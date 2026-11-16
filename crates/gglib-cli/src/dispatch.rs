@@ -199,8 +199,11 @@ pub async fn dispatch(
             handlers::web::execute(no_open).await?;
         }
         Commands::Daemon { command } => match command {
-            crate::commands::DaemonCommand::Run { allowed_host } => {
-                handlers::daemon::run(allowed_host).await?;
+            crate::commands::DaemonCommand::Run {
+                allowed_host,
+                without_endpoint,
+            } => {
+                handlers::daemon::run(allowed_host, without_endpoint).await?;
             }
             crate::commands::DaemonCommand::Status => {
                 handlers::daemon::status().await?;

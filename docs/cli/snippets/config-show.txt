@@ -18,7 +18,7 @@ Current application settings:
   models-dir               /Users/mmogr/.local/share/gglib-demo/models (environment, Writable)
   proxy-allowed-hosts      None
   proxy-api-key            None
-  proxy-autostart          None
+  proxy-autostart          None (on)
   proxy-cache-disk-gb      None
   proxy-cache-on-disk      None
   proxy-host               None

@@ -193,6 +193,7 @@ gglib config unset
 gglib daemon
 gglib daemon run
   --allowed-host
+  --without-endpoint (hidden)
 gglib daemon status
 gglib daemon stop
   --remote

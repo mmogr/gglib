@@ -12,8 +12,16 @@ const ASK_WHO: Duration = Duration::from_secs(1);
 /// What holds `address`, a port a start could not bind, as the sentence the
 /// endpoint's status carries while it is off.
 pub(crate) async fn port_in_use(address: &str) -> String {
-    let _ = held_by_gglib(address).await;
-    String::new()
+    let port = address.rsplit(':').next().unwrap_or(address);
+    let holder = if held_by_gglib(address).await {
+        "another gglib service"
+    } else {
+        "another program"
+    };
+    format!(
+        "The endpoint is off: port {port} is in use by {holder}. Stop it, or choose another port \
+         (Settings \u{203a} Endpoint, or `gglib config set proxy-port`), then turn the endpoint on."
+    )
 }
 
 /// Whether what listens at `address` answers as a gglib endpoint does.

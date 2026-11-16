@@ -34,7 +34,7 @@ import { useRequestBlink } from '../components/status/useRequestBlink';
 import { ENDPOINT_WORDS, KEY_WORDS } from '../components/status/words';
 import { Icon } from '../components/ui/Icon';
 import { useEndpointDashboard } from '../places/library/useResidency';
-import { useEndpointFacts, type EndpointFacts } from '../services/proxyRegistry';
+import { useEndpointFacts, useEndpointRefusal, type EndpointFacts } from '../services/proxyRegistry';
 import { useAllServerStates } from '../services/serverRegistry';
 import type { EndpointState } from '../types/generated/EndpointState';
 import { PlaceRow } from './PlaceRow';
@@ -57,7 +57,7 @@ export function shownAddress(baseUrl: string): string {
  * was refused says so, and the page it opens says why in the daemon's words.
  */
 export function secondLine(facts: EndpointFacts, loaded: number, refused: string | null = null): string {
-  if (facts.state === 'off') return refused === null ? 'click to turn on' : 'click to turn on';
+  if (facts.state === 'off') return refused === null ? 'click to turn on' : 'did not start, click for why';
   if (facts.state === 'starting') return ENDPOINT_WORDS.starting;
   if (facts.pinned !== null) return facts.pinned.name;
   if (loaded === 0) return 'nothing loaded yet';
@@ -66,6 +66,7 @@ export function secondLine(facts: EndpointFacts, loaded: number, refused: string
 
 export function EndpointLine({ current = false }: { current?: boolean }) {
   const facts = useEndpointFacts();
+  const refused = useEndpointRefusal();
   const blinking = useRequestBlink(useEndpointDashboard().snapshot?.total_requests ?? null);
   const loaded = useAllServerStates().filter((s) => s.status === 'running').length;
   const navigate = useNavigate();
@@ -99,7 +100,7 @@ export function EndpointLine({ current = false }: { current?: boolean }) {
               <CopyValue value={facts.baseUrl} label="Copy the endpoint address" />
             </div>
           )}
-          <span>{secondLine(facts, loaded)}</span>
+          <span title={refused ?? undefined}>{secondLine(facts, loaded, refused)}</span>
         </>
       }
       current={current}

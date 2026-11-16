@@ -235,17 +235,38 @@ impl ProxyOps {
         config: ProxyConfig,
         pin: Option<gglib_core::ports::PinnedSpec>,
     ) -> Result<SocketAddr, GuiError> {
+        let _one = self.switching.lock().await;
+        self.start_unlocked(config, pin).await
+    }
+
+    /// [`Self::start`], with `switching` already held.
+    ///
+    /// The pin is the run's: a start that loses the supervisor's slot to
+    /// another puts back the pin that run had, so it never pins an endpoint
+    /// it did not start.
+    async fn start_unlocked(
+        &self,
+        config: ProxyConfig,
+        pin: Option<gglib_core::ports::PinnedSpec>,
+    ) -> Result<SocketAddr, GuiError> {
         if let ProxyStatus::Running { address } = self.supervisor.status().await {
             return Err(GuiError::Conflict(format!(
                 "Proxy already running at {address}"
             )));
         }
+        let before = self.runtime.pinned();
         if let Err(e) = self.runtime.set_pin(pin) {
             return Err(GuiError::Internal(format!(
                 "could not apply model pin: {e}"
             )));
         }
-        self.start_raw(config).await.map_err(Self::map_start_error)
+        let started = self.start_raw(config).await;
+        if matches!(started, Err(SupervisorError::AlreadyRunning(_)))
+            && let Err(e) = self.runtime.set_pin(before)
+        {
+            tracing::debug!("could not put back the running endpoint's pin: {e}");
+        }
+        started.map_err(Self::map_start_error)
     }
 
     /// Shared setup behind [`Self::start`] and [`Self::ensure_running`],
@@ -302,6 +323,9 @@ impl ProxyOps {
                 .refused
                 .write()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(why);
+            // Said, so a window that read the status before the reason was
+            // known reads it again: the endpoint is off, and now says why.
+            self.emitter.emit(AppEvent::proxy_stopped());
         }
         started
             // The token the supervisor settled on is kept here and not
@@ -388,6 +412,9 @@ impl ProxyOps {
     /// `map_start_error` produces if the proxy cannot start — a bind failure or
     /// an already-running supervisor both surface as `GuiError::Conflict`.
     pub async fn ensure_running(&self) -> Result<SocketAddr, GuiError> {
+        // Under the lock every start and stop takes, so it cannot land
+        // between a switch's stop and its start.
+        let _one = self.switching.lock().await;
         if let ProxyStatus::Running { address } = self.supervisor.status().await {
             return Ok(address);
         }
@@ -429,6 +456,12 @@ impl ProxyOps {
     /// handle before it waits, so the endpoint is off either way. A stop
     /// that finds nothing running says nothing.
     pub async fn stop(&self) -> Result<(), GuiError> {
+        let _one = self.switching.lock().await;
+        self.stop_unlocked().await
+    }
+
+    /// [`Self::stop`], with `switching` already held.
+    async fn stop_unlocked(&self) -> Result<(), GuiError> {
         if let Err(e) = self.runtime.set_pin(None) {
             tracing::debug!("could not clear model pin on stop: {e}");
         }

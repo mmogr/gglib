@@ -21,7 +21,7 @@ use crate::daemon_client::wire::{StartPinnedBody, StopServerBody};
 use crate::daemon_client::{
     self, Absent, DaemonHandle, StartProxyBody, StartServerBody, StartedOrDiffers,
 };
-use crate::handlers::inference::switch::Consent;
+use crate::handlers::inference::switch::{self, Consent};
 
 /// Execute `gglib model load <id> [--context-size N|max] [--pin] [-y]`.
 pub(crate) async fn load(
@@ -37,7 +37,13 @@ pub(crate) async fn load(
     // The engine the model runs under has to be here before the daemon is
     // asked for it, as `serve` and `chat` make sure of.
     crate::handlers::config::engine::ensure_installed(model.runtime(), false).await?;
-    let handle = daemon_client::ensure_daemon().await?;
+    // A pinned load starts the endpoint its own way, so a daemon launched
+    // for it leaves the endpoint to it.
+    let handle = if pin {
+        daemon_client::ensure_daemon_for_endpoint().await?
+    } else {
+        daemon_client::ensure_daemon().await?
+    };
     for line in load_on(&handle, &body, pin, &mut Consent::here(yes)).await? {
         eprintln!("{line}");
     }
@@ -69,10 +75,22 @@ pub(super) async fn load_on(
         {
             StartedOrDiffers::Started(status) => status,
             StartedOrDiffers::Differs(change) => {
-                // Today: the same start again, which nothing replaces.
-                let _ = consent.allows(&change)?;
+                // A no is an error: nothing is loaded, and a script after
+                // this must not go on as if it were.
+                anyhow::ensure!(
+                    consent.allows(&change)?,
+                    "{}",
+                    switch::kept(&change).trim_start()
+                );
+                let replacing = StartPinnedBody {
+                    proxy: StartProxyBody {
+                        replace: true,
+                        ..StartProxyBody::default()
+                    },
+                    ..asked
+                };
                 handle
-                    .start_pinned_proxy(&asked)
+                    .start_pinned_proxy(&replacing)
                     .await
                     .context("the daemon did not pin the endpoint")?
             }

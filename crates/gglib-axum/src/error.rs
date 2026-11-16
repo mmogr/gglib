@@ -123,8 +123,8 @@ impl IntoResponse for HttpError {
             Self::EndpointDiffers(change) => (
                 StatusCode::CONFLICT,
                 format!(
-                    "The endpoint is {}. Starting it to {} replaces it, which cuts off the \
-                     clients connected now: ask again with replace.",
+                    "The endpoint is {}, so it was left as it is: switching it to {} would \
+                     cut off the clients connected now.",
                     change.now, change.action
                 ),
                 Some(ENDPOINT_DIFFERS.to_owned()),
@@ -358,6 +358,7 @@ mod tests {
         let refused = HttpError::EndpointDiffers(gglib_app_services::EndpointChange {
             now: "on at port 8080, serving only Qwen3-4B".to_owned(),
             action: "serve every model again".to_owned(),
+            moves: false,
         })
         .into_response();
         assert_eq!(refused.status(), StatusCode::CONFLICT);

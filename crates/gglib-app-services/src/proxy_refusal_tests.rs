@@ -56,6 +56,35 @@ async fn a_port_another_program_holds_is_said_until_a_start_binds() {
     assert_eq!(cleared, None);
 }
 
+/// The reason is said when it is known, `proxy_stopped`, so a window that
+/// read the status before the bind failed reads it again and sees why.
+#[tokio::test]
+async fn a_refused_bind_is_said_so_the_status_is_read_again() {
+    let pool = setup_test_database().await.expect("in-memory DB");
+    let heard = Arc::new(RecordingEmitter::default());
+    let (_core, proxy) = test_core_and_proxy_heard(
+        &CoreFactory::build_repos(pool),
+        Arc::clone(&heard) as Arc<dyn gglib_core::ports::AppEventEmitter>,
+    );
+    let holder = std::net::TcpListener::bind("127.0.0.1:0").expect("hold a port");
+    let port = holder.local_addr().unwrap().port();
+
+    let refused = proxy.start(on(port), None).await;
+    drop(holder);
+
+    assert!(refused.is_err());
+    assert!(proxy.refused().is_some());
+    let said: Vec<String> = heard
+        .events()
+        .iter()
+        .map(|e| serde_json::to_string(e).unwrap())
+        .collect();
+    assert_eq!(
+        said,
+        [serde_json::to_string(&gglib_core::events::AppEvent::proxy_stopped()).unwrap()]
+    );
+}
+
 /// A second gglib service holding the port is named as one.
 #[tokio::test]
 async fn a_port_another_gglib_holds_is_said_to_be_gglibs() {

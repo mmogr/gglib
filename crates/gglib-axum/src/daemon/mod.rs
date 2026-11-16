@@ -47,6 +47,12 @@ pub struct DaemonOptions {
     /// `Host` header values accepted in addition to loopback: the
     /// `--allowed-host` entries.
     pub allowed_hosts: Vec<String>,
+    /// Leave the endpoint off at this start, whatever `proxy-autostart`
+    /// says: the CLI passes it when it launches the service to start the
+    /// endpoint its own way (`gglib serve`, `proxy`, `up`, `model load
+    /// --pin`), so that command finds the endpoint off rather than one this
+    /// start brought up a moment before.
+    pub leave_endpoint_off: bool,
 }
 
 /// Run the gglib daemon until a shutdown signal or `/api/daemon/shutdown`.
@@ -150,7 +156,8 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     //    desktop app (`autostart.rs`).
     {
         let state = Arc::clone(&state);
-        tokio::spawn(async move { autostart::autostart_proxy(&state).await });
+        let leave_off = opts.leave_endpoint_off;
+        tokio::spawn(async move { autostart::autostart_proxy(&state, leave_off).await });
     }
 
     // 5b. Put the tunnel back up if this machine was told to be reachable.

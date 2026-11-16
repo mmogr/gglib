@@ -42,7 +42,7 @@ pub(crate) struct UpArgs {
 /// where the endpoint comes up and what the client configuration then prints.
 fn start_body(port: Option<u16>, default_context: Option<u64>) -> StartProxyBody {
     StartProxyBody {
-        host: Some("127.0.0.1".to_owned()),
+        host: None,
         port,
         default_context,
         // Unpinned: `/v1/models` has to work for Cline and Open WebUI to
@@ -85,11 +85,11 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     // fitted value at launch. Sending `None` lets the launch fit it.
     let default_context = settings.default_context_size;
 
-    let handle = daemon_client::ensure_daemon().await?;
+    let handle = daemon_client::ensure_daemon_for_endpoint().await?;
     let body = start_body(args.port, default_context);
     // An endpoint that is on is working: `up` leaves one on otherwise as it
     // is, never asks to switch it, and `-y` does not switch it either.
-    let started = proxy::start_or_leave(&handle, &body, &settings).await?;
+    let started = endpoint_step(&handle, &body, &settings, args.port).await?;
 
     // Step 5: prove it. The daemon sends one real request through the very
     // endpoint the user is about to point their client at, by the id that
@@ -101,6 +101,22 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
         println!("{line}");
     }
     Ok(())
+}
+
+/// Step 4's start: the endpoint as `body` asks, or the one that is on left
+/// as it is, never switched, whatever `--yes` says; `port` is `--port`, and
+/// names the command that would apply it.
+async fn endpoint_step(
+    handle: &daemon_client::DaemonHandle,
+    body: &StartProxyBody,
+    settings: &gglib_core::Settings,
+    port: Option<u16>,
+) -> Result<proxy::StartedProxy> {
+    let apply = port.map_or_else(
+        || "gglib proxy".to_owned(),
+        |port| format!("gglib proxy --port {port}"),
+    );
+    proxy::start_or_leave(handle, body, settings, &apply).await
 }
 
 // ─── Shared output helpers ───────────────────────────────────────────────────
@@ -336,5 +352,55 @@ mod tests {
         if std::env::var_os("NO_COLOR").is_some() || !std::io::stdout().is_terminal() {
             assert!(!use_color());
         }
+    }
+
+    /// Step 4 never switches an endpoint that is on otherwise, whatever
+    /// `--yes` says: it sends no `replace`, reads the endpoint as it is, and
+    /// says what it did not do with the command that would apply `--port`.
+    #[tokio::test]
+    async fn the_endpoint_step_leaves_an_endpoint_on_otherwise_as_it_is() {
+        use crate::daemon_client::{paths, stand_in::against};
+
+        let differs = serde_json::json!({
+            "error": "The endpoint is on at port 8080, serving every model, so it was left as it is.",
+            "type": paths::ENDPOINT_DIFFERS_TYPE,
+            "metadata": {
+                "now": "on at port 8080, serving every model",
+                "action": "restart it with port 9000 (now 8080)",
+                "moves": true,
+            },
+        });
+        let status = serde_json::json!({
+            "running": true, "state": "on", "port": 8080,
+            "base_url": "http://127.0.0.1:8080/v1", "key": "none_needed",
+            "pinned_model": null, "pinned_to": null, "pinned_model_id": null,
+        });
+        let body = body_for(&["gglib", "up", "--port", "9000", "-y"]);
+        let (started, taken) = against(
+            vec![(409, differs.to_string()), (200, status.to_string())],
+            |handle| async move {
+                endpoint_step(&handle, &body, &Settings::default(), Some(9000)).await
+            },
+        )
+        .await;
+
+        assert_eq!(started.expect("left as it is").port, 8080);
+        assert_eq!(taken.len(), 2, "the start, then the status; no switch");
+        assert_eq!(taken[0].body["replace"], false);
+        assert_eq!(
+            crate::handlers::inference::switch::left(
+                &gglib_app_services::EndpointChange {
+                    now: "on at port 8080, serving every model".into(),
+                    action: "restart it with port 9000 (now 8080)".into(),
+                    moves: true,
+                },
+                "gglib proxy --port 9000",
+            ),
+            [
+                "  The endpoint is on at port 8080, serving every model, so gglib up left it as \
+                 it is and did not restart it with port 9000 (now 8080).",
+                "  To do that, run: gglib proxy --port 9000",
+            ]
+        );
     }
 }

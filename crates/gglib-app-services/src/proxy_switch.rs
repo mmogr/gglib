@@ -30,7 +30,11 @@ pub(crate) struct ProxyShape {
     disk_budget: DiskBudget,
     inference_override: Option<InferenceConfig>,
     default_profile: Option<String>,
+    /// The key the endpoint demands, or would: the one it was started with
+    /// for a running endpoint, the one asked for or else the stored one for
+    /// a start. Compared, never said.
     api_key: Option<String>,
+    /// Sorted and without repeats: the hosts are a set.
     allowed_hosts: Vec<String>,
     /// The pinned model's id, name and launch options (as JSON, which is
     /// how they compare); `None` serves every model.
@@ -38,8 +42,16 @@ pub(crate) struct ProxyShape {
 }
 
 impl ProxyShape {
-    /// The shape `config` and `pin` ask for, at `port`.
-    pub(crate) fn of(config: &ProxyConfig, pin: Option<&PinnedSpec>, port: u16) -> Self {
+    /// The shape `config` and `pin` ask for, at `port`, demanding `key`.
+    pub(crate) fn of(
+        config: &ProxyConfig,
+        pin: Option<&PinnedSpec>,
+        port: u16,
+        key: Option<&str>,
+    ) -> Self {
+        let mut allowed_hosts = config.allowed_hosts.clone();
+        allowed_hosts.sort();
+        allowed_hosts.dedup();
         Self {
             host: config.host.clone(),
             port,
@@ -49,8 +61,8 @@ impl ProxyShape {
             disk_budget: config.disk_budget,
             inference_override: config.inference_override.clone(),
             default_profile: config.default_profile.clone(),
-            api_key: config.api_key.clone(),
-            allowed_hosts: config.allowed_hosts.clone(),
+            api_key: key.map(str::to_owned),
+            allowed_hosts,
             pin: pin.map(|p| {
                 (
                     p.id,
@@ -72,6 +84,10 @@ pub struct EndpointChange {
     /// What switching does, after "to": `serve only Qwen3-4B`, `serve every
     /// model again`, `restart it with port 9929 (now 8080)`.
     pub action: String,
+    /// Whether the switch moves the endpoint to another port or address, so
+    /// clients connected now stay cut off until they are pointed there.
+    #[serde(default)]
+    pub moves: bool,
 }
 
 /// What a start did.
@@ -134,6 +150,7 @@ pub(crate) fn change(running: &ProxyShape, asked: &ProxyShape) -> Option<Endpoin
             running.pin.as_ref().map(|(_, name, _)| name.as_str()),
         ),
         action,
+        moves: asked.host != running.host || (asked.port != 0 && asked.port != running.port),
     })
 }
 

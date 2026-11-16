@@ -84,7 +84,7 @@ async fn a_fresh_install_has_the_endpoint_on_at_launch() {
         None
     );
 
-    let outcome = autostart_proxy(&state).await;
+    let outcome = autostart_proxy(&state, false).await;
 
     assert!(
         matches!(outcome, Autostart::On(addr) if addr.port() == port),
@@ -106,7 +106,7 @@ async fn a_stored_false_keeps_the_endpoint_off_at_launch() {
     let state = fresh(dir.path(), port).await;
     store_switch(&state, false).await;
 
-    let outcome = autostart_proxy(&state).await;
+    let outcome = autostart_proxy(&state, false).await;
 
     assert!(matches!(outcome, Autostart::Off), "{outcome:?}");
     assert!(matches!(state.proxy.status().await, ProxyStatus::Stopped));
@@ -120,7 +120,7 @@ async fn a_stored_true_turns_the_endpoint_on_at_launch() {
     let state = fresh(dir.path(), port).await;
     store_switch(&state, true).await;
 
-    let outcome = autostart_proxy(&state).await;
+    let outcome = autostart_proxy(&state, false).await;
 
     assert!(
         matches!(outcome, Autostart::On(addr) if addr.port() == port),
@@ -138,7 +138,7 @@ async fn a_taken_port_leaves_the_endpoint_off_and_says_which_port() {
     let port = holder.local_addr().unwrap().port();
     let state = fresh(dir.path(), port).await;
 
-    let outcome = autostart_proxy(&state).await;
+    let outcome = autostart_proxy(&state, false).await;
 
     let Autostart::Failed(reason) = outcome else {
         panic!("the endpoint cannot come on over a taken port: {outcome:?}");
@@ -173,13 +173,13 @@ async fn a_taken_port_leaves_the_endpoint_off_and_says_which_port() {
 async fn a_port_another_gglib_service_holds_is_said_to_be_gglibs() {
     let other_dir = tempfile::tempdir().unwrap();
     let other = fresh(other_dir.path(), free_port()).await;
-    let Autostart::On(held) = autostart_proxy(&other).await else {
+    let Autostart::On(held) = autostart_proxy(&other, false).await else {
         panic!("the other service's endpoint is on");
     };
     let dir = tempfile::tempdir().unwrap();
     let state = fresh(dir.path(), held.port()).await;
 
-    let outcome = autostart_proxy(&state).await;
+    let outcome = autostart_proxy(&state, false).await;
     let status = crate::handlers::proxy::status(axum::extract::State(Arc::clone(&state)))
         .await
         .0;
@@ -199,54 +199,6 @@ async fn a_port_another_gglib_service_holds_is_said_to_be_gglibs() {
     );
 }
 
-/// `gglib up` after the launch, with the endpoint stored to listen on every
-/// address: up sends no host, so the endpoint is as the settings describe
-/// it and stays bound where it is. Naming loopback, as up did, would have
-/// asked to rebind it.
-#[tokio::test]
-async fn up_finds_an_endpoint_the_settings_put_on_every_address_as_asked() {
-    let dir = tempfile::tempdir().unwrap();
-    let port = free_port();
-    let state = fresh(dir.path(), port).await;
-    state
-        .core
-        .settings()
-        .update(SettingsUpdate {
-            proxy_host: Some(Some("0.0.0.0".to_owned())),
-            ..SettingsUpdate::default()
-        })
-        .await
-        .expect("store the address");
-    assert!(matches!(autostart_proxy(&state).await, Autostart::On(_)));
-
-    let as_up_asks = crate::handlers::proxy::start(
-        axum::extract::State(Arc::clone(&state)),
-        axum::Json(Some(
-            serde_json::from_value(serde_json::json!({ "host": null })).unwrap(),
-        )),
-    )
-    .await;
-    let naming_loopback = crate::handlers::proxy::start(
-        axum::extract::State(Arc::clone(&state)),
-        axum::Json(Some(
-            serde_json::from_value(serde_json::json!({ "host": "127.0.0.1" })).unwrap(),
-        )),
-    )
-    .await;
-    let bound = state.proxy.status().await;
-    state.proxy.stop().await.unwrap();
-
-    assert_eq!(
-        as_up_asks.expect("as the settings say").0.outcome,
-        Some(gglib_app_services::StartOutcome::Unchanged)
-    );
-    assert!(naming_loopback.is_err(), "loopback by name differs");
-    assert!(
-        matches!(bound, ProxyStatus::Running { address } if address.ip().is_unspecified()),
-        "{bound:?}"
-    );
-}
-
 /// The endpoint the launch turns on is said, `proxy_started` with its port,
 /// as any start that turns it on is: a window open before it learns it.
 #[tokio::test]
@@ -257,7 +209,7 @@ async fn the_endpoint_the_launch_turns_on_is_said() {
     let state = fresh(dir.path(), port).await;
     let mut events = Box::pin(state.sse.events());
 
-    let outcome = autostart_proxy(&state).await;
+    let outcome = autostart_proxy(&state, false).await;
     state.proxy.stop().await.unwrap();
 
     assert!(matches!(outcome, Autostart::On(_)), "{outcome:?}");
@@ -292,7 +244,10 @@ async fn a_plain_start_after_the_launch_finds_the_endpoint_as_asked() {
         })
         .await
         .expect("store the endpoint's settings");
-    assert!(matches!(autostart_proxy(&state).await, Autostart::On(_)));
+    assert!(matches!(
+        autostart_proxy(&state, false).await,
+        Autostart::On(_)
+    ));
 
     let answer =
         crate::handlers::proxy::start(axum::extract::State(Arc::clone(&state)), axum::Json(None))
@@ -305,4 +260,18 @@ async fn a_plain_start_after_the_launch_finds_the_endpoint_as_asked() {
         Some(gglib_app_services::StartOutcome::Unchanged)
     );
     assert_eq!(status.port, Some(port));
+}
+
+/// A service a command launched to start the endpoint its own way leaves it
+/// off at its start, even on a fresh install, so that command finds no
+/// endpoint of the launch's to ask about or be refused by.
+#[tokio::test]
+async fn a_service_launched_for_a_command_leaves_the_endpoint_to_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = fresh(dir.path(), free_port()).await;
+
+    let outcome = autostart_proxy(&state, true).await;
+
+    assert!(matches!(outcome, Autostart::Left), "{outcome:?}");
+    assert!(matches!(state.proxy.status().await, ProxyStatus::Stopped));
 }

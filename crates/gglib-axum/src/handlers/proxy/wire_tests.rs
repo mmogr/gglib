@@ -311,6 +311,38 @@ fn an_endpoint_refused_its_port_adds_exactly_the_contract_fields() {
     assert_eq!(on.refused, None);
 }
 
+/// `gglib up` names no host: with the endpoint stored to listen on every
+/// address, what its start asks for is what the service's own launch
+/// starts, so the endpoint is left where it listens. Naming loopback, as up
+/// once did, would ask to move it. Compared without binding anything.
+#[test]
+fn a_start_naming_no_host_asks_for_the_endpoint_the_launch_starts() {
+    let settings = Settings {
+        proxy_host: Some("0.0.0.0".to_owned()),
+        proxy_allowed_hosts: Some(vec!["desk.local".to_owned()]),
+        default_context_size: Some(16_384),
+        ..Settings::default()
+    };
+    let launch = gglib_app_services::proxy_config_from_settings(&settings);
+    let as_up = to_runtime_config(&StartProxyConfig::default(), &settings);
+
+    assert_eq!(as_up.host, "0.0.0.0");
+    assert_eq!(as_up.host, launch.host);
+    assert_eq!(as_up.port, launch.port);
+    assert_eq!(as_up.allowed_hosts, launch.allowed_hosts);
+    assert_eq!(as_up.default_context, launch.default_context);
+    assert_eq!(as_up.cache_enabled, launch.cache_enabled);
+
+    let naming_loopback = to_runtime_config(
+        &StartProxyConfig {
+            host: Some("127.0.0.1".to_owned()),
+            ..StartProxyConfig::default()
+        },
+        &settings,
+    );
+    assert_ne!(naming_loopback.host, launch.host);
+}
+
 /// A start's answer is the status with what the start did, the keys the
 /// CLI reads beside the status's.
 #[test]

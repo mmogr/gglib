@@ -115,6 +115,12 @@ pub struct AxumContext {
               order, top to bottom"
 )]
 pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
+    // A unit test's context resolves every path in a data root of its own:
+    // one that starts its endpoint with the prompt cache on disk would
+    // otherwise keep and evict slot files in the user's own folder, beside
+    // their pidfiles and logs. The one place every such test passes.
+    #[cfg(test)]
+    gglib_core::paths::isolate_data_root();
     // Log resolved paths at startup for diagnostics. The models directory is
     // the one current now, and is not kept: each download asks again as it
     // starts.

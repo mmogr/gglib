@@ -180,6 +180,15 @@ pub(super) fn settings_display_rows(
             // Absent is off, and the row says so rather than leave "None"
             // to be read either way.
             rows.push((kebab_key, "None (off)".to_owned()));
+        } else if kebab_key == "proxy-autostart" && val.is_null() {
+            // Absent is on, from the reader the service starts by, so the
+            // row says what the service will do rather than a bare "None".
+            let on = if settings.effective_proxy_autostart() {
+                "on"
+            } else {
+                "off"
+            };
+            rows.push((kebab_key, format!("None ({on})")));
         } else if kebab_key == "default-context-size" && val.is_null() {
             // Unset is the ordinary — and preferred — state for this one
             // field: it is what lets the daemon size each launch. A bare

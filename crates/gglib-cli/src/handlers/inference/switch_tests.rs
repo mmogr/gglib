@@ -54,19 +54,13 @@ fn answering(answer: bool, yes: bool, terminal: bool) -> (Consent, Arc<Mutex<Vec
     let consent = Consent {
         yes,
         terminal,
+        command: "gglib serve Qwen3-4B".to_owned(),
         ask: Box::new(move |question| {
             kept.lock().unwrap().push(question.to_owned());
             Ok(answer)
         }),
     };
     (consent, asked)
-}
-
-fn change() -> EndpointChange {
-    EndpointChange {
-        now: "on at port 8080, serving every model".into(),
-        action: "serve only Qwen3-4B".into(),
-    }
 }
 
 /// In a terminal, the question names what runs and what switching does; a
@@ -88,7 +82,7 @@ async fn in_a_terminal_it_asks_and_a_yes_switches() {
     )
     .await;
 
-    assert_eq!(started.unwrap().map(|s| s.port), Some(8080));
+    assert_eq!(started.unwrap().port, 8080);
     assert_eq!(
         *asked.lock().unwrap(),
         [
@@ -101,7 +95,8 @@ async fn in_a_terminal_it_asks_and_a_yes_switches() {
     assert_eq!(taken[1].body["replace"], true);
 }
 
-/// A no sends nothing more, and the command ends with the endpoint as it is.
+/// A no sends nothing more, and the command fails with the endpoint as it
+/// is, so a script after it does not go on.
 #[tokio::test]
 async fn a_no_leaves_everything_as_it_was() {
     let (mut consent, asked) = answering(false, false, true);
@@ -119,13 +114,12 @@ async fn a_no_leaves_everything_as_it_was() {
     )
     .await;
 
-    assert!(started.unwrap().is_none(), "the user kept it");
+    assert_eq!(
+        format!("{:#}", started.expect_err("a no is not a start")),
+        "Nothing changed: the endpoint is still on at port 8080, serving every model."
+    );
     assert_eq!(asked.lock().unwrap().len(), 1);
     assert_eq!(taken.len(), 1, "nothing was sent after the no");
-    assert_eq!(
-        kept(&change()),
-        "  Nothing changed: the endpoint is still on at port 8080, serving every model."
-    );
 }
 
 /// `-y` switches without a question, in a terminal or not.
@@ -146,14 +140,14 @@ async fn yes_switches_without_asking() {
     )
     .await;
 
-    assert!(started.unwrap().is_some());
+    assert!(started.is_ok());
     assert!(asked.lock().unwrap().is_empty(), "-y asks nothing");
     assert_eq!(taken.len(), 2);
     assert_eq!(taken[1].body["replace"], true);
 }
 
 /// With nobody to ask and no `-y`, nothing is switched, and the refusal is
-/// one sentence that names `-y`.
+/// one sentence that names the command to run, as typed, with `-y`.
 #[tokio::test]
 async fn a_script_without_yes_is_refused_and_switches_nothing() {
     let (mut consent, asked) = answering(true, false, false);
@@ -175,7 +169,7 @@ async fn a_script_without_yes_is_refused_and_switches_nothing() {
     assert_eq!(
         refused,
         "The endpoint is on at port 8080, serving every model, so nothing was changed: \
-         run this again with -y to serve only Qwen3-4B."
+         to serve only Qwen3-4B, run `gglib serve Qwen3-4B -y`."
     );
     assert!(asked.lock().unwrap().is_empty());
     assert_eq!(taken.len(), 1, "nothing was sent after the refusal");
@@ -199,7 +193,7 @@ async fn the_same_endpoint_asks_nothing() {
     )
     .await;
 
-    assert!(started.unwrap().is_some());
+    assert!(started.is_ok());
     assert!(asked.lock().unwrap().is_empty());
     assert_eq!(taken.len(), 1);
     assert_eq!(
@@ -216,15 +210,18 @@ fn the_question_names_the_difference() {
     let port = EndpointChange {
         now: "on at port 8080, serving every model".into(),
         action: "restart it with port 9929 (now 8080) and different sampling".into(),
+        moves: true,
     };
     assert_eq!(
         question(&port),
         "  The endpoint is on at port 8080, serving every model. Restart it with port 9929 \
-         (now 8080) and different sampling? Clients connected now are cut off for a moment."
+         (now 8080) and different sampling? Clients connected now are cut off until they are \
+         pointed at the new address."
     );
     let back = EndpointChange {
         now: "on at port 8080, serving only Qwen3-4B".into(),
         action: "serve every model again".into(),
+        moves: false,
     };
     assert_eq!(
         question(&back),
@@ -256,6 +253,7 @@ async fn up_leaves_a_pinned_endpoint_as_it_is() {
                 &handle,
                 &StartProxyBody::default(),
                 &gglib_core::Settings::default(),
+                "gglib proxy",
             )
             .await
         },
@@ -276,11 +274,19 @@ async fn up_leaves_a_pinned_endpoint_as_it_is() {
         format!("GET {} HTTP/1.1", paths::PROXY_STATUS_PATH)
     );
     assert_eq!(
-        left(&EndpointChange {
-            now: "on at port 8080, serving only Qwen3-4B".into(),
-            action: "serve every model again".into(),
-        }),
-        "  The endpoint is on at port 8080, serving only Qwen3-4B; gglib up leaves it as it is."
+        left(
+            &EndpointChange {
+                now: "on at port 8080, serving only Qwen3-4B".into(),
+                action: "serve every model again".into(),
+                moves: false,
+            },
+            "gglib proxy"
+        ),
+        [
+            "  The endpoint is on at port 8080, serving only Qwen3-4B, so gglib up left it as it \
+             is and did not serve every model again.",
+            "  To do that, run: gglib proxy",
+        ]
     );
 }
 
@@ -306,4 +312,23 @@ fn status_of(answer: &str) -> String {
     let mut status: serde_json::Value = serde_json::from_str(answer).expect("JSON");
     status.as_object_mut().expect("an object").remove("outcome");
     status.to_string()
+}
+
+/// The question is asked only of somebody who both reads it and types the
+/// answer: a question sent to a log file waits on nobody.
+#[test]
+fn somebody_is_asked_only_at_a_terminal_both_ways() {
+    assert!(somebody_to_ask(true, true));
+    assert!(!somebody_to_ask(true, false), "stderr to a file");
+    assert!(!somebody_to_ask(false, true), "stdin from a pipe");
+}
+
+/// The command the refusal names is the one typed, as a shell takes it.
+#[test]
+fn the_command_named_is_the_one_typed() {
+    let typed = ["serve", "Qwen3 4B", "--temperature", "0.5", "it's"].map(str::to_owned);
+    assert_eq!(
+        command_line(typed),
+        "gglib serve 'Qwen3 4B' --temperature 0.5 'it'\\''s'"
+    );
 }

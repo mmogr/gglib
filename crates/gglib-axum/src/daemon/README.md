@@ -28,6 +28,11 @@ This module is responsible for:
   Host-header allowlist, and the daemon token minted anew at every start,
 - sweeping orphaned llama-server pidfiles at startup (moved here from the
   desktop app, which used to kill a concurrent CLI's servers),
+- turning the endpoint on once the management API is bound, unless
+  `proxy_autostart` is stored as `false`, or the command that launched the
+  daemon starts the endpoint itself (`--without-endpoint`, `autostart.rs`);
+  a port that is taken leaves the daemon serving with the endpoint off, and
+  its status says why,
 - stopping when asked, through `gglib_core::utils::process::stop`: Ctrl-C,
   SIGTERM and, on Windows, Ctrl-Break, and the `POST /api/daemon/shutdown`
   route's cancellation token,

@@ -133,21 +133,23 @@ impl StartedProxy {
 /// where the body asked for it, or the stored `proxy_port` the daemon falls
 /// back to.
 ///
-/// Shared by `proxy`, `serve` and `up`, so none of them has a port, an
-/// address, a key rule or a question of its own.
+/// Shared by `proxy` and `serve`, so neither has a port, an address, a key
+/// rule or a question of its own. A no is an error: the command did not do
+/// what it was run to do, and a script after it must not go on.
 pub(in crate::handlers) async fn start_on(
     handle: &DaemonHandle,
     body: &StartProxyBody,
     settings: &gglib_core::Settings,
     consent: &mut Consent,
-) -> Result<Option<StartedProxy>> {
+) -> Result<StartedProxy> {
     let status = match handle.start_proxy_or_differs(body).await? {
         StartedOrDiffers::Started(status) => status,
         StartedOrDiffers::Differs(change) => {
-            if !consent.allows(&change)? {
-                eprintln!("{}", switch::kept(&change));
-                return Ok(None);
-            }
+            anyhow::ensure!(
+                consent.allows(&change)?,
+                "{}",
+                switch::kept(&change).trim_start()
+            );
             let replacing = StartProxyBody {
                 replace: true,
                 ..body.clone()
@@ -163,17 +165,19 @@ pub(in crate::handlers) async fn start_on(
             switch::unchanged(port, status.pinned_model.as_deref())
         );
     }
-    Ok(Some(StartedProxy::from_status(&status, body, settings)))
+    Ok(StartedProxy::from_status(&status, body, settings))
 }
 
 /// Start the endpoint `body` describes, or leave the one that is on
 /// otherwise as it is and say so: `gglib up`'s start, which never switches.
 ///
-/// A pinned endpoint left alone closes with how to serve every model again.
+/// An endpoint left alone is said with what `up` did not do and `apply`,
+/// the command that would.
 pub(in crate::handlers) async fn start_or_leave(
     handle: &DaemonHandle,
     body: &StartProxyBody,
     settings: &gglib_core::Settings,
+    apply: &str,
 ) -> Result<StartedProxy> {
     let status = match handle.start_proxy_or_differs(body).await? {
         StartedOrDiffers::Started(status) => {
@@ -187,7 +191,12 @@ pub(in crate::handlers) async fn start_or_leave(
             }
             status
         }
-        StartedOrDiffers::Differs(change) => anyhow::bail!("{}", switch::left(&change)),
+        StartedOrDiffers::Differs(change) => {
+            for line in switch::left(&change, apply) {
+                eprintln!("{line}");
+            }
+            handle.proxy_status().await?
+        }
     };
     Ok(StartedProxy::from_status(&status, body, settings))
 }
@@ -198,7 +207,7 @@ pub(in crate::handlers) async fn start_here(
     body: &StartProxyBody,
     settings: &gglib_core::Settings,
     yes: bool,
-) -> Result<Option<StartedProxy>> {
+) -> Result<StartedProxy> {
     start_on(handle, body, settings, &mut Consent::here(yes)).await
 }
 
@@ -260,10 +269,8 @@ pub(in crate::handlers) async fn start_and_attach(
     yes: bool,
     attach: Attach,
 ) -> Result<()> {
-    let handle = daemon_client::ensure_daemon().await?;
-    let Some(started) = start_here(&handle, body, settings, yes).await? else {
-        return Ok(());
-    };
+    let handle = daemon_client::ensure_daemon_for_endpoint().await?;
+    let started = start_here(&handle, body, settings, yes).await?;
     attach_dashboard(
         ctx,
         attach.reach,

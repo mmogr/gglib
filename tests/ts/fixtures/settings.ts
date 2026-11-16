@@ -9,7 +9,9 @@
  * describing a response no endpoint produces.
  *
  * The `null` baseline here is the fresh-install state, which is what the
- * hooks resolving their own fallbacks need to be tested against.
+ * hooks resolving their own fallbacks need to be tested against. The one
+ * field that is not `null` there is `proxyAutostart`: the service sends what
+ * it does at launch, and a fresh install's endpoint comes on.
  */
 import type { AppSettings } from '../../../src/types';
 
@@ -37,7 +39,7 @@ const UNSET: AppSettings = {
   loopGuard: null,
   toolCallRepair: null,
   mcpDrawing: null,
-  proxyAutostart: null,
+  proxyAutostart: true,
   closeToTray: null,
   startAtLogin: null,
 };

@@ -282,3 +282,140 @@ async fn a_refused_replacement_puts_the_endpoint_back_and_says_so() {
         "{status:?}"
     );
 }
+
+/// A runtime that takes every pin and holds every load request forever: a
+/// client waiting on one keeps its connection open past the stop's wait.
+#[derive(Debug, Default)]
+struct HoldsEveryLoad {
+    pin: std::sync::Mutex<Option<PinnedSpec>>,
+}
+
+#[async_trait::async_trait]
+impl gglib_core::ports::ModelRuntimePort for HoldsEveryLoad {
+    async fn admit(
+        &self,
+        _model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: Option<u64>,
+        _overrides: gglib_core::ports::LaunchOverrides,
+    ) -> Result<gglib_core::ports::Admission, gglib_core::ports::ModelRuntimeError> {
+        std::future::pending().await
+    }
+
+    async fn current_model(&self) -> Option<gglib_core::ports::RunningTarget> {
+        None
+    }
+
+    async fn stop_current(&self) -> Result<(), gglib_core::ports::ModelRuntimeError> {
+        Ok(())
+    }
+
+    async fn stop_model(
+        &self,
+        _model_id: u32,
+    ) -> Result<bool, gglib_core::ports::ModelRuntimeError> {
+        Ok(false)
+    }
+
+    fn pinned(&self) -> Option<PinnedSpec> {
+        self.pin.lock().unwrap().clone()
+    }
+
+    fn set_pin(&self, pin: Option<PinnedSpec>) -> Result<(), gglib_core::ports::ModelRuntimeError> {
+        *self.pin.lock().unwrap() = pin;
+        Ok(())
+    }
+}
+
+/// A switch while a client is still waiting on the endpoint: the stop
+/// outlasts its wait and aborts the run, which still leaves the endpoint
+/// off, so the switch goes on and the endpoint comes back on the same port,
+/// serving what was asked. Said once each way.
+#[tokio::test]
+async fn a_switch_whose_stop_times_out_still_switches() {
+    let pool = setup_test_database().await.expect("in-memory DB");
+    let heard = Arc::new(RecordingEmitter::default());
+    let (_core, proxy) = crate::test_support::test_core_and_proxy_telling(
+        &CoreFactory::build_repos(pool),
+        Arc::new(HoldsEveryLoad::default()),
+        Arc::clone(&heard) as Arc<dyn gglib_core::ports::AppEventEmitter>,
+    );
+    let port = free_port();
+    proxy.start_as(on(port), None, false).await.unwrap();
+    // A client whose request the endpoint never answers.
+    let waiting = tokio::spawn(async move {
+        let _ = gglib_proxy::loopback::client()
+            .post(format!("http://127.0.0.1:{port}/v1/gglib/models/held/load"))
+            .send()
+            .await;
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let heard_before = heard.events().len();
+
+    let answer = proxy.start_as(on(port), Some(qwen()), true).await;
+    let pinned = proxy.pinned().map(|p| p.name);
+    let status = proxy.status().await;
+    let said = Fixture {
+        proxy: Arc::clone(&proxy),
+        heard: Arc::clone(&heard),
+    }
+    .said(heard_before);
+    proxy.stop().await.unwrap();
+    waiting.abort();
+
+    assert!(
+        matches!(answer, Ok(StartAnswer::On(a, StartOutcome::Replaced)) if a.port() == port),
+        "{answer:?}"
+    );
+    assert_eq!(pinned.as_deref(), Some("Qwen3-4B"));
+    assert!(matches!(status, ProxyStatus::Running { address } if address.port() == port));
+    assert_eq!(
+        said,
+        [
+            frame(&AppEvent::proxy_stopped()),
+            frame(&AppEvent::proxy_started(port))
+        ]
+    );
+}
+
+/// Switches at once are one after the other: each stops what runs and
+/// starts what it asked, so every one is answered with the endpoint on, and
+/// what the endpoint says it serves is what the runtime enforces.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn switches_at_once_are_one_after_the_other() {
+    let fx = Fixture::new().await;
+    let port = free_port();
+    fx.proxy.start_as(on(port), None, false).await.unwrap();
+
+    let switches: Vec<_> = (0..8)
+        .map(|n| {
+            let proxy = Arc::clone(&fx.proxy);
+            let pin = (n % 2 == 0).then(qwen);
+            tokio::spawn(async move { proxy.start_as(on(port), pin, true).await })
+        })
+        .collect();
+    let mut answers = Vec::new();
+    for switch in switches {
+        answers.push(switch.await.expect("the switch ran"));
+    }
+    let status = fx.proxy.status().await;
+    let recorded = fx
+        .proxy
+        .running
+        .read()
+        .unwrap()
+        .clone()
+        .map(|r| r.pin.map(|p| p.id));
+    let enforced = fx.proxy.pinned().map(|p| p.id);
+    fx.proxy.stop().await.unwrap();
+
+    for answer in &answers {
+        assert!(matches!(answer, Ok(StartAnswer::On(..))), "{answers:?}");
+    }
+    assert!(matches!(status, ProxyStatus::Running { address } if address.port() == port));
+    assert_eq!(
+        recorded,
+        Some(enforced),
+        "what it says it serves is what it enforces"
+    );
+}

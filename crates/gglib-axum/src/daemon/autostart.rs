@@ -22,6 +22,8 @@ use crate::state::AppState;
 pub(super) enum Autostart {
     /// The switch is off, so the endpoint waits to be turned on.
     Off,
+    /// The command that launched the service starts the endpoint itself.
+    Left,
     /// The endpoint is on, at this address.
     On(SocketAddr),
     /// The endpoint should have come on and did not; why.
@@ -30,10 +32,15 @@ pub(super) enum Autostart {
 
 /// Bring the endpoint up if the switch says so, log what happened, and say
 /// it.
-pub(super) async fn autostart_proxy(state: &AppState) -> Autostart {
-    let outcome = start_if_on(state).await;
+pub(super) async fn autostart_proxy(state: &AppState, leave_off: bool) -> Autostart {
+    let outcome = if leave_off {
+        Autostart::Left
+    } else {
+        start_if_on(state).await
+    };
     match &outcome {
         Autostart::Off => {}
+        Autostart::Left => info!("the endpoint is left to the command that launched the service"),
         Autostart::On(addr) => info!("proxy autostarted on {addr}"),
         Autostart::Failed(reason) => warn!("proxy autostart failed: {reason}"),
     }

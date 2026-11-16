@@ -138,13 +138,10 @@ pub(super) async fn serve_image(
         None,
     );
 
-    let handle = daemon_client::ensure_daemon().await?;
+    let handle = daemon_client::ensure_daemon_for_endpoint().await?;
     let started =
         crate::handlers::inference::proxy::start_here(&handle, &body, &settings, flags.options.yes)
             .await?;
-    let Some(started) = started else {
-        return Ok(());
-    };
     let proxy_port = started.port;
     let key = auth::proxy_key(ctx, access.api_key.clone()).await;
     let client = gglib_proxy::loopback::client();

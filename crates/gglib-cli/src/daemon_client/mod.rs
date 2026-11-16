@@ -184,6 +184,33 @@ pub(crate) async fn running() -> Result<DaemonHandle, Absent> {
 /// - the launched daemon does not become healthy within the wait window
 ///   (the log file path is named in the error).
 pub(crate) async fn ensure_daemon() -> Result<DaemonHandle> {
+    ensure_daemon_leaving(Endpoint::AsSettingsSay).await
+}
+
+/// What a daemon this command launches does with the endpoint at its start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Endpoint {
+    /// As `proxy-autostart` says: every command that does not start the
+    /// endpoint itself.
+    AsSettingsSay,
+    /// Left off, because this command starts it next, its own way (`serve`,
+    /// `proxy`, `up`, `model load --pin`): a launch's endpoint would be one
+    /// it then found on, and asked about or was refused by.
+    LeftToThisCommand,
+}
+
+/// [`ensure_daemon`], for a command that starts the endpoint next: a daemon
+/// it launches leaves the endpoint to it. One already running is used as it
+/// is, endpoint and all, so its endpoint is one that was on before.
+///
+/// # Errors
+///
+/// As [`ensure_daemon`].
+pub(crate) async fn ensure_daemon_for_endpoint() -> Result<DaemonHandle> {
+    ensure_daemon_leaving(Endpoint::LeftToThisCommand).await
+}
+
+async fn ensure_daemon_leaving(endpoint: Endpoint) -> Result<DaemonHandle> {
     let api_key = auth::daemon_token();
     let client = gglib_proxy::loopback::client();
 
@@ -197,7 +224,7 @@ pub(crate) async fn ensure_daemon() -> Result<DaemonHandle> {
         DaemonProbe::NotRunning => {}
     }
 
-    let log_path = spawn_daemon().context("could not launch the gglib daemon")?;
+    let log_path = spawn_daemon(endpoint).context("could not launch the gglib daemon")?;
     eprintln!("  starting gglib daemon\u{2026}");
 
     let prober = client.clone();
@@ -240,8 +267,16 @@ async fn wait_for_launch<F: Future<Output = DaemonProbe>>(
     }
 }
 
+/// The arguments `gglib daemon run` is launched with for `endpoint`.
+pub(crate) fn daemon_run_args(endpoint: Endpoint) -> &'static [&'static str] {
+    match endpoint {
+        Endpoint::AsSettingsSay => &["daemon", "run"],
+        Endpoint::LeftToThisCommand => &["daemon", "run", "--without-endpoint"],
+    }
+}
+
 /// Spawn `gglib daemon run` detached; returns the log file path.
-fn spawn_daemon() -> Result<std::path::PathBuf> {
+fn spawn_daemon(endpoint: Endpoint) -> Result<std::path::PathBuf> {
     // Never from a test: the binary launched would be the test harness
     // itself, which reads `daemon run` as two filters and runs those tests.
     if cfg!(test) {
@@ -259,7 +294,7 @@ fn spawn_daemon() -> Result<std::path::PathBuf> {
         .with_context(|| format!("opening {}", log_path.display()))?;
 
     let mut command = cmd(exe);
-    command.args(["daemon", "run"]);
+    command.args(daemon_run_args(endpoint));
     detached::spawn_daemon(command, &log).context("spawning `gglib daemon run`")?;
     Ok(log_path)
 }

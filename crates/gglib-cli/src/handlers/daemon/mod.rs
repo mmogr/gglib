@@ -10,9 +10,14 @@ use crate::target::Target;
 use gglib_axum::{DaemonLock, DaemonOptions, SHUTDOWN_WATCHDOG, run_daemon};
 use gglib_core::daemon_port;
 
-/// Execute `gglib daemon run`: host the daemon in the foreground.
-pub(crate) async fn run(allowed_hosts: Vec<String>) -> Result<()> {
-    run_daemon(DaemonOptions { allowed_hosts }).await
+/// Execute `gglib daemon run`: host the daemon in the foreground, with the
+/// endpoint left off at its start when `leave_endpoint_off`.
+pub(crate) async fn run(allowed_hosts: Vec<String>, leave_endpoint_off: bool) -> Result<()> {
+    run_daemon(DaemonOptions {
+        allowed_hosts,
+        leave_endpoint_off,
+    })
+    .await
 }
 
 /// The report's lines for the proxy: its state (a pinned one with its model,
@@ -42,7 +47,10 @@ fn proxy_lines(proxy: &ProxyStatusDto) -> Vec<String> {
 /// This CLI's own words, about one of its commands, and so kept apart from
 /// [`proxy_lines`], whose every word is the daemon's.
 fn way_back_line(proxy: &ProxyStatusDto) -> Option<String> {
-    proxy.pinned_to.as_ref().filter(|_| false).cloned()
+    proxy
+        .pinned_to
+        .is_some()
+        .then(|| "  Unpin:   gglib proxy  (serve every model again)".to_owned())
 }
 
 /// Execute `gglib daemon status`.

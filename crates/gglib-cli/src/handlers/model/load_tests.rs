@@ -13,6 +13,7 @@ fn consent(answer: bool, terminal: bool) -> Consent {
     Consent {
         yes: false,
         terminal,
+        command: "gglib model load 3 --pin".to_owned(),
         ask: Box::new(move |_| Ok(answer)),
     }
 }
@@ -162,8 +163,8 @@ async fn a_pin_over_an_endpoint_on_otherwise_asks_first() {
         )
         .await;
     assert_eq!(
-        lines.unwrap(),
-        ["  Nothing changed: the endpoint is still on at port 8080, serving every model."]
+        format!("{:#}", lines.expect_err("a no loads nothing, and fails")),
+        "Nothing changed: the endpoint is still on at port 8080, serving every model."
     );
     assert_eq!(taken.len(), 1, "a no loads nothing");
 }
