@@ -36,7 +36,7 @@ vi.mock('../../../src/services/transport', async () => {
   const actual = await vi.importActual<Record<string, unknown>>('../../../src/services/transport');
   return {
     ...actual,
-    getTransport: () => ({ ...transport, subscribe: vi.fn(() => () => {}), onEventStreamOpen: vi.fn(() => () => {}) }),
+    getTransport: () => ({ ...transport, subscribe: vi.fn(() => () => {}), onEventStreamOpen: vi.fn(() => () => {}), onEventStreamClose: vi.fn(() => () => {}), isEventStreamOpen: vi.fn(() => false) }),
   };
 });
 vi.mock('../../../src/services/transport/api/setup', () => api);

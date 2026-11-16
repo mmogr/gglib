@@ -19,6 +19,8 @@ useGglibRuntime                      send / edit / regenerate / Retry / Stop
         │          points, whether it ends in a question
         │          (sending waits for both)
         └── drawRun: GET /api/runs/{id}/events?after=0 → one frame per AgentEvent
+              │  (a stream that ends before the run: ?after=<last seq> again,
+              │   after 250 ms, 500 ms, 1 s, 2 s, then 4 s; eight tries: followAgain)
               ├── text_delta / reasoning_delta → current assistant message
               ├── tool_call_start / _complete  → tool-call part, then its result
               │                                  and its images, on its artifact
@@ -61,6 +63,17 @@ unfinished reply marked, and how long each turn thought. The live run is
 looked up before the rows load, so a run that ends during the opening is
 shown once. Nothing about a run is kept in browser storage; its id lives in
 memory while it is read.
+
+A run's stream can end before the run does (a proxy that hiccups, a service
+restarting its listener, a machine that slept). While the run is read, that
+stream is read again from the last event drawn, into the same message, so
+nothing is shown twice or lost: after 250 ms, 500 ms, 1 s, 2 s, then 4 s, up
+to eight tries, and a try that reads a new event starts the waits again
+(`followAgain.ts`). The run's end, a run the service no longer has (404) and
+leaving end the tries; Stop cancels the run and the next try reads its end.
+Once the tries are spent the thread shows the saved rows, the page says the
+reply stopped arriving and may still be running, and the next send asks
+whether a run is live first, drawing it rather than sending when one is.
 
 An edit (of a question or of a reply) and a regenerate are changes the daemon
 makes (`POST /api/conversations/{id}/changes`, ADR 0017), and the page holds
@@ -142,8 +155,9 @@ loop detection) lives in the Rust `gglib-agent` crate.
 |---|---|
 | `useGglibRuntime.ts` | The runtime: send, edit, regenerate, Retry and Stop, as runs and changes; each start says the chat's Thinking choice when the caller gives one, and `draw` when the caller's Draw button is armed, and tells the caller once that turn is accepted; hands the page what the open chat says of its branches (`branching`) |
 | `branchChanges.ts` | An edit, a regenerate or Branch from here as the change it asks the daemon for, and the change made: the chat it leaves shown, or the branch it made opened, and answered by a run when the daemon says so; with no change, Retry. `useBranching` hands the thread what the chat offers of its branches as one object, new only when the chat's thread is read again |
-| `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end; keeps how the run it last read to its end ended (`endedRun`) until the conversation is left, which is how the page knows a reply finished in front of it; keeps what the daemon says beside the rows (`answerable`, `points`); hands up each reading of a far chat, unless it was left first; holds the preview frames of the run it is reading (`previews`), and none between readings |
-| `drawRun.ts` | Reads one run's events from the first and draws them; a `preview` item goes to the frames held beside the messages, until its call's result is drawn or the reading ends |
+| `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run and again to a stream that ended early (`followAgain`), taking the run as perhaps live once the tries are spent, stops reading on leave, shows what was saved at a run's end; keeps how the run it last read to its end ended (`endedRun`) until the conversation is left, which is how the page knows a reply finished in front of it; keeps what the daemon says beside the rows (`answerable`, `points`); hands up each reading of a far chat, unless it was left first; holds the preview frames of the run it is reading (`previews`), and none between readings |
+| `drawRun.ts` | Reads one run's events from the first and draws them, and from the last one read again when its stream ends early and the caller's `again` says so; a `preview` item goes to the frames held beside the messages, until its call's result is drawn or the reading ends |
+| `followAgain.ts` | When a stream that ended before its run is read again: the waits (250 ms doubling to 4 s, eight tries, started again by a try that reads more), which ends are tried again (a close, a broken or timed-out connection, a stale token, renewed first, a failing service) and which not (a refusal such as a run gone), the wait cleared on leaving, and the sentence once the tries are spent |
 | `runPreviews.ts` | A run's preview frames, by tool call: a `preview` event's data read as a frame or not at all, the newest kept for each call, and a frame as an image's `src` |
 | `runRequest.ts` | The turn's body (`LocalTurn`, `buildTurn`): the conversation, the message and its images by id, and no model, port, history, tool filter or limit; `thinking` only when the turn changes the chat's choice, and `folder` only when it changes the chat's folder (`""` for Clear); `answer_saved` only on a turn that answers the question the chat ends in; `draw` only for a turn started while Draw is armed: a send, or an answer turn (an edit, a regenerate or a Retry); `image_model` only beside `draw`, when the chat chose one. And the run id |
 | `savedRows.ts` | A conversation's saved thread with its branch points and whether it ends in a question, its live run, and the row a message is; a far chat's from the far machine, handed on as that machine answered it, its live run from the far listing's `live_run` |

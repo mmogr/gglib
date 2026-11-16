@@ -18,6 +18,10 @@ const transport = vi.hoisted(() => ({
   startProxy: vi.fn(async (_c?: unknown): Promise<unknown> => null),
   startPinnedProxy: vi.fn(async (_r: unknown): Promise<unknown> => null),
   stopProxy: vi.fn(async () => {}),
+  getProxyStatus: vi.fn(async (): Promise<unknown> => null),
+  onEventStreamOpen: vi.fn(() => () => {}),
+  onEventStreamClose: vi.fn(() => () => {}),
+  isEventStreamOpen: vi.fn(() => false),
 }));
 
 vi.mock('../../../src/services/transport', () => ({
@@ -25,6 +29,7 @@ vi.mock('../../../src/services/transport', () => ({
 }));
 
 import { useEndpointActions } from '../../../src/places/endpoint/useEndpointActions';
+import { cleanupProxyEvents, initProxyEvents } from '../../../src/services/proxyEvents';
 import { getProxyState, resetProxyState } from '../../../src/services/proxyRegistry';
 
 describe('the endpoint actions', () => {
@@ -57,6 +62,22 @@ describe('the endpoint actions', () => {
     await act(() => result.current.serve(null));
 
     expect(getProxyState()).toEqual({ running: true, port: 8080, status: UP });
+  });
+
+  it('a status read asked before the start, and answered after it, does not write over the start\'s answer', async () => {
+    let answerRead: (status: ProxyStatus) => void = () => {};
+    transport.getProxyStatus.mockReturnValueOnce(new Promise<ProxyStatus>((resolve) => (answerRead = resolve)));
+    initProxyEvents();
+    const { result } = renderHook(() => useEndpointActions());
+
+    await act(() => result.current.turnOn());
+    await act(async () => {
+      answerRead({ ...UP, running: false, state: 'off', port: null, base_url: null });
+      await Promise.resolve();
+    });
+
+    expect(getProxyState()).toEqual({ running: true, port: 8080, status: UP });
+    cleanupProxyEvents();
   });
 
   it('a refused start leaves the registry as it was', async () => {

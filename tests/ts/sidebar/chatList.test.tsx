@@ -23,6 +23,9 @@ const daemon = vi.hoisted(() => ({ chats: [] as Chat[], runs: [] as unknown[] })
 
 const transport = vi.hoisted(() => ({
   subscribe: vi.fn(() => () => {}),
+  onEventStreamOpen: vi.fn(() => () => {}),
+  onEventStreamClose: vi.fn(() => () => {}),
+  isEventStreamOpen: vi.fn(() => false),
   listModels: vi.fn(async () => []),
   getSettings: vi.fn(async () => ({})),
   getProxyStatus: vi.fn(async () => ({ running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null })),

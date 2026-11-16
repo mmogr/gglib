@@ -42,7 +42,7 @@ export {
 } from './mcpIntegration';
 
 // Re-export built-in integration
-export { syncBuiltinTools } from './builtinIntegration';
+export { keepBuiltinToolsCurrent, syncBuiltinTools } from './builtinIntegration';
 
 // Re-export name utilities
 export {

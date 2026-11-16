@@ -31,11 +31,13 @@ sentence. In the desktop app Start gglib starts it as the tray menu does
 (`start_gglib`), held as "Starting gglib…" until the poll hears it, and a
 refusal is said under the sentence in the app's words; elsewhere it is
 drawn disabled. The registries let go of what the daemon said when it
-goes (`hooks/useDaemonRecovery`, which the main window's gate shares), and each is read again when the poll hears it (a list read replaces
-the running set, so a model that died with the old daemon is not drawn),
-and the event stream connects at once instead of sleeping out a reconnect
-wait that grew while the daemon was gone. A list read that failed, or that an
-event overtook, is tried again each poll until one lands.
+goes (`hooks/useDaemonRecovery`, which the main window's gate shares); when the poll hears it the event stream connects at once instead of
+sleeping out a reconnect wait that grew while the daemon was gone, and its
+opening reads each registry again (a list read replaces the running set,
+so a model that died with the old daemon is not drawn). A list read that failed, or that an
+event overtook, is followed by the next opening of the stream, the next
+server event, or (while the stream is open) `keptCurrent`'s own retry; the
+panel has no poll of its own for it.
 Before the first answer, and until the proxy's read has landed, the panel
 claims neither, and the footer has no Turn on or Turn off.
 Everything here is HTTP except Open gglib, the panel's one window action:

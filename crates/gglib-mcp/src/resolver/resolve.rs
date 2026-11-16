@@ -2,14 +2,16 @@
 
 use super::env::{EnvProvider, SystemEnv};
 use super::fs::{FsProvider, SystemFs};
+use super::platform::Platform;
 use super::search::ExecutableSearcher;
-use super::types::{Attempt, AttemptOutcome, ResolveError, ResolveResult};
+use super::types::{Attempt, ResolveError, ResolveResult};
 use std::path::Path;
 
 /// Resolve a command to an absolute executable path.
 ///
 /// Search order:
-/// 1. If command is absolute and valid → return it
+/// 1. If command is absolute and a program, under one of the names the
+///    platform gives it → return that
 /// 2. Search in PATH environment variable
 /// 3. Search in /etc/paths and /etc/paths.d/* (macOS only)
 /// 4. Search in platform-specific default directories
@@ -19,15 +21,18 @@ pub(crate) fn resolve_executable(
     command: &str,
     user_search_paths: &[String],
 ) -> Result<ResolveResult, ResolveError> {
-    resolve_executable_with_deps(command, user_search_paths, &SystemEnv, &SystemFs)
+    let platform = Platform::host();
+    resolve_executable_with_deps(command, user_search_paths, &SystemEnv, &SystemFs, &platform)
 }
 
-/// Resolve with injected dependencies (for testing).
+/// Resolve with injected dependencies and the rules of a platform (for
+/// testing).
 pub(crate) fn resolve_executable_with_deps(
     command: &str,
     user_search_paths: &[String],
     env: &dyn EnvProvider,
     fs: &dyn FsProvider,
+    platform: &Platform,
 ) -> Result<ResolveResult, ResolveError> {
     if command.is_empty() {
         return Err(ResolveError::EmptyCommand);
@@ -36,25 +41,33 @@ pub(crate) fn resolve_executable_with_deps(
     let mut all_attempts = Vec::new();
     let mut warnings = Vec::new();
 
-    // Step 1: If command is absolute, validate and return
+    // Step 1: If command is absolute, check it in its own folder under each
+    // name the platform gives it: on Windows `C:\nodejs\npx` is found as
+    // `npx.cmd`, which is tried before the bare name.
     let command_path = Path::new(command);
     if command_path.is_absolute() {
-        let outcome = fs.check_executable(command_path);
-        all_attempts.push(Attempt {
-            candidate: command_path.to_path_buf(),
-            outcome: outcome.clone(),
-        });
+        let searcher = ExecutableSearcher::new(env, fs, platform);
+        let basename = command_path.file_name().and_then(|n| n.to_str());
+        let found = match (command_path.parent(), basename) {
+            (Some(dir), Some(name)) => searcher.probe_dirs([dir], name, &mut all_attempts),
+            _ => searcher.probe(command_path.to_path_buf(), &mut all_attempts),
+        };
 
-        if outcome == AttemptOutcome::Ok {
+        if let Some(resolved_path) = found {
             return Ok(ResolveResult {
-                resolved_path: command_path.to_path_buf(),
+                resolved_path,
                 attempts: all_attempts,
                 warnings,
             });
         }
 
-        // Absolute path failed - try falling back to basename
-        if let Some(basename) = command_path.file_name().and_then(|n| n.to_str()) {
+        // Absolute path failed - try falling back to basename. The last
+        // attempt is the command as written.
+        if let Some(basename) = basename {
+            let outcome = all_attempts
+                .last()
+                .map(|attempt| attempt.outcome.to_string())
+                .unwrap_or_default();
             warnings.push(format!(
                 "Absolute path '{command}' failed ({outcome}), falling back to basename '{basename}'"
             ));
@@ -63,6 +76,7 @@ pub(crate) fn resolve_executable_with_deps(
                 user_search_paths,
                 env,
                 fs,
+                platform,
                 all_attempts,
                 warnings,
             );
@@ -73,7 +87,15 @@ pub(crate) fn resolve_executable_with_deps(
     }
 
     // Step 2-6: Search for relative command
-    resolve_relative_command(command, user_search_paths, env, fs, all_attempts, warnings)
+    resolve_relative_command(
+        command,
+        user_search_paths,
+        env,
+        fs,
+        platform,
+        all_attempts,
+        warnings,
+    )
 }
 
 /// Resolve a relative command (not an absolute path).
@@ -85,10 +107,11 @@ fn resolve_relative_command(
     user_search_paths: &[String],
     env: &dyn EnvProvider,
     fs: &dyn FsProvider,
+    platform: &Platform,
     mut attempts: Vec<Attempt>,
     warnings: Vec<String>,
 ) -> Result<ResolveResult, ResolveError> {
-    let searcher = ExecutableSearcher::new(env, fs);
+    let searcher = ExecutableSearcher::new(env, fs, platform);
 
     let found = searcher
         .search_in_path(command, &mut attempts)
@@ -114,41 +137,51 @@ mod tests {
     use crate::resolver::fs::MockFs;
     use std::path::PathBuf;
 
-    #[test]
-    fn test_resolve_absolute_path_success() {
-        let env = MockEnv::new();
-        let fs = MockFs::new().with_executable("/usr/local/bin/npx");
-
-        let result = resolve_executable_with_deps("/usr/local/bin/npx", &[], &env, &fs);
-
-        assert!(result.is_ok());
-        let resolved = result.unwrap();
-        assert_eq!(resolved.resolved_path, PathBuf::from("/usr/local/bin/npx"));
+    /// A path that is absolute on this machine, whatever its OS: `/usr/…`
+    /// is not absolute on Windows, which wants a drive.
+    fn absolute(rest: &str) -> PathBuf {
+        std::env::temp_dir().join("gglib-test").join(rest)
     }
 
     #[test]
-    fn test_resolve_absolute_path_failure_falls_back() {
-        let env = MockEnv::new().with_var("PATH", "/opt/homebrew/bin");
-        let fs = MockFs::new().with_executable("/opt/homebrew/bin/npx");
+    fn test_resolve_absolute_path_success() {
+        let npx = absolute("local/bin/npx");
+        let env = MockEnv::new();
+        let fs = MockFs::new().with_executable(&npx);
 
-        // Try absolute path that doesn't exist, should fall back to basename search
-        let result = resolve_executable_with_deps("/usr/local/bin/npx", &[], &env, &fs);
+        let result =
+            resolve_executable_with_deps(npx.to_str().unwrap(), &[], &env, &fs, &Platform::host());
 
         assert!(result.is_ok());
         let resolved = result.unwrap();
-        assert_eq!(
-            resolved.resolved_path,
-            PathBuf::from("/opt/homebrew/bin/npx")
-        );
+        assert_eq!(resolved.resolved_path, npx);
+    }
+
+    /// `PATH` is one directory, so no separator is in it to differ by OS.
+    #[test]
+    fn test_resolve_absolute_path_failure_falls_back() {
+        let homebrew = absolute("homebrew/bin");
+        let env = MockEnv::new().with_var("PATH", &homebrew);
+        let fs = MockFs::new().with_executable(homebrew.join("npx"));
+
+        // Try absolute path that doesn't exist, should fall back to basename search
+        let gone = absolute("local/bin/npx");
+        let result =
+            resolve_executable_with_deps(gone.to_str().unwrap(), &[], &env, &fs, &Platform::host());
+
+        assert!(result.is_ok());
+        let resolved = result.unwrap();
+        assert_eq!(resolved.resolved_path, homebrew.join("npx"));
         assert!(!resolved.warnings.is_empty()); // Should warn about fallback
     }
 
+    /// Unix's rules, so the `:` list splits as it does there on every OS.
     #[test]
     fn test_resolve_in_path() {
         let env = MockEnv::new().with_var("PATH", "/usr/bin:/usr/local/bin");
         let fs = MockFs::new().with_executable("/usr/local/bin/npx");
 
-        let result = resolve_executable_with_deps("npx", &[], &env, &fs);
+        let result = resolve_executable_with_deps("npx", &[], &env, &fs, &Platform::unix());
 
         assert!(result.is_ok());
         let resolved = result.unwrap();
@@ -160,7 +193,7 @@ mod tests {
         let env = MockEnv::new();
         let fs = MockFs::new();
 
-        let result = resolve_executable_with_deps("", &[], &env, &fs);
+        let result = resolve_executable_with_deps("", &[], &env, &fs, &Platform::host());
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), ResolveError::EmptyCommand));
@@ -171,7 +204,7 @@ mod tests {
         let env = MockEnv::new().with_var("PATH", "/usr/bin");
         let fs = MockFs::new();
 
-        let result = resolve_executable_with_deps("nonexistent", &[], &env, &fs);
+        let result = resolve_executable_with_deps("nonexistent", &[], &env, &fs, &Platform::host());
 
         assert!(result.is_err());
         if let Err(ResolveError::NotResolved { command, attempts }) = result {
@@ -188,7 +221,7 @@ mod tests {
         let fs = MockFs::new().with_executable("/custom/bin/npx");
         let user_paths = vec!["/custom/bin".to_string()];
 
-        let result = resolve_executable_with_deps("npx", &user_paths, &env, &fs);
+        let result = resolve_executable_with_deps("npx", &user_paths, &env, &fs, &Platform::host());
 
         assert!(result.is_ok());
         let resolved = result.unwrap();

@@ -126,6 +126,8 @@ export const transport = {
   shutdownDaemon: vi.fn(async () => {}),
   subscribe: vi.fn(() => () => {}),
   onEventStreamOpen: vi.fn(() => () => {}),
+  onEventStreamClose: vi.fn(() => () => {}),
+  isEventStreamOpen: vi.fn(() => false),
 };
 
 /** Tests waiting for an answer, while `daemon.tested` is `null`. */

@@ -1,14 +1,15 @@
 /**
  * The tray popover while the daemon comes and goes: no daemon is its own
  * state, with Start gglib disabled and no Turn on (TM-8); the poll hearing
- * it again reads every registry afresh, so a model that died with the old
- * daemon is not drawn, and nothing is claimed until the proxy's read has
- * landed, on the first open and on every recovery; and the panel keeps one
- * `/api/events` stream through it all (TX-1).
+ * it again wakes the event stream, whose opening reads every registry
+ * afresh, so a model that died with the old daemon is not drawn, and nothing
+ * is claimed until the proxy's read has landed, on the first open and on
+ * every recovery; and the panel keeps one `/api/events` stream through it
+ * all (TX-1).
  *
  * The daemon's answers are the transport's. The event stream is the real
- * shared manager over a fake `apiFetch` in the one test that counts streams,
- * and a stub everywhere else.
+ * shared manager over a fake `apiFetch`: the daemon going ends its stream,
+ * and no new one opens until it is back.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -22,11 +23,11 @@ const transport = vi.hoisted(() => ({
   revealSecret: vi.fn(async (): Promise<string | null> => null),
 }));
 
-/** The fake `/api/events`: up or not, and every stream it handed out. */
+/** The fake `/api/events`: up or not, every stream it handed out, and how to end the open ones. */
 const events = vi.hoisted(() => ({
-  real: false,
   up: true,
   streams: [] as AbortSignal[],
+  ends: [] as (() => void)[],
 }));
 
 vi.mock('../../../src/services/transport', async () => {
@@ -39,9 +40,11 @@ vi.mock('../../../src/services/transport', async () => {
       // This fake daemon takes no token and no key: its health probe answers
       // exactly when its proxy status does.
       probeDaemon: () => transport.getProxyStatus().then(() => true, () => false),
-      subscribe: events.real ? sse.subscribeSseEvent : vi.fn(() => () => {}),
-      onEventStreamOpen: vi.fn(() => () => {}),
-      reconnectEventStreamNow: events.real ? sse.reconnectEventStreamNow : vi.fn(),
+      subscribe: sse.subscribeSseEvent,
+      onEventStreamOpen: sse.onEventStreamOpen,
+      onEventStreamClose: sse.onEventStreamClose,
+      isEventStreamOpen: sse.isEventStreamOpen,
+      reconnectEventStreamNow: sse.reconnectEventStreamNow,
     }),
   };
 });
@@ -57,6 +60,7 @@ vi.mock('../../../src/services/transport/api/client', async () => {
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           signal.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')));
+          events.ends.push(() => controller.error(new TypeError('network error')));
         },
       });
       return new Response(body, { status: 200 });
@@ -82,6 +86,13 @@ const gone = async () => {
   throw new Error('fetch failed');
 };
 
+/** The daemon goes: its status stops answering, its stream ends, and no new one opens. */
+function daemonGoes() {
+  transport.getProxyStatus.mockImplementation(gone);
+  events.up = false;
+  for (const end of events.ends.splice(0)) end();
+}
+
 /** One poll of the probe, and what it set going. */
 async function poll() {
   // Async, so each reconnect wait's promise settles before the next timer.
@@ -98,7 +109,7 @@ describe('the tray panel while the daemon comes and goes', () => {
     transport.getRemoteStatus.mockImplementation(async () => IDLE_STATUS);
     transport.revealSecret.mockImplementation(async () => null);
     forgetServerList();
-    Object.assign(events, { real: false, up: true, streams: [] });
+    Object.assign(events, { up: true, streams: [], ends: [] });
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -108,6 +119,7 @@ describe('the tray panel while the daemon comes and goes', () => {
   describe('with no daemon answering (TM-8)', () => {
     beforeEach(() => {
       transport.getProxyStatus.mockImplementation(gone);
+      events.up = false;
     });
 
     it('says gglib is not running, not that the endpoint is off', async () => {
@@ -128,6 +140,7 @@ describe('the tray panel while the daemon comes and goes', () => {
       render(<TrayPanel />);
       await screen.findByRole('button', { name: 'Start gglib' });
       transport.getProxyStatus.mockImplementation(async () => UP);
+      events.up = true;
       await poll();
       expect(await screen.findByText('http://127.0.0.1:8080/v1')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Turn off' })).toBeEnabled();
@@ -147,7 +160,8 @@ describe('the tray panel while the daemon comes and goes', () => {
     // The probe answers; the bridge's own read does not.
     transport.getProxyStatus.mockImplementationOnce(async () => UP).mockImplementation(() => new Promise(() => {}));
     render(<TrayPanel />);
-    await waitFor(() => expect(transport.getProxyStatus).toHaveBeenCalledTimes(2));
+    // The probe, the bridge's own read, and the read the stream's first opening set going.
+    await waitFor(() => expect(transport.getProxyStatus).toHaveBeenCalledTimes(3));
     await act(async () => {});
     expect(screen.queryByText("Off. Clients can't connect.")).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Endpoint' })).not.toBeInTheDocument();
@@ -155,18 +169,26 @@ describe('the tray panel while the daemon comes and goes', () => {
   });
 
   it('claims nothing on a recovery either, until the re-read has landed', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
     transport.getProxyStatus.mockImplementation(async () => UP);
     render(<TrayPanel />);
     await screen.findByText('http://127.0.0.1:8080/v1');
 
-    transport.getProxyStatus.mockImplementation(gone);
+    daemonGoes();
     await poll();
     await screen.findByText(NOT_RUNNING);
+    // Gone long enough that the stream sleeps in an 8 s wait (0.5 + 1 + 2 +
+    // 4 s failed), so the probe, not the stream's own retry, hears it first.
+    for (let i = 0; i < 4; i++) await poll();
 
-    // Back: the probe answers, the re-read it sets going is held.
+    // Back: the probe answers, the re-read the stream's opening sets going is held.
+    const streamsBefore = events.streams.length;
     transport.getProxyStatus.mockImplementationOnce(async () => UP).mockImplementation(() => new Promise(() => {}));
+    events.up = true;
     await poll();
     await waitFor(() => expect(screen.queryByText(NOT_RUNNING)).not.toBeInTheDocument());
+    // The stream opened again, and the read its opening set going is out.
+    expect(events.streams).toHaveLength(streamsBefore + 1);
     expect(screen.queryByText("Off. Clients can't connect.")).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Endpoint' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Turn (on|off)/ })).not.toBeInTheDocument();
@@ -178,17 +200,20 @@ describe('the tray panel while the daemon comes and goes', () => {
     render(<TrayPanel />);
     const loaded = await screen.findByRole('region', { name: 'Loaded' });
     expect(within(loaded).getByRole('listitem')).toHaveTextContent(`Phi-4${RESIDENCY_WORDS.loaded}`);
+    const readsBefore = transport.listServers.mock.calls.length;
 
-    transport.getProxyStatus.mockImplementation(gone);
+    daemonGoes();
     await poll();
     await screen.findByText(NOT_RUNNING);
 
     transport.getProxyStatus.mockImplementation(async () => DOWN);
     transport.listServers.mockImplementation(async () => []);
+    events.up = true;
     await poll();
     expect(await screen.findByText('Nothing loaded.')).toBeInTheDocument();
     expect(screen.queryByText('Phi-4')).not.toBeInTheDocument();
-    expect(transport.listServers).toHaveBeenCalledTimes(2);
+    // One read: the stream's opening, which the daemon's return set going.
+    expect(transport.listServers).toHaveBeenCalledTimes(readsBefore + 1);
   });
 
   it('draws no model from the old daemon while the new one\'s list is still on its way', async () => {
@@ -196,23 +221,25 @@ describe('the tray panel while the daemon comes and goes', () => {
     transport.listServers.mockImplementation(async () => [{ model_id: 3, model_name: 'Phi-4', port: 9003 }]);
     render(<TrayPanel />);
     await screen.findByText('Phi-4');
+    const readsBefore = transport.listServers.mock.calls.length;
 
-    transport.getProxyStatus.mockImplementation(gone);
+    daemonGoes();
     await poll();
     await screen.findByText(NOT_RUNNING);
 
     transport.getProxyStatus.mockImplementation(async () => DOWN);
     transport.listServers.mockImplementation(() => new Promise(() => {}));
+    events.up = true;
     await poll();
     await screen.findByRole('region', { name: 'Endpoint' });
-    await waitFor(() => expect(transport.listServers).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(transport.listServers).toHaveBeenCalledTimes(readsBefore + 1));
     expect(screen.queryByText('Phi-4')).not.toBeInTheDocument();
     expect(screen.queryByText(/Nothing loaded/)).not.toBeInTheDocument();
   });
 
   it('keeps one /api/events stream through an outage and back (TX-1)', async () => {
     vi.spyOn(Math, 'random').mockReturnValue(0);
-    Object.assign(events, { real: true, up: false });
+    events.up = false;
     transport.getProxyStatus.mockImplementation(async () => DOWN);
     const open = () => events.streams.filter((signal) => !signal.aborted).length;
 
@@ -237,7 +264,7 @@ describe('the tray panel while the daemon comes and goes', () => {
 
   it('after a long outage, connects the stream as soon as the daemon answers, not after its reconnect wait', async () => {
     vi.spyOn(Math, 'random').mockReturnValue(0);
-    Object.assign(events, { real: true, up: false });
+    events.up = false;
     transport.getProxyStatus.mockImplementation(async () => DOWN);
     const open = () => events.streams.filter((signal) => !signal.aborted).length;
 
@@ -263,18 +290,27 @@ describe('the tray panel while the daemon comes and goes', () => {
     expect(open()).toBe(1);
   });
 
-  it('reads the list again each poll until one read lands, and only then says what is loaded', async () => {
+  // No poll of its own: the stream opening is what reads the list again.
+  it('reads a list that failed again when the stream opens, not on a poll, and only then says what is loaded', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    events.up = false;
     transport.getProxyStatus.mockImplementation(async () => DOWN);
     transport.listServers.mockRejectedValueOnce(new Error('list refused')).mockImplementation(async () => []);
     render(<TrayPanel />);
     await screen.findByRole('region', { name: 'Endpoint' });
     await waitFor(() => expect(transport.listServers).toHaveBeenCalledTimes(1));
+    // Two polls (its attempts at 0.5, 1.5 and 3.5 s refused): nothing reads the list.
+    await poll();
+    await poll();
+    expect(transport.listServers).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/Nothing loaded/)).not.toBeInTheDocument();
 
+    // The stream's next attempt, at 7.5 s, opens.
+    events.up = true;
+    await poll();
     await poll();
     expect(await screen.findByText('Nothing loaded.')).toBeInTheDocument();
     expect(transport.listServers).toHaveBeenCalledTimes(2);
-    // Heard: no more reads for the list's sake.
     await poll();
     await poll();
     expect(transport.listServers).toHaveBeenCalledTimes(2);
@@ -284,15 +320,39 @@ describe('the tray panel while the daemon comes and goes', () => {
     transport.getProxyStatus.mockImplementation(async () => DOWN);
     render(<TrayPanel />);
     await screen.findByRole('region', { name: 'Devices' });
+    const readsBefore = transport.getRemoteStatus.mock.calls.length;
 
-    transport.getProxyStatus.mockImplementation(gone);
+    daemonGoes();
     await poll();
     await screen.findByText(NOT_RUNNING);
     expect(screen.queryByRole('region', { name: 'Devices' })).not.toBeInTheDocument();
 
     transport.getProxyStatus.mockImplementation(async () => DOWN);
+    events.up = true;
     await poll();
     expect(await screen.findByRole('region', { name: 'Devices' })).toBeInTheDocument();
-    expect(transport.getRemoteStatus).toHaveBeenCalledTimes(2);
+    expect(transport.getRemoteStatus).toHaveBeenCalledTimes(readsBefore + 1);
+  });
+
+  // A probe can fail while the daemon stays up (a slow answer): the stream
+  // never closed, so nothing opens it again, and the registries it let go
+  // must still be read when the probe answers.
+  it('reads the registries again when the probe failed for a poll while the stream stayed up', async () => {
+    transport.getProxyStatus.mockImplementation(async () => UP);
+    render(<TrayPanel />);
+    await screen.findByText('http://127.0.0.1:8080/v1');
+    const streamsBefore = events.streams.length;
+    const remoteReads = transport.getRemoteStatus.mock.calls.length;
+
+    transport.getProxyStatus.mockImplementation(gone);
+    await poll();
+    await screen.findByText(NOT_RUNNING);
+
+    transport.getProxyStatus.mockImplementation(async () => UP);
+    await poll();
+    expect(await screen.findByText('http://127.0.0.1:8080/v1')).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Devices' })).toBeInTheDocument();
+    expect(transport.getRemoteStatus).toHaveBeenCalledTimes(remoteReads + 1);
+    expect(events.streams).toHaveLength(streamsBefore);
   });
 });

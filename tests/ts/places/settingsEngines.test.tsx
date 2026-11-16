@@ -80,7 +80,7 @@ vi.mock('../../../src/services/transport/api/setup', () => ({
 }));
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  getTransport: () => ({ getSettings: async () => appSettings(), subscribe: () => () => {}, onEventStreamOpen: () => () => {} }),
+  getTransport: () => ({ getSettings: async () => appSettings(), subscribe: () => () => {}, onEventStreamOpen: () => () => {}, onEventStreamClose: vi.fn(() => () => {}), isEventStreamOpen: vi.fn(() => false) }),
 }));
 vi.mock('../../../src/services/transport/api/settings', () => ({
   getSettings: async () => appSettings(),

@@ -35,12 +35,19 @@ vi.mock('../../../src/services/downloadsEvents', () => ({
 // The daemon answers the window's health probe and takes its token, so the
 // shell is drawn, not the service-not-running screen.
 vi.mock('../../../src/services/transport', () => ({
-  getTransport: () => ({ getSettings: async () => ({}), probeDaemon: async () => true, tokenRefusal: async () => null }),
+  getTransport: () => ({
+    getSettings: async () => ({}),
+    probeDaemon: async () => true,
+    tokenRefusal: async () => null,
+    onEventStreamOpen: () => () => {},
+    onEventStreamClose: vi.fn(() => () => {}),
+    isEventStreamOpen: vi.fn(() => false),
+  }),
 }));
 vi.mock('../../../src/services/transport/api/setup', () => ({
   getSetupStatus: async () => ({ setupCompleted: true }),
 }));
-vi.mock('../../../src/services/tools', () => ({ syncBuiltinTools: async () => {} }));
+vi.mock('../../../src/services/tools', () => ({ keepBuiltinToolsCurrent: () => () => {} }));
 
 import { StrictMode } from 'react';
 import App from '../../../src/App';

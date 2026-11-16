@@ -52,17 +52,21 @@ export function initProxyEvents(): void {
  * still reconnecting), so the answer is what moves this window's line.
  */
 export async function startEndpoint(config: Partial<ProxyConfig>): Promise<void> {
-  applyProxyStatus(await getTransport().startProxy(config));
+  applyStartAnswer(await getTransport().startProxy(config));
 }
 
 /** Start the endpoint pinned to one model, and take its answer the same way. */
 export async function startEndpointPinned(request: StartPinnedRequest): Promise<void> {
-  applyProxyStatus(await getTransport().startPinnedProxy(request));
+  applyStartAnswer(await getTransport().startPinnedProxy(request));
 }
 
-/** Read the status again, as hydration does: for a reader whose daemon has come back. */
-export function refreshProxyStatus(): void {
-  void bridge.refresh();
+/**
+ * A start's answer is newer than any status read still out, which was asked
+ * before the start: that read is dropped, so it cannot write "off" over it.
+ */
+function applyStartAnswer(status: Awaited<ReturnType<ReturnType<typeof getTransport>['startProxy']>>): void {
+  bridge.overtake();
+  applyProxyStatus(status);
 }
 
 /**

@@ -41,6 +41,8 @@ vi.mock('../../../src/services/transport', async () => {
       probeDaemon: () => transport.getProxyStatus().then(() => true, () => false),
       subscribe: vi.fn(() => () => {}),
       onEventStreamOpen: vi.fn(() => () => {}),
+      onEventStreamClose: vi.fn(() => () => {}),
+      isEventStreamOpen: vi.fn(() => false),
       reconnectEventStreamNow: vi.fn(),
     }),
   };

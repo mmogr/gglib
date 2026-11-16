@@ -39,6 +39,8 @@ const transport = vi.hoisted(() => ({
   removeFromQueue: vi.fn(),
   subscribe: vi.fn(),
   onEventStreamOpen: vi.fn(),
+  onEventStreamClose: vi.fn(() => () => {}),
+  isEventStreamOpen: vi.fn(() => false),
 }));
 const refreshModels = vi.hoisted(() => vi.fn(async () => {}));
 

@@ -5,8 +5,9 @@
  * the queue, and drop a read a snapshot event or a cleanup overtook; an
  * ending event carries no snapshot and overtakes nothing. The registry's
  * revision guard drops whatever is older still. Each time the event stream
- * opens the last revision is forgotten and the queue read again, since a
- * restarted daemon counts from 1 and keeps no backlog.
+ * opens the bridge reads the queue again (`keptCurrent`), and the last
+ * revision is forgotten first, since a restarted daemon counts from 1 and
+ * keeps no backlog.
  *
  * A download that completes reads the library again, since its model is new
  * there; completions within one window are one read and one word to the
@@ -70,28 +71,21 @@ const bridge = bridgeEvents({
   onEvent: (wrapped) => onDownloadEvent(wrapped.event),
   read: () => getTransport().getDownloadQueue(),
   apply: takeQueueSnapshot,
+  // A restarted daemon numbers its snapshots from 1 again.
+  onStreamOpen: forgetQueueRevision,
   reset: resetDownloads,
   // A snapshot's revision orders it against the read; an ending carries no
   // snapshot, and must not cost the read that may be the only one.
   overtakes: (wrapped) => wrapped.event.type === 'queue_snapshot',
 });
 
-let stopWatchingOpen: (() => void) | null = null;
-
 /** Subscribe, read the queue, and read it again each time the stream opens. Once only. */
 export function initDownloadEvents(): void {
   bridge.init();
-  if (stopWatchingOpen) return;
-  stopWatchingOpen = getTransport().onEventStreamOpen(() => {
-    forgetQueueRevision();
-    void bridge.refresh();
-  });
 }
 
 /** Unsubscribe, drop a pending batch, and empty the registry. */
 export function cleanupDownloadEvents(): void {
-  stopWatchingOpen?.();
-  stopWatchingOpen = null;
   batcher.dispose();
   batcher = createBatchWithinWindow<DownloadCompletionInfo>(DEFAULT_BATCH_WINDOW_MS, onCompletedBurst);
   bridge.cleanup();
