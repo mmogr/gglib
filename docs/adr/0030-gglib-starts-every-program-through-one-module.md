@@ -144,7 +144,9 @@ comment).
 > `CreateToolhelp32Snapshot`, `Thread32First`, `Thread32Next`, `OpenThread`,
 > `ResumeThread`) are in `host.rs`, in a section of their own. On macOS and
 > Linux the child leads a process group of its own and stopping sends
-> `SIGKILL` to the group while the child is unreaped. A server in its own
+> `SIGKILL` to the group while the child is unreaped (`nix`, not linked into
+> an iOS build: gglib starts no process on a phone, and there a tree is its
+> child alone). A server in its own
 > group no longer gets a signal sent to gglib's group (the terminal's
 > Ctrl-C or hangup, `kill -9 %1`), so the daemon's teardown now stops
 > every MCP server explicitly, and `gglib mcp test` stops the server it is

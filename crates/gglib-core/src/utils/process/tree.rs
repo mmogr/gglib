@@ -28,6 +28,10 @@
 //!   given to another process. In a group of its own the child no longer
 //!   gets the terminal's Ctrl-C or hangup: it is stopped by the process
 //!   that started it, and nothing ties it to that process.
+//! - **iOS: the child alone.** gglib starts no process on a phone, and a
+//!   phone build links nothing that signals one (`nix` is kept out of it,
+//!   `scripts/check_phone_closure.sh`), so a tree there is its child,
+//!   stopped as a child is.
 //!
 //! Everything the child starts means a program it opens too: a browser an
 //! MCP server starts as a new process for a sign-in closes when the server
@@ -112,7 +116,7 @@ impl Drop for Tree {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "ios")))]
 mod imp {
     use std::io;
 
@@ -154,6 +158,28 @@ mod imp {
         // A group already gone (ESRCH) has nothing left to end.
         let _ = killpg(Pid::from_raw(group), Signal::SIGKILL);
     }
+}
+
+#[cfg(not(any(windows, all(unix, not(target_os = "ios")))))]
+mod imp {
+    use std::io;
+
+    use tokio::process::{Child, Command};
+
+    /// Nothing holds the tree: it is the child alone.
+    pub(super) type Whole = ();
+
+    pub(super) const fn prepare(_: &mut Command) {}
+
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "the signature Windows' hold has, which can fail"
+    )]
+    pub(super) const fn hold(_: &Child) -> io::Result<(Whole, Option<io::Error>)> {
+        Ok(((), None))
+    }
+
+    pub(super) const fn stop((): &mut Whole, _: &Child) {}
 }
 
 #[cfg(windows)]

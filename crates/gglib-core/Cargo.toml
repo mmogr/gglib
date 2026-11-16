@@ -46,9 +46,11 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 
-# utils::process::tree signals a process group on macOS and Linux. The version and
-# feature gglib-runtime already resolves, so no second copy is built.
-[target.'cfg(unix)'.dependencies]
+# utils::process::tree signals a process group on a desktop Unix (macOS, Linux).
+# Not on iOS: gglib starts no process on a phone, and a phone build must not link
+# nix (scripts/check_phone_closure.sh). The version and feature gglib-runtime
+# already resolves, so no second copy is built.
+[target.'cfg(all(unix, not(target_os = "ios")))'.dependencies]
 nix = { version = "0.30", features = ["signal"] }
 
 [features]
