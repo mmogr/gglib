@@ -2,7 +2,7 @@
 mod branches;
 pub(crate) mod drain;
 pub(crate) mod draw;
-mod files;
+pub(crate) mod files;
 pub(crate) mod images;
 mod markdown;
 mod memory_jogger;
@@ -64,7 +64,7 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     let chat = kept.as_ref().map_or(files::Chat::New, |folder| {
         files::Chat::Resumed(folder.as_deref())
     });
-    let (folder, files_line) = files::of_session(&args, sent_to, chat);
+    let (folder, files_line) = files::of_session(&args.tools, args.no_tools, sent_to, chat);
     if let Some(line) = files_line {
         eprintln!("{line}");
     }

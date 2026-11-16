@@ -1,11 +1,11 @@
 //! Single-turn agentic question handler for `gglib q`.
 //!
-//! Makes a conversation with filesystem tools reading the current working
-//! directory, sends the question as one turn through the daemon's door, shows
+//! Makes a conversation whose file tools read the directory it was asked
+//! in, by `gglib chat`'s rule (`agent_chat::files`: never home or a system
+//! folder), sends the question as one turn through the daemon's door, shows
 //! the reply as it arrives, and optionally goes on as an interactive chat on
 //! the same conversation if the user wants to continue it.
 
-use std::env;
 use std::io::{self, IsTerminal};
 
 use anyhow::{Result, anyhow};
@@ -16,6 +16,7 @@ use crate::bootstrap::CliContext;
 use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::daemon_client;
 use crate::handlers::agent_chat::draw::DrawSwitch;
+use crate::handlers::agent_chat::files::{self, Chat};
 use crate::handlers::agent_chat::images::TurnImages;
 use crate::handlers::agent_chat::persistence::Conversation;
 use crate::handlers::agent_chat::repl::{Session, run_repl};
@@ -38,13 +39,22 @@ const SYSTEM_PROMPT_NO_TOOLS: &str = "\
 Answer the question from what you know and from any text given with it. \
 You have no tools and cannot read files. Be direct and concise.";
 
-/// The system prompt a question's chat is made with. Only a question with
-/// tools is told of them and of the directory they read.
-fn system_prompt(no_tools: bool, cwd: &std::path::Path) -> String {
-    if no_tools {
-        SYSTEM_PROMPT_NO_TOOLS.to_owned()
-    } else {
-        format!("{SYSTEM_PROMPT}\n\nWorking directory: {}", cwd.display())
+/// System prompt for a question asked with its tools in a directory whose
+/// files are not read: home, a system folder, or under a `--tools` list
+/// that admits no file tool. It names no file tool and no folder, for the
+/// reason [`SYSTEM_PROMPT_NO_TOOLS`] names none.
+const SYSTEM_PROMPT_NO_FOLDER: &str = "\
+Answer the question from what you know, from any text given with it and \
+with any tool you are given. You cannot read files here. Be direct and \
+concise.";
+
+/// The system prompt a question's chat is made with. Only a question whose
+/// file tools read a folder is told of them and of that folder.
+fn system_prompt(no_tools: bool, folder: Option<&str>) -> String {
+    match (no_tools, folder) {
+        (true, _) => SYSTEM_PROMPT_NO_TOOLS.to_owned(),
+        (false, Some(folder)) => format!("{SYSTEM_PROMPT}\n\nWorking directory: {folder}"),
+        (false, None) => SYSTEM_PROMPT_NO_FOLDER.to_owned(),
     }
 }
 
@@ -108,7 +118,6 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     // A file that cannot be attached ends the command before any model lookup.
     let (attachments, mut receipts) = (ctx.app.attachments(), io::stderr());
     let mut images = TurnImages::attach(attachments, &images, quiet, &mut receipts).await?;
-    let cwd = env::current_dir().map_err(|e| anyhow!("cannot determine CWD: {e}"))?;
 
     // If no model was specified, look up the default from settings
     let settings = ctx
@@ -157,9 +166,18 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     // The daemon answers the question: found, or started, once its model is.
     let daemon = daemon_client::ensure_daemon().await?;
 
+    // The file tools read the directory the question was asked in, by
+    // `gglib chat`'s rule. Only a question that reads none says so, so a
+    // question that reads its folder prints what it always has.
+    let sent_to = turn.machine.as_deref();
+    let (folder, files_line) = files::of_session(&tools, no_tools, sent_to, Chat::New);
+    if let (None, Some(line), false) = (&folder, &files_line, quiet) {
+        eprintln!("{line}");
+    }
+
     // The question's chat, made before it is asked: the daemon answers a
     // turn on a saved conversation, and saves the turn to it.
-    let system_prompt = system_prompt(no_tools, &cwd);
+    let system_prompt = system_prompt(no_tools, folder.as_deref());
     let profile_name = selection
         .profile
         .as_ref()
@@ -178,8 +196,6 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     // Construct user message with optional piped/file context
     let user_content =
         super::question_input::build_user_message(&question, file.as_deref(), show_prompt)?;
-    // The file tools read the directory the question was asked in.
-    let folder = Some(cwd.display().to_string());
     let shown = Shown { verbose, quiet };
     let asked = LocalTurn {
         conversation_id: conversation.id,

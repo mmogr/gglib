@@ -1,18 +1,23 @@
 //! A chat's folder: where gglib's own file tools read in its runs, and the
 //! two rules that make one.
 //!
-//! The folder is the chat session's to decide. `gglib chat`'s is the
-//! directory it was launched in ([`launched`]), never this machine's home
-//! folder or the filesystem's root; the page's is the folder the person
-//! chose ([`chosen`]); a paired device's turn has none. Either rule answers
-//! a canonical path, so what is shown as the folder is what is read. The
-//! decision is [ADR 0023].
+//! The folder is the chat session's to decide. `gglib chat`'s and `gglib
+//! q`'s is the directory it was launched in ([`launched`]), never this
+//! machine's home folder or a system folder ([`Places`]); the page's is the
+//! folder the person chose ([`chosen`]), whatever it is; a paired device's
+//! turn has none. Either rule answers a canonical path, so what is shown as
+//! the folder is what is read. The decision is [ADR 0023].
 //!
 //! [ADR 0023]: https://github.com/mmogr/gglib/blob/main/docs/adr/0023-a-chats-folder-is-where-gglibs-own-file-tools-read.md
 
 use std::path::{Path, PathBuf};
 
 use crate::paths::canonical;
+
+#[path = "folder_places.rs"]
+mod places;
+
+pub use places::Places;
 
 /// Why a path cannot be a chosen folder.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -28,23 +33,56 @@ pub enum FolderError {
     NotAFolder(PathBuf),
 }
 
-/// The folder of a chat launched in `cwd`: its canonical path, or `None`
-/// when that is this machine's home folder or the filesystem's root, which
-/// are never read without being chosen.
+/// Why a chat launched in a folder does not take it as its folder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NotAdopted {
+    /// It is this machine's home folder.
+    Home,
+    /// It is a system folder ([`Places::is_system`]), named canonical.
+    System(PathBuf),
+}
+
+/// The folder of a chat launched in `cwd`: its canonical path, unless that
+/// is this machine's home folder or a system folder, which are never read
+/// without being chosen.
 ///
 /// A `cwd` that cannot be resolved is answered as given; the file tools
 /// refuse each call there with their own words.
-#[must_use]
-pub fn launched(cwd: &Path) -> Option<PathBuf> {
-    launched_in(cwd, dirs::home_dir().as_deref())
+///
+/// # Errors
+///
+/// [`NotAdopted`], saying which of the two it is.
+pub fn launched(cwd: &Path) -> Result<PathBuf, NotAdopted> {
+    launched_on(cwd, &Places::current())
 }
 
-/// [`launched`] with `home` as this machine's home folder.
-fn launched_in(cwd: &Path, home: Option<&Path>) -> Option<PathBuf> {
-    let cwd = canonical(cwd).unwrap_or_else(|_| cwd.to_path_buf());
-    let home = home.map(|home| canonical(home).unwrap_or_else(|_| home.to_path_buf()));
-    let is_root = cwd.parent().is_none();
-    (!is_root && home.as_deref() != Some(cwd.as_path())).then_some(cwd)
+/// [`launched`] on a machine whose places are `places`.
+///
+/// # Errors
+///
+/// [`NotAdopted`], as [`adopted`] answers it.
+pub fn launched_on(cwd: &Path, places: &Places) -> Result<PathBuf, NotAdopted> {
+    adopted(canonical(cwd).unwrap_or_else(|_| cwd.to_path_buf()), places)
+}
+
+/// The one rule, on values: whether a chat launched in the canonical `dir`
+/// takes it as its folder.
+///
+/// `places` are the machine's. The rule reads no disk and no environment,
+/// so it answers alike on every OS.
+///
+/// # Errors
+///
+/// [`NotAdopted::Home`] for this user's home folder,
+/// [`NotAdopted::System`] for a system folder.
+pub fn adopted(dir: PathBuf, places: &Places) -> Result<PathBuf, NotAdopted> {
+    if places.is_home(&dir) {
+        Err(NotAdopted::Home)
+    } else if places.is_system(&dir) {
+        Err(NotAdopted::System(dir))
+    } else {
+        Ok(dir)
+    }
 }
 
 /// The folder a person chose at `path`: its canonical path, once it is
