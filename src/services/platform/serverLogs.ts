@@ -80,7 +80,7 @@ export async function listenToServerLogs(
   void (async () => {
     while (!controller.signal.aborted) {
       try {
-        const response = await apiFetch(path, { signal: controller.signal });
+        const response = await apiFetch(path, { signal: controller.signal, stream: true });
         for await (const message of readSse(response)) {
           if (!message.data || message.data.trim() === '' || message.data === 'ping') continue;
           try {

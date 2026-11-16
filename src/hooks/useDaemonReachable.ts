@@ -11,7 +11,8 @@
  * Polling rather than reacting to a failed call: a reachability signal has to
  * recover on its own, and nothing else in the popover would ask again once its
  * one fetch had failed. Absolute each time, so it cannot drift. What it asks is
- * `/health` (`probeDaemon`), the route the desktop app's own probe asks.
+ * `/health` (`probeDaemon`), the route the desktop app's own probe asks. A
+ * probe with no answer is asked again at once; two in a row say gone.
  *
  * @module hooks/useDaemonReachable
  */
@@ -40,9 +41,25 @@ export function useDaemonReachable(): Reachability {
     // `/health`, which needs no token: any answer is a daemon there, a
     // refused token among them. An `/api` probe read a stale token as no
     // daemon.
+    //
+    // One probe with no answer is asked again at once, and only two in a row
+    // say the daemon is gone. A probe has 1.5 s to be answered, and a busy
+    // machine can take longer once without the daemon having gone anywhere;
+    // being called gone clears what every registry holds. A refused
+    // connection fails at once both times, so a daemon that is really gone
+    // is still said so without delay. A tick that falls while a probe is
+    // out is skipped: the answer on its way is the newer one.
+    let asking = false;
     const probe = async () => {
-      const answers = await getTransport().probeDaemon();
-      if (!cancelled) setReachable(answers);
+      if (asking) return;
+      asking = true;
+      try {
+        const transport = getTransport();
+        const answers = (await transport.probeDaemon()) || (await transport.probeDaemon());
+        if (!cancelled) setReachable(answers);
+      } finally {
+        asking = false;
+      }
     };
 
     void probe();

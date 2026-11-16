@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 
+pub mod bounded;
 pub mod detached;
 pub mod host;
 pub mod stop;

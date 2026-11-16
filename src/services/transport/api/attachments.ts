@@ -11,6 +11,7 @@ import type { AttachmentUpload } from '../../../types/generated/AttachmentUpload
 import { readData } from '../errors';
 import type { ChatSource } from '../types/chat';
 import { apiFetch } from './client';
+import { FAR_STREAMED_LIMIT_MS } from './timeLimit';
 
 function storeOf(source: ChatSource): string {
   return source === 'far' ? '/api/remote/attachments' : '/api/attachments';
@@ -36,6 +37,9 @@ export async function uploadAttachment(source: ChatSource, image: Blob): Promise
  * credential: an `<img>` cannot send it, so the page shows the blob.
  */
 export async function fetchAttachmentBlob(source: ChatSource, id: string): Promise<Blob> {
-  const response = await apiFetch(`${storeOf(source)}/${encodeURIComponent(id)}`);
+  const response = await apiFetch(`${storeOf(source)}/${encodeURIComponent(id)}`, {
+    // The far machine's bytes come through the daemon's streaming client.
+    ...(source === 'far' && { timeoutMs: FAR_STREAMED_LIMIT_MS }),
+  });
   return response.blob();
 }

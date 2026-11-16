@@ -74,6 +74,7 @@ async function streamRun(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
     signal,
+    stream: true,
   });
 
   for await (const { data } of readSse(response)) {

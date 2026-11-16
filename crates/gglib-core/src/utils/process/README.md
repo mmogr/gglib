@@ -15,6 +15,8 @@ Use [`cmd`] and [`async_cmd`] instead of `Command::new` at every call site.
 The Windows-specific flag is applied here and nowhere else.
 
 - [`host`]: what a gglib binary does to its own process before anything else.
+- [`bounded`]: running a program that should answer and exit, with a time
+  limit.
 - [`detached`]: starting the service, so it outlives the command that
   started it.
 - [`stop`]: hearing that this process is asked to stop, and whether it has

@@ -8,6 +8,8 @@
 //! unconditionally returns `false` there.
 
 #[cfg(target_os = "macos")]
+use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
+#[cfg(target_os = "macos")]
 use gglib_core::utils::process::cmd;
 
 /// Check if the system has Metal support.
@@ -23,7 +25,7 @@ pub(super) fn has_metal_support() -> bool {
         }
 
         // Intel Macs: Metal requires macOS 10.13+
-        if let Ok(output) = cmd("sw_vers").arg("-productVersion").output()
+        if let Ok(output) = run_bounded(cmd("sw_vers").arg("-productVersion"), PROBE_WAIT)
             && let Ok(version) = String::from_utf8(output.stdout)
             && let Some(major) = version.split('.').next()
             && let Ok(major_num) = major.trim().parse::<u32>()

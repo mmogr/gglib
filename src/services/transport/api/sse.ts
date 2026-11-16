@@ -54,6 +54,7 @@ export function streamSse(
         },
         ...(body !== undefined && { body: JSON.stringify(body) }),
         signal: controller.signal,
+        stream: true,
       });
       for await (const { event = '', data } of readSse(response)) {
         handlers.onFrame({ event, data });
