@@ -12,11 +12,15 @@
  * An event carries the port and nothing else, so each one moves the
  * registry at once and then asks the daemon for the rest (the state word,
  * the reached address, the key rule, the pin), as the remote bridge does.
+ *
+ * A start this window asks for (`startEndpoint`, `startEndpointPinned`)
+ * takes the daemon's answer as the status at once, as a read would.
  */
 
 import { bridgeEvents } from './bridgeEvents';
 import { getTransport } from './transport';
 import { applyProxyStatus, ingestProxyEvent, resetProxyState } from './proxyRegistry';
+import type { ProxyConfig, StartPinnedRequest } from './transport/types/proxy';
 
 const bridge = bridgeEvents({
   category: 'proxy',
@@ -38,6 +42,31 @@ const bridge = bridgeEvents({
  */
 export function initProxyEvents(): void {
   bridge.init();
+}
+
+/**
+ * Start the endpoint (as the settings say, for `{}`), and take the status the daemon
+ * answers with as the registry's at once. The daemon says `proxy_started`
+ * only when a start turns the endpoint on, not when it finds it on, and the
+ * event can reach this window after the answer or not at all (a stream
+ * still reconnecting), so the answer is what moves this window's line.
+ */
+export async function startEndpoint(config: Partial<ProxyConfig>): Promise<void> {
+  applyStartAnswer(await getTransport().startProxy(config));
+}
+
+/** Start the endpoint pinned to one model, and take its answer the same way. */
+export async function startEndpointPinned(request: StartPinnedRequest): Promise<void> {
+  applyStartAnswer(await getTransport().startPinnedProxy(request));
+}
+
+/**
+ * A start's answer is newer than any status read still out, which was asked
+ * before the start: that read is dropped, so it cannot write "off" over it.
+ */
+function applyStartAnswer(status: Awaited<ReturnType<ReturnType<typeof getTransport>['startProxy']>>): void {
+  bridge.overtake();
+  applyProxyStatus(status);
 }
 
 /**

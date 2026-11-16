@@ -7,7 +7,9 @@
 //!
 //! The runtime is scripted, so nothing is launched and nothing is
 //! announced by it. A start still brings a real proxy up, on a loopback
-//! port of its own, because the start path begins with `ensure_running`.
+//! port of its own, because the start path begins with `ensure_running`;
+//! the proxy shares the bus, so a start with the endpoint off is heard
+//! saying `proxy_started` first (`servers_proxy_events_tests.rs`).
 
 use std::sync::Arc;
 
@@ -20,7 +22,7 @@ use gglib_core::{NewModel, SettingsUpdate};
 use gglib_db::{CoreFactory, setup_test_database};
 
 use super::*;
-use crate::test_support::{RecordingEmitter, test_core_and_proxy_on};
+use crate::test_support::{RecordingEmitter, test_core_and_proxy_telling};
 
 const MODEL: &str = "test-model";
 
@@ -77,6 +79,13 @@ impl ModelRuntimePort for Scripted {
         }
         self.stop_fails.clone().map_or(Ok(true), Err)
     }
+
+    /// No pin is held; clearing one, as an unpinned start does, is fine.
+    fn set_pin(&self, pin: Option<gglib_core::ports::PinnedSpec>) -> Result<(), ModelRuntimeError> {
+        pin.map_or(Ok(()), |_| {
+            Err(ModelRuntimeError::Internal("no pinning here".to_owned()))
+        })
+    }
 }
 
 /// A loopback port nothing is listening on.
@@ -98,6 +107,8 @@ struct Fixture {
     model_id: i64,
     /// The port the scripted runtime says [`MODEL`] is on.
     model_port: u16,
+    /// The port the settings give the endpoint, where a start brings it up.
+    proxy_port: u16,
     _model_file: tempfile::TempDir,
 }
 
@@ -162,7 +173,8 @@ impl Fixture {
             true,
         )
         .with_runtime(runtime);
-        let (core, proxy) = test_core_and_proxy_on(
+        let emitter = Arc::new(RecordingEmitter::default());
+        let (core, proxy) = test_core_and_proxy_telling(
             &repos,
             Arc::new(Scripted {
                 target,
@@ -171,17 +183,18 @@ impl Fixture {
                 stop_fails,
                 gone_at_stop,
             }),
+            Arc::clone(&emitter) as Arc<dyn AppEventEmitter>,
         );
         // Off 8080, where a developer's own daemon usually is.
+        let proxy_port = free_port().await;
         core.settings()
             .update(SettingsUpdate {
-                proxy_port: Some(Some(free_port().await)),
+                proxy_port: Some(Some(proxy_port)),
                 ..SettingsUpdate::default()
             })
             .await
             .expect("settings update");
 
-        let emitter = Arc::new(RecordingEmitter::default());
         let ops = ServerOps::new(ServerDeps {
             core,
             proxy: Arc::clone(&proxy),
@@ -193,6 +206,7 @@ impl Fixture {
             emitter,
             model_id,
             model_port,
+            proxy_port,
             _model_file: dir,
         }
     }
@@ -205,10 +219,19 @@ impl Fixture {
             .map(|event| serde_json::to_string(event).expect("an event serializes"))
             .collect()
     }
+
+    /// The frame the endpoint sends as a start brings it up.
+    fn proxy_started(&self) -> String {
+        serde_json::to_string(&gglib_core::events::AppEvent::proxy_started(
+            self.proxy_port,
+        ))
+        .expect("an event serializes")
+    }
 }
 
 /// The runtime announces the load once the model is healthy; a model
-/// already resident is served as it stands. Either way nothing is said here.
+/// already resident is served as it stands. Either way nothing is said here;
+/// the endpoint the start brings up says it is on.
 #[tokio::test]
 async fn a_start_the_runtime_performs_announces_nothing_from_here() {
     let fx = Fixture::new(None, None).await;
@@ -224,7 +247,7 @@ async fn a_start_the_runtime_performs_announces_nothing_from_here() {
         .expect("the proxy the start brought up");
 
     assert_eq!(started.expect("the start succeeds").port, fx.model_port);
-    assert_eq!(frames, Vec::<String>::new());
+    assert_eq!(frames, [fx.proxy_started()]);
 }
 
 #[tokio::test]
@@ -245,10 +268,13 @@ async fn a_start_the_runtime_refuses_sends_server_error_and_no_server_started() 
     assert!(started.is_err(), "{started:?}");
     assert_eq!(
         frames,
-        [format!(
-            r#"{{"type":"server_error","modelId":{},"modelName":"test-model","error":{{"message":"Failed to start model: no binary","type":"server_error","retryable":false}}}}"#,
-            fx.model_id
-        )]
+        [
+            fx.proxy_started(),
+            format!(
+                r#"{{"type":"server_error","modelId":{},"modelName":"test-model","error":{{"message":"Failed to start model: no binary","type":"server_error","retryable":false}}}}"#,
+                fx.model_id
+            )
+        ]
     );
 }
 
@@ -332,3 +358,6 @@ async fn stopping_an_image_model_in_the_second_slot_stops_it_by_id() {
 
     assert_eq!(fx.frames(), Vec::<String>::new());
 }
+
+#[path = "servers_proxy_events_tests.rs"]
+mod proxy_events;
