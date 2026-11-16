@@ -37,8 +37,9 @@
  *   come to over 16 MiB together, is refused by its code before it starts,
  *   and a saved user row lists its images' facts.
  *
- * A test drives a run with `emit` and `finish`, and can act at any request
- * with `before`. Every request is recorded.
+ * A test drives a run with `emit` and `finish`, drops its readers' streams
+ * with `drop`, and can act at any request with `before`. Every request is
+ * recorded.
  */
 
 import type { ChatMessage } from '../../../src/services/transport';
@@ -240,6 +241,17 @@ export class FakeDaemon {
   preview(id: string, toolCallId: string, frame: { mime: string; step: number; total: number; b64: string }): void {
     const data = JSON.stringify({ tool_call_id: toolCallId, frame });
     this.runs.get(id)!.streams.forEach((s) => s.enqueue(sse(`event: preview\ndata: ${data}\n\n`)));
+  }
+
+  /**
+   * End run `id`'s streams without its end, as a dropped connection does:
+   * `closed` cleanly, or `broken` with a network error. The run goes on, and
+   * a reader that comes back reads its log from where it asks.
+   */
+  drop(id: string, how: 'closed' | 'broken' = 'closed'): void {
+    const run = this.runs.get(id)!;
+    run.streams.forEach((s) => (how === 'closed' ? s.close() : s.error(new TypeError('network error'))));
+    run.streams = [];
   }
 
   /**
