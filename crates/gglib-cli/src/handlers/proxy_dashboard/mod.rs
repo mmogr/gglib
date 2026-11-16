@@ -10,9 +10,10 @@ use gglib_core::sse::DataFrames;
 /// Width (in bar cells) of every progress bar drawn by this dashboard.
 const BAR_WIDTH: usize = 20;
 
-/// Fallback terminal width (columns) used when stdout isn't a TTY or
-/// `crossterm::terminal::size()` fails to report one. Matches the common
-/// default terminal width so output still looks reasonable when piped.
+/// Fallback terminal width (columns) used when stdout isn't a TTY or its
+/// width cannot be read ([`stdout_width`], the one place the CLI reads it).
+/// Matches the common default terminal width so output still looks
+/// reasonable when piped.
 const DEFAULT_TERM_WIDTH: u16 = 80;
 
 mod render;
@@ -27,6 +28,8 @@ mod wire_sampling;
 
 use render::{render_frame, visual_row_count};
 use wire::DashboardSnapshot;
+
+use crate::presentation::terminal::stdout_width;
 
 /// Take `chunk` off the stream, and return every snapshot it completed. A
 /// payload that is not a snapshot is skipped.
@@ -136,8 +139,9 @@ pub(crate) async fn execute(host: String, port: u16, api_key: Option<&str>) -> R
                     // Re-check on every tick (not just once) so a mid-session
                     // terminal resize is picked up rather than rendering
                     // against a stale width.
-                    let term_width = terminal::size()
-                        .map_or(DEFAULT_TERM_WIDTH, |(cols, _rows)| cols);
+                    let term_width = stdout_width()
+                        .and_then(|cols| u16::try_from(cols).ok())
+                        .unwrap_or(DEFAULT_TERM_WIDTH);
                     let frame = render_frame(&url, &snapshot, term_width);
                     if is_tty {
                         let mut out = stdout();

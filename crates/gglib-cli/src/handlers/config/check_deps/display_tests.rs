@@ -18,12 +18,14 @@ fn plain(text: &str) -> String {
 }
 
 fn rendered(os: HostOs, origin: BuildOrigin, found: &Found) -> String {
-    let text = plain(&render_report(&dependency_report(
-        os,
-        origin,
-        LinuxDistro::Debian,
-        found,
-    )));
+    rendered_at(os, origin, found, None)
+}
+
+fn rendered_at(os: HostOs, origin: BuildOrigin, found: &Found, width: Option<usize>) -> String {
+    let text = plain(&render_report(
+        &dependency_report(os, origin, LinuxDistro::Debian, found),
+        width,
+    ));
     // Shown with `--nocapture`: the report as a user on `os` would read it.
     println!("--- {os:?}, {origin:?} ---\n{text}");
     text
@@ -89,7 +91,13 @@ fn a_checkout_is_told_what_building_it_needs() {
     }
     let text = rendered(HostOs::MacOs, BuildOrigin::Checkout, &found);
 
-    assert!(text.contains("*cargo               ✓ v1.97.1"), "{text}");
+    // Every state starts in one column, the one after the widest name
+    // (` stable-diffusion.cpp`, 21 with its mark), so no row is out of line.
+    assert!(text.contains("*cargo                ✓ v1.97.1"), "{text}");
+    assert!(
+        text.contains(" stable-diffusion.cpp ○ not installed"),
+        "{text}"
+    );
     assert!(
         text.lines()
             .any(|line| line.starts_with("*C++ compiler") && line.contains("✗ missing")),
@@ -99,7 +107,7 @@ fn a_checkout_is_told_what_building_it_needs() {
         text.contains("✗ 1 dependency this gglib needs is missing."),
         "{text}"
     );
-    assert!(text.contains(" Metal               ✓ available"), "{text}");
+    assert!(text.contains(" Metal                ✓ available"), "{text}");
 }
 
 /// C11: a probe that found something without a version, such as Metal,
@@ -110,11 +118,33 @@ fn a_word_where_a_version_would_be_takes_no_v() {
         Dependency::optional("Metal", "Apple GPU").with_status(DependencyStatus::Present {
             version: "available".to_string(),
         });
-    let row = dependency_row(&available);
+    let row = dependency_cells(&available).join(" ");
     assert!(row.contains("✓ available"), "{row}");
 
     let versioned = Dependency::required("cmake", "Build").with_status(DependencyStatus::Present {
         version: "3.28.1".to_string(),
     });
-    assert!(dependency_row(&versioned).contains("✓ v3.28.1"));
+    assert!(dependency_cells(&versioned).join(" ").contains("✓ v3.28.1"));
+}
+
+/// In a narrow terminal every line of the report fits it: a note wraps
+/// under its own column, and a group's explanation wraps, rather than
+/// running past the edge.
+#[test]
+fn the_report_fits_a_narrow_terminal() {
+    let found = Found {
+        llama_install: EngineInstall::Download,
+        ..Found::default()
+    };
+    for width in [80, 60, 40] {
+        let text = rendered_at(HostOs::Windows, BuildOrigin::Checkout, &found, Some(width));
+        for line in text.lines() {
+            let columns = crate::presentation::table_layout::display_width(line);
+            assert!(
+                columns <= width,
+                "{width}: a line {columns} wide\n{line}\n{text}"
+            );
+        }
+        assert!(text.contains("DEPENDENCY"), "{text}");
+    }
 }

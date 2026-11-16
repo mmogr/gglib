@@ -139,39 +139,51 @@ Provides table formatting utilities and helper functions.
 - `first_chars(s: &str, max: usize)` - The first `max` characters, never part of one
 - `short_sha(sha: &str)` - The first 8 characters of a hash
 - `format_number(n: u64)` - Renders a count as `500`, `1.5K` or `1.5M`
-- `print_separator(width: usize)` - Prints a horizontal separator
+
+### Table Layout
+**Module:** `table_layout.rs`
+
+The one owner of how wide a printed table and its rules are. A `Table` is
+its `Column`s and rows of cells; `Table::lay_out(width)` takes the width as a
+value and returns lines no wider than it. In order, it gives way by:
+padding first, then shortening what may be shortened (a name at its end, a
+path in its middle keeping the file name, prose wrapped onto more lines),
+then dropping the lowest-priority column, and for a very narrow width it
+prints one `label: value` block per row. With no width (output piped or
+redirected) nothing is shortened or dropped. Widths are display widths:
+CJK and emoji take two columns, colour codes none.
+
+**Key Items:**
+- `Table`, `Column`, `Shorten`, `Align` - A table and how each column gives way
+- `Laid` - The laid-out header, ruler and rows; `lines()` and `text()`
+- `rule(ch, natural, width)` - A rule between sections, never wider than the terminal
+- `wrap(text, width)` - Prose wrapped to a width
+- `display_width(text)` - The columns text takes
 
 **Example:**
 ```rust,ignore
-use crate::presentation::tables::{print_separator, truncate_string};
+use crate::presentation::table_layout::{Column, Shorten, Table};
+use crate::presentation::terminal::stdout_width;
 
-// Column-safe truncation
-println!("Name: {}", truncate_string("a-very-long-model-name.gguf", 12));
-
-// Separators
-print_separator(80);
-// ================================================================================
+let mut table = Table::new(vec![
+    Column::new("ID").pad(3),
+    Column::new("Name").shorten(Shorten::End { min: 16 }),
+    Column::new("File Path").shorten(Shorten::Path).droppable(1),
+])
+.ruler('-');
+table.row(vec!["1".into(), "Qwen3-4B".into(), path.into()]);
+print!("{}", table.lay_out(stdout_width()).text());
 ```
 
-### Table Formatting Pattern
+### Terminal
+**Module:** `terminal.rs`
 
-Most commands use a consistent table pattern:
+The one place the terminal's width is read, through `console`: `None` when
+the stream is piped or redirected. `COLUMNS` is not read.
 
-```rust,ignore
-// Header
-println!("{:<15} {:<20} {:<10}", "ID", "Name", "Added");
-print_separator(45);
-
-// Rows
-for model in models {
-    println!(
-        "{:<15} {:<20} {:<10}",
-        model.id,
-        truncate_string(&model.name, 20),
-        format_relative_time(&model.added_at)
-    );
-}
-```
+**Key Functions:**
+- `stdout_width()` - Standard output's width
+- `stderr_width()` - Standard error's width
 
 ## Usage Guidelines
 
@@ -219,7 +231,8 @@ display_model_list(&view_models);
 - **crossterm** - The colours and attributes of that skin (`style.rs`)
 - **indicatif** - The spinner (`style.rs`)
 - **chrono** - Relative times (`tables.rs`)
-- Everything else is ANSI color codes and fixed-width formatting (`println!` with format strings)
+- **console** - The terminal's width (`terminal.rs`) and the display width of text (`table_layout.rs`)
+- Everything else is ANSI color codes and formatting with `println!`
 
 ## Testing
 
@@ -245,14 +258,13 @@ fn truncate_long_string_gets_ellipsis() {
 ## Design Notes
 
 1. **Keep It Simple** - Plain text formatting, no fancy TUI frameworks
-2. **Terminal-Friendly** - Assumes standard terminal width (~80-120 chars)
+2. **Terminal-Friendly** - A table fits the terminal it is printed in, and is whole when piped (`table_layout.rs`)
 3. **Composable** - Small, focused functions that work together
 4. **Testable** - Pure functions with no side effects (except printing)
 
 ## Future Considerations
 
 - Color theme customization
-- Terminal width detection and adaptive layout
 - Progress bar utilities (currently in individual handlers)
 
 <!-- module-docs:end -->

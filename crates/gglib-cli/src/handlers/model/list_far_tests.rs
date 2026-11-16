@@ -39,7 +39,7 @@ fn a_models_variants_are_its_profiles_not_rows_of_their_own() {
     ]);
 
     let rows = rows(&models);
-    let table = render(&rows);
+    let table = render(&rows, None);
 
     assert_eq!(rows.len(), 2, "one row per id: {table}");
     let lines: Vec<&str> = table.lines().collect();
@@ -73,7 +73,7 @@ fn a_far_model_that_reads_images_is_marked() {
     models[1].capabilities = Some(vec!["embeddings".to_owned()]);
     models[3].capabilities = Some(vec!["embeddings".to_owned(), "vision".to_owned()]);
 
-    let table = render(&rows(&models));
+    let table = render(&rows(&models), None);
 
     let lines: Vec<&str> = table.lines().collect();
     let column = lines[0].find("IMAGES").expect("an IMAGES header");
@@ -91,7 +91,7 @@ fn a_far_model_that_reads_images_is_marked() {
 fn the_id_column_is_as_wide_as_the_widest_id() {
     let models = listed(&[("small", 3, None, None), ("big", 1000, None, None)]);
 
-    let table = render(&rows(&models));
+    let table = render(&rows(&models), None);
 
     let lines: Vec<&str> = table.lines().collect();
     assert_eq!(lines[0].find("NAME"), lines[2].find("small"), "{table}");

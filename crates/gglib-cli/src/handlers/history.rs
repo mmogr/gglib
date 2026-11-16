@@ -10,7 +10,9 @@ use gglib_core::domain::chat::ConversationSettings;
 use gglib_core::domain::{Machine, UNNAMED_PAIRED};
 
 use crate::bootstrap::CliContext;
-use crate::presentation::{format_relative_time, print_separator, truncate_string};
+use crate::presentation::table_layout::{Column, Shorten, Table};
+use crate::presentation::terminal::stdout_width;
+use crate::presentation::{format_relative_time, truncate_string};
 
 /// Execute the history command.
 ///
@@ -35,28 +37,38 @@ pub(crate) async fn execute(ctx: &CliContext, limit: usize) -> Result<()> {
         rows.push((conv, count));
     }
 
-    println!(
-        "{:<5} {:<35} {:<6} {:<9} {:<40} {:<15}",
-        "ID", "Title", "Msgs", "Branched", "Model", "Updated"
-    );
-    print_separator(115);
-
+    // In a narrow terminal the id and the title stay; the model goes last of
+    // the rest, then when it was updated, how many messages, and the chat it
+    // was branched from first.
+    let mut table = Table::new(vec![
+        Column::new("ID").pad(5),
+        Column::new("Title")
+            .pad(35)
+            .shorten(Shorten::End { min: 16 }),
+        Column::new("Msgs").pad(6).droppable(2),
+        Column::new("Branched").pad(9).droppable(1),
+        Column::new("Model")
+            .pad(40)
+            .shorten(Shorten::End { min: 16 })
+            .droppable(4),
+        Column::new("Updated").pad(15).droppable(3),
+    ])
+    .ruler('-');
     for (conv, msg_count) in &rows {
         let model_label = conv.settings.as_ref().map_or_else(
             || "--".to_owned(),
             |s| model_label(s, pairing.as_ref(), MODEL_WIDTH),
         );
-
-        println!(
-            "{:<5} {:<35} {:<6} {:<9} {:<40} {:<15}",
-            conv.id,
+        table.row(vec![
+            conv.id.to_string(),
             truncate_string(&conv.title, 34),
-            msg_count,
+            msg_count.to_string(),
             branched(conv.branch_of),
             model_label,
             format_relative_time(&conv.updated_at),
-        );
+        ]);
     }
+    print!("{}", table.lay_out(stdout_width()).text());
 
     println!("\nResume with: gglib chat --continue <ID>");
 

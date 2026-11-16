@@ -13,8 +13,6 @@
 //! Without `--remote`, the local list ends with [`summary`]'s one line about
 //! the paired machine, which asks that machine nothing.
 
-use std::fmt::Write as _;
-
 use anyhow::Result;
 use gglib_app_services::RemoteConnection;
 use gglib_core::domain::UNNAMED_PAIRED;
@@ -23,6 +21,8 @@ use gglib_proxy::models::{ModelInfo, VISION_CAPABILITY};
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, DaemonHandle, DaemonProbe};
 use crate::handlers::remote::for_how_long;
+use crate::presentation::table_layout::{Column, Shorten, Table};
+use crate::presentation::terminal::stdout_width;
 use crate::target::Target;
 
 pub(super) async fn execute(target: Target) -> Result<()> {
@@ -36,7 +36,7 @@ pub(super) async fn execute(target: Target) -> Result<()> {
     if rows.is_empty() {
         return Ok(());
     }
-    print!("{}", render(&rows));
+    print!("{}", render(&rows, stdout_width()));
     print!("{}", footer(&rows));
     Ok(())
 }
@@ -183,23 +183,23 @@ fn base_name(model: &ModelInfo) -> &str {
         .unwrap_or(&model.id)
 }
 
-/// The table, as text, so it can be checked without a machine.
-fn render(rows: &[Row<'_>]) -> String {
-    let ids: Vec<String> = rows.iter().map(|row| row.id.to_string()).collect();
-    let id_width = ids.iter().map(String::len).max().unwrap_or(0).max(2);
-    let name_width = rows
-        .iter()
-        .map(|row| row.name.len())
-        .max()
-        .unwrap_or(0)
-        .max(4);
-    let mut out = format!(
-        "{:>id_width$}  {:<name_width$}  {:>9}  {:<6}  PROFILES\n",
-        "ID", "NAME", "CONTEXT", "IMAGES"
-    );
-    out.push_str(&"-".repeat(id_width + name_width + 31));
-    out.push('\n');
-    for (row, id) in rows.iter().zip(&ids) {
+/// The table, as text, so it can be checked without a machine: fitted to
+/// `width`, or whole when there is none. The id and the name are never
+/// dropped; then the profiles (wrapped before they go), the context, and
+/// whether it reads images.
+fn render(rows: &[Row<'_>], width: Option<usize>) -> String {
+    let mut table = Table::new(vec![
+        Column::new("ID").right(),
+        Column::new("NAME").shorten(Shorten::End { min: 12 }),
+        Column::new("CONTEXT").right().pad(9).droppable(2),
+        Column::new("IMAGES").pad(6).droppable(1),
+        Column::new("PROFILES")
+            .shorten(Shorten::Wrap { min: 12 })
+            .droppable(3),
+    ])
+    .gap(2)
+    .ruler('-');
+    for row in rows {
         let context = row
             .context
             .map_or_else(|| "-".to_owned(), |c| c.to_string());
@@ -209,13 +209,15 @@ fn render(rows: &[Row<'_>]) -> String {
             row.profiles.join(", ")
         };
         let images = if row.images { "yes" } else { "-" };
-        let _ = writeln!(
-            out,
-            "{id:>id_width$}  {:<name_width$}  {context:>9}  {images:<6}  {profiles}",
-            row.name
-        );
+        table.row(vec![
+            row.id.to_string(),
+            row.name.to_owned(),
+            context,
+            images.to_owned(),
+            profiles,
+        ]);
     }
-    out
+    table.lay_out(width).text()
 }
 
 /// How to send a turn to one of them: by its id, and with a profile when
