@@ -94,6 +94,28 @@ pub enum ConfigCommand {
     },
     /// Show resolved paths for all gglib directories, and every gglib on PATH and the desktop app
     Paths,
+    /// Put the folder that holds this gglib on the user's own PATH, or take
+    /// it off: what the desktop app's Windows installer and uninstaller run
+    /// (`src-tauri/windows/installer-hooks.nsh`). Hidden from `--help`.
+    #[command(hide = true)]
+    PathEntry {
+        #[command(subcommand)]
+        command: PathEntryCommand,
+    },
+}
+
+/// What `config path-entry` does with the folder that holds this gglib.
+///
+/// Each is hidden as well as its parent, so `promised_surface.txt` marks it
+/// `(hidden)`, which `docs/compatibility.md` does not promise.
+#[derive(Subcommand, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathEntryCommand {
+    /// Add it to the user's own PATH, unless it is already there
+    #[command(hide = true)]
+    Add,
+    /// Take every entry naming it off the user's own PATH
+    #[command(hide = true)]
+    Remove,
 }
 
 /// Fast-download accelerator command variants.
