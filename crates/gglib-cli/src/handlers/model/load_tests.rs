@@ -239,3 +239,6 @@ async fn an_unload_asks_the_daemon_to_stop_the_model_and_prints_its_sentence() {
     let err = format!("{:#}", line.expect_err("not loaded"));
     assert!(err.contains("server not found: 3"), "{err}");
 }
+
+#[path = "load_endpoint_off_tests.rs"]
+mod endpoint_off;
