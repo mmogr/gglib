@@ -2,11 +2,17 @@
 import type { Fix } from "./Fix";
 
 /**
- * A repair as a status carries it: which, and what gglib says about it.
+ * A repair as a status carries it: which, what is said about it, and the
+ * button that makes it.
  */
 export type FixOffer = { fix: Fix, 
 /**
- * [`Fix::offer`]: shown beside the Repair button, and before the
- * command line's question.
+ * [`Fix::offer`]: shown beside the button, and before the command
+ * line's question.
  */
-offer: string, };
+offer: string, 
+/**
+ * [`Fix::action`]: the button's word; null when there is no button,
+ * because gglib cannot make the fix.
+ */
+action: string | null, };

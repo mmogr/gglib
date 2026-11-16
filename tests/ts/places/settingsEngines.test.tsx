@@ -136,6 +136,7 @@ const KINDS = Object.keys(ENGINES) as RuntimeKind[];
 const RUNTIME_FIX: FixOffer = {
   fix: 'install_visual_cpp_runtime',
   offer: 'gglib can install the Microsoft Visual C++ Redistributable (x64) from Microsoft. Windows will ask for permission.',
+  action: 'Repair',
 };
 const RUNTIME_SAYS = 'Installed the Microsoft Visual C++ Redistributable (x64).';
 const CPU_WARNING = 'No GPU runtime gglib can use was found, so the CPU build will be slow.';
@@ -466,7 +467,7 @@ describe('the engine rows', () => {
     fake.statuses.llama = [
       status('llama', 'atPin', {
         broken: 'llama-server failed when asked `--version`: it exited with status 1',
-        fix: { fix: 'reinstall', offer: 'gglib can download llama.cpp again and reinstall it.' },
+        fix: { fix: 'reinstall', offer: 'gglib can download llama.cpp again and reinstall it.', action: 'Repair' },
       }),
     ];
     renderApp('/settings/engines');
@@ -476,6 +477,23 @@ describe('the engine rows', () => {
     await userEvent.click(r.getByRole('button', { name: 'Repair' }));
 
     await waitFor(() => expect(fake.streams.llama).toHaveLength(1));
+    expect(fake.repaired).toEqual([]);
+  });
+
+  it("says how Windows repairs a damaged runtime, with no button that would install it again", async () => {
+    const damaged =
+      'The Microsoft Visual C++ Redistributable (x64) is installed but damaged: its files are missing. Repair it in Windows: Settings › Apps › Installed apps › Microsoft Visual C++ 2015-2022 Redistributable (x64) › Modify › Repair, then check again.';
+    fake.statuses.llama = [
+      status('llama', 'atPin', {
+        broken: 'llama-server cannot start: a library it needs is missing.',
+        fix: { fix: 'repair_visual_cpp_runtime', offer: damaged, action: null },
+      }),
+    ];
+    renderApp('/settings/engines');
+    const r = await row('llama.cpp');
+
+    expect(await r.findByText(damaged)).toBeInTheDocument();
+    expect(r.queryByRole('button', { name: 'Repair' })).not.toBeInTheDocument();
     expect(fake.repaired).toEqual([]);
   });
 

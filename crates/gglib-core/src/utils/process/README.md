@@ -20,8 +20,12 @@ The Windows-specific flag is applied here and nowhere else.
   each OS's report of a library that cannot be loaded (Windows' exit
   status, glibc's loader, macOS's dyld), as values, so all three are
   tested on any OS.
+  `run_bounded_silent` is the same for a program whose output is never
+  read, with nothing on its pipes.
 - [`detached`]: starting the service, so it outlives the command that
   started it.
+- [`held`]: holding a downloaded program's file while it is checked and
+  run, so on Windows nobody else can write, delete or rename it in between.
 - [`stop`]: hearing that this process is asked to stop, and whether it has
   time for an orderly teardown or seconds before the OS ends it.
 - [`tied`]: tying a child to this process, so it ends when this process

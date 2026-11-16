@@ -240,6 +240,7 @@ describe("setup's engines", () => {
     const fix = {
       fix: 'install_visual_cpp_runtime',
       offer: 'gglib can install the Microsoft Visual C++ Redistributable (x64) from Microsoft. Windows will ask for permission.',
+      action: 'Repair',
     } as const;
     const says = 'Installed the Microsoft Visual C++ Redistributable (x64). llama-server works now.';
     answer('llama', engine('llama', true, { broken: reason('llama-server'), fix }));

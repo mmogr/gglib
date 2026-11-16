@@ -7,7 +7,12 @@
  * the acceleration, prebuilt or built from source, and its state), then
  * offers what can be done: Install where nothing is, Update to the pin
  * (asked first) where an older one is, and under ⋯ Reinstall and Remove…
- * (asked first). Nothing is offered as a button where the daemon would
+ * (asked first). One that does not work for a reason gglib can repair
+ * (`fix`) offers Repair (the fix's `action`) beside its reason, with the
+ * daemon's words for what it does; a fix with no action, Windows' repair
+ * of a damaged runtime, is said with no button. When a repair ends, every
+ * engine's row is read again. Nothing
+ * is offered as a button where the daemon would
  * refuse it: a source build's install or update is the terminal's, named by
  * its command. While a model runs on the engine every action is disabled,
  * saying which model to stop (ST-11). ▸ Details holds the install record,
@@ -79,7 +84,9 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
   const fromTerminal = older && !status?.pin.updateDownloads;
   const serving = status?.serving ?? null;
   const stopFirst = serving ? `Stop ${serving} first.` : undefined;
-  const busy = installing || uninstalling || serving !== null;
+  const busy = installing || uninstalling || engine.repairing || serving !== null;
+  // What gglib can do about an engine that does not work, said by the daemon.
+  const fix = status?.fix ?? null;
   // Whether an install is a download is the daemon's to say (`updateDownloads`);
   // where one fits and still the install is not one, a source build was here.
   const missing = !!status && !status.installed;
@@ -136,6 +143,11 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
           {engine.loadingStatus && !status && <Line>Reading {product}…</Line>}
         </div>
         <div className="flex shrink-0 items-center gap-xs">
+          {fix?.action && (
+            <Button variant="secondary" size="sm" disabled={busy} title={stopFirst} onClick={engine.runRepair}>
+              {fix.action}
+            </Button>
+          )}
           {offersInstall && (
             <Button variant="secondary" size="sm" disabled={busy} title={stopFirst} onClick={engine.runInstall}>
               Install
@@ -155,6 +167,10 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
       {serving && <Line>{stopFirst}</Line>}
       {engine.statusError && <Line tone="danger">{engine.statusError}</Line>}
       {status?.broken && <Line tone="danger">{status.broken}</Line>}
+      {fix && !engine.repairing && <Line>{fix.offer}</Line>}
+      {engine.repairing && <Line>Repairing {product}…</Line>}
+      {engine.repairError && <Line tone="danger">{engine.repairError}</Line>}
+      {engine.repairResult && <Line>{engine.repairResult}</Line>}
       {fromTerminal && <Line>The update is a source build, run from a terminal: {status?.installCommand}.</Line>}
       {(offersInstall || offersUpdate || offersReinstall) && status?.warning && (
         <StatusMark kind="attention" word={status.warning} className="text-xs" />

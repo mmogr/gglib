@@ -124,7 +124,10 @@ pub(crate) fn sd_status_at(
                 status.version_line = first_line(&output.stdout);
                 status.commit = status.version_line.as_deref().and_then(commit_of);
             }
-            Err(not_working) => status.health_error = Some(not_working.to_string()),
+            Err(not_working) => {
+                status.fix = not_working.fix();
+                status.health_error = Some(not_working.to_string());
+            }
         }
     }
     status

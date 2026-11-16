@@ -59,6 +59,9 @@ zip = { version = "9.0", default-features = false, features = ["aes-crypto", "bz
 # tar.gz extraction for macOS and Linux prebuilt archives
 flate2 = "1"
 tar = "0.4"
+# The folder a Visual C++ runtime install downloads into: a random name,
+# created so that a folder already there is never reused, removed after.
+tempfile = { workspace = true }
 
 # Unix signal handling
 [target.'cfg(unix)'.dependencies]
@@ -67,7 +70,6 @@ nix = { version = "0.30", features = ["signal", "process"] }
 [dev-dependencies]
 # The virtual clock the timing tests pause and advance.
 tokio = { workspace = true, features = ["test-util"] }
-tempfile = { workspace = true }
 # Tests that write pidfiles do it in a data root of this binary's own (#955).
 gglib-core = { workspace = true, features = ["test-utils"] }
 # The connection a fake server answers on, with the request already read.

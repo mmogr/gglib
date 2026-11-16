@@ -12,7 +12,8 @@ use gglib_core::domain::{EngineState, RuntimeKind};
 use gglib_core::paths::{LLAMA_INSTALL_COMMAND, SD_INSTALL_COMMAND};
 use gglib_core::ports::ModelRuntimePort;
 use gglib_runtime::engine::{
-    FixOffer, InstallPlan, PinStanding, PinState, pin_state, plan_install, standing_line,
+    Fix, FixOffer, InstallPlan, PinStanding, PinState, RepairReport, current_fix,
+    install_visual_cpp_runtime, pin_state, plan_install, plan_with, standing_line,
 };
 use gglib_runtime::llama::{LlamaProgressEvent, LlamaStatus, llama_status};
 use gglib_runtime::sd::{SdStatus, sd_status};
@@ -127,6 +128,56 @@ impl SetupOps {
         }
         .map_err(|e| GuiError::Internal(format!("Failed to install {}: {e}", kind.label())))
     }
+
+    /// Make the repair `kind`'s status offers that changes the machine:
+    /// install the Visual C++ runtime, then check `kind` again. The person
+    /// asked for it by pressing Repair. A reinstall is the install's, which
+    /// streams; anything else has no repair, and is refused.
+    pub async fn repair(&self, kind: RuntimeKind) -> Result<RepairReport, GuiError> {
+        let fix = tokio::task::spawn_blocking(move || current_fix(kind))
+            .await
+            .map_err(|e| GuiError::Internal(format!("Repair check panicked: {e}")))?
+            .map_err(|e| GuiError::Internal(e.to_string()))?;
+        refuse_another_repair(kind, fix)?;
+        Ok(install_visual_cpp_runtime(kind).await)
+    }
+}
+
+/// A conflict unless `fix`, `kind`'s fix now, is the runtime's install, the
+/// one repair the route makes.
+pub(crate) fn refuse_another_repair(kind: RuntimeKind, fix: Option<Fix>) -> Result<(), GuiError> {
+    let product = kind.label();
+    match fix {
+        Some(Fix::InstallVisualCppRuntime) => Ok(()),
+        Some(Fix::Reinstall) => Err(GuiError::Conflict(format!(
+            "{product} is repaired by installing it again, which its install does."
+        ))),
+        Some(fix @ Fix::RepairVisualCppRuntime) => Err(GuiError::Conflict(fix.offer(kind))),
+        None => Err(GuiError::Conflict(format!(
+            "There is nothing gglib can repair in {product}: it works, or gglib has no \
+             repair for why it does not."
+        ))),
+    }
+}
+
+/// The repair the status offers for `fix`, which `kind`'s check gave: a
+/// reinstall only where the daemon's install over what `pin` describes is a
+/// download, given this machine's `download`; a source build is the
+/// terminal's, which the status's reason already names.
+fn offered(
+    kind: RuntimeKind,
+    fix: Option<Fix>,
+    pin: &PinState,
+    download: &Result<(String, Option<String>), String>,
+) -> Option<FixOffer> {
+    let fix = fix?;
+    let downloads = || {
+        matches!(
+            plan_with(pin, false, false, || download.clone()),
+            InstallPlan::Download { .. }
+        )
+    };
+    (fix != Fix::Reinstall || downloads()).then(|| FixOffer::new(fix, kind))
 }
 
 /// The command that installs and updates `kind` from a terminal.
@@ -193,6 +244,7 @@ pub(super) fn llama_engine_status(
     EngineStatus {
         state: EngineState::of(status.installed, status.health_error.is_some()),
         broken: status.health_error,
+        fix: offered(RuntimeKind::Llama, status.fix, &status.pin, &download),
         install,
         record_error: status.build_error,
         reports: status.runtime.map(|runtime| runtime.build_label()),
@@ -223,6 +275,12 @@ pub(super) fn sd_engine_status(
     EngineStatus {
         state: EngineState::of(status.installed, status.health_error.is_some()),
         broken: status.health_error,
+        fix: offered(
+            RuntimeKind::StableDiffusion,
+            status.fix,
+            &status.pin,
+            &download,
+        ),
         install,
         record_error: status.record_error,
         reports: status.version_line,

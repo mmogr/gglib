@@ -3,4 +3,4 @@
 /**
  * What became of an install of the runtime.
  */
-export type RuntimeInstall = "not_needed" | "already_running" | "not_downloaded" | "not_verified" | "installed" | "restart_needed" | "newer_installed" | "declined" | "timed_out" | "failed";
+export type RuntimeInstall = "not_needed" | "already_running" | "not_downloaded" | "not_verified" | "installed" | "restart_needed" | "newer_installed" | "damaged" | "declined" | "refused" | "busy" | "timed_out" | "failed";

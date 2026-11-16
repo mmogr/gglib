@@ -3,7 +3,7 @@
 
 use std::time::{Duration, Instant};
 
-use super::{super::cmd, run_bounded};
+use super::{super::cmd, run_bounded, run_bounded_silent};
 
 #[test]
 fn a_program_that_answers_gives_its_output() {
@@ -61,4 +61,22 @@ fn a_program_that_cannot_start_says_why() {
         run_bounded(&mut cmd(&missing), Duration::from_secs(1)).expect_err("nothing to run");
 
     assert_eq!(refused.kind(), std::io::ErrorKind::NotFound, "{refused}");
+}
+
+/// A silent run gives the program's exit status, and stops one that never
+/// exits when the wait is up.
+#[test]
+fn a_silent_run_gives_the_status_and_stops_at_the_wait() {
+    let dir = tempfile::tempdir().unwrap();
+    let answers = gglib_test_proc::install(dir.path(), "answers", "print ignored\nexit 7");
+    let hangs = gglib_test_proc::install(dir.path(), "hangs", "sleep 60");
+
+    let status = run_bounded_silent(&mut cmd(&answers), Duration::from_secs(10)).unwrap();
+    let started = Instant::now();
+    let refused = run_bounded_silent(&mut cmd(&hangs), Duration::from_millis(500))
+        .expect_err("it never exits");
+
+    assert_eq!(status.code(), Some(7));
+    assert_eq!(refused.kind(), std::io::ErrorKind::TimedOut, "{refused}");
+    assert!(started.elapsed() < Duration::from_secs(5));
 }

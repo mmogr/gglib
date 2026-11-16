@@ -91,7 +91,7 @@ pub fn plan_install(kind: RuntimeKind, state: &PinState, force: bool, build: boo
 
 /// [`plan_install`] with this machine's download asked of `prebuilt`, which
 /// is asked only when nothing before it has decided.
-pub(crate) fn plan_with(
+pub fn plan_with(
     state: &PinState,
     force: bool,
     build: bool,

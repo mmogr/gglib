@@ -6,14 +6,16 @@
  * (`useFastDownloads`).
  *
  * An installed engine says so in the word every surface uses
- * (`ENGINE_WORDS`), llama.cpp's with why it does not work when it does
- * not; one that needs building says Not installed. llama.cpp's failure is
+ * (`ENGINE_WORDS`), each with why it does not work when it does not, and
+ * Repair beside the daemon's words for it where gglib can repair it; one
+ * that needs building says Not installed. llama.cpp's failure is
  * an error under its line, with Retry;
  * stable-diffusion.cpp's and the accelerator's are warnings (SU-2). Where
  * only a terminal can build llama.cpp, the step names the command the
  * daemon gives, with Check again, and looks for the build by itself every
- * few seconds (`useEngines`). Continue needs llama.cpp ready; Skip goes on
- * without it, and the Library's banner and Settings › Engines take it up.
+ * few seconds (`useEngines`). Continue needs llama.cpp installed and
+ * working; Skip goes on without it, and the Library's banner and
+ * Settings › Engines take it up.
  *
  * @module places/setup/EnginesStep
  */
@@ -27,7 +29,7 @@ import { Button } from '../../components/ui/Button';
 import { ENGINE_PRODUCT } from '../../types/setup';
 import type { EngineStatus } from '../../types/setup';
 import { Item, Problem, Step } from './Step';
-import { installable, needsBuild, type EngineView, type SetupEngines } from './useEngines';
+import { installable, needsBuild, working, type EngineView, type SetupEngines } from './useEngines';
 import type { FastDownloads } from './useFastDownloads';
 
 const SKIPPED = 'skipped — chat works without it';
@@ -48,18 +50,43 @@ const Installed: FC<{ status: EngineStatus }> = ({ status }) => (
   <StatusMark kind={status.state === 'not_working' ? 'failed' : 'on'} word={ENGINE_WORDS[status.state]} />
 );
 
+/**
+ * What can be done about an engine that does not work, in the daemon's
+ * words, with its button (Repair) where gglib makes the fix; and what the
+ * last repair did.
+ */
+const Repair: FC<{ view: EngineView; onRepair: () => void }> = ({ view, onRepair }) => {
+  const fix = view.status?.fix;
+  return (
+    <>
+      {fix && view.installing === null && (
+        <p className="m-0 flex flex-wrap items-center gap-sm">
+          <span>{view.repairing ? 'Repairing…' : fix.offer}</span>
+          {fix.action && (
+            <Button variant="secondary" size="sm" disabled={view.repairing} onClick={onRepair}>
+              {fix.action}
+            </Button>
+          )}
+        </p>
+      )}
+      {view.repaired !== null && <p className="m-0">{view.repaired}</p>}
+    </>
+  );
+};
+
 /** The progress under an engine's line while it installs. */
 const Progress: FC<{ view: EngineView; product: string }> = ({ view, product }) =>
   view.installing === null ? null : (
     <InstallProgress progress={view.installing === 'starting' ? null : view.installing} product={product} />
   );
 
-const Llama: FC<{ view: EngineView; readError: string | null; onRetry: () => void; onRecheck: () => void }> = ({
-  view,
-  readError,
-  onRetry,
-  onRecheck,
-}) => {
+const Llama: FC<{
+  view: EngineView;
+  readError: string | null;
+  onRetry: () => void;
+  onRecheck: () => void;
+  onRepair: () => void;
+}> = ({ view, readError, onRetry, onRecheck, onRepair }) => {
   const { status } = view;
   let state;
   if (view.installing !== null) state = <StatusMark kind="changing" word="installing" />;
@@ -73,6 +100,7 @@ const Llama: FC<{ view: EngineView; readError: string | null; onRetry: () => voi
       {view.installing === null && view.error !== null && <Problem onRetry={onRetry}>{view.error}</Problem>}
       {readError !== null && <Problem onRetry={onRecheck}>{readError}</Problem>}
       {view.installing === null && status?.broken && <Problem>{status.broken}</Problem>}
+      <Repair view={view} onRepair={onRepair} />
       {status && view.installing === null && needsBuild(status) && (
         <>
           <p className="m-0 flex flex-wrap items-center gap-xs">
@@ -91,7 +119,7 @@ const Llama: FC<{ view: EngineView; readError: string | null; onRetry: () => voi
   );
 };
 
-const Drawing: FC<{ view: EngineView; onRetry: () => void }> = ({ view, onRetry }) => {
+const Drawing: FC<{ view: EngineView; onRetry: () => void; onRepair: () => void }> = ({ view, onRetry, onRepair }) => {
   const { status } = view;
   const skipped = view.error !== null || needsBuild(status);
   let state;
@@ -107,6 +135,8 @@ const Drawing: FC<{ view: EngineView; onRetry: () => void }> = ({ view, onRetry 
           {view.error}
         </Problem>
       )}
+      {view.installing === null && status?.broken && <Problem warning>{status.broken}</Problem>}
+      <Repair view={view} onRepair={onRepair} />
       {status && view.installing === null && needsBuild(status) && (
         <p className="m-0 flex flex-wrap items-center gap-xs">
           In a terminal: <Command status={status} />
@@ -139,7 +169,8 @@ export const EnginesStep: FC<{ engines: SetupEngines; fast: FastDownloads; onNex
   onNext,
   onBack,
 }) => {
-  const ready = engines.llama.status?.installed === true && engines.llama.installing === null;
+  // Chat needs llama.cpp working: installed and not working holds Continue.
+  const ready = working(engines.llama.status) && engines.llama.installing === null;
   return (
     <Step
       n={2}
@@ -163,8 +194,13 @@ export const EnginesStep: FC<{ engines: SetupEngines; fast: FastDownloads; onNex
         readError={engines.readError}
         onRetry={() => engines.retry('llama')}
         onRecheck={engines.recheck}
+        onRepair={() => engines.repair('llama')}
       />
-      <Drawing view={engines.sd} onRetry={() => engines.retry('stable_diffusion')} />
+      <Drawing
+        view={engines.sd}
+        onRetry={() => engines.retry('stable_diffusion')}
+        onRepair={() => engines.repair('stable_diffusion')}
+      />
       <Fast fast={fast.fast} onRetry={fast.retry} />
     </Step>
   );

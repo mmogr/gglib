@@ -120,6 +120,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `GET` | `/api/config/system/engines/{kind}` | An engine's status, `kind` `llama` or `stable_diffusion`: what is installed, its pin, what an install would download, and the model running on it |
 | `POST` | `/api/config/system/engines/{kind}/install` | Install or update the engine's pinned download, progress over SSE; refused while a model runs on it |
 | `POST` | `/api/config/system/engines/{kind}/uninstall` | Remove what the install put in the engine's folder; 409 while a model runs on it |
+| `POST` | `/api/config/system/engines/{kind}/repair` | Install the Visual C++ runtime the engine's status offers as its fix, then check the engine again; the app calls it for Repair. The install runs on if the request goes away, one at a time. 409 when the status offers no such repair: a working engine, a reinstall (the install's), a damaged runtime (Windows' to repair), and always off Windows |
 | `POST` | `/api/config/system/setup-python` | Set up the Python fast-download helper |
 | `POST` | `/api/config/system/disable-fast-downloads` | Remove the fast-download helper; downloads go back to native HTTP |
 | `GET` | `/api/config/system/diagnostics` | Dependencies, resolved paths and acceleration (`gglib config check-deps`, `paths` and `fast-downloads status` in one) |

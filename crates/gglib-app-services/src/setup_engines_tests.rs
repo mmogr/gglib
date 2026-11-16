@@ -223,6 +223,33 @@ fn an_engine_without_the_visual_cpp_runtime_offers_it() {
         "gglib can install the Microsoft Visual C++ Redistributable (x64) from Microsoft. \
          Windows will ask for permission."
     );
+    assert_eq!(json["fix"]["action"], "Repair");
+}
+
+/// The repair route makes the runtime's install and nothing else: a
+/// working engine, a reinstall, a damaged runtime and no fix are refused,
+/// the damaged runtime with how Windows repairs it.
+#[test]
+fn the_repair_route_makes_only_the_runtime_s_install() {
+    let kind = RuntimeKind::Llama;
+    assert!(refuse_another_repair(kind, Some(Fix::InstallVisualCppRuntime)).is_ok());
+    for fix in [
+        None,
+        Some(Fix::Reinstall),
+        Some(Fix::RepairVisualCppRuntime),
+    ] {
+        let refused = refuse_another_repair(kind, fix).unwrap_err();
+        assert!(
+            matches!(refused, GuiError::Conflict(_)),
+            "{fix:?}: {refused:?}"
+        );
+    }
+    let GuiError::Conflict(damaged) =
+        refuse_another_repair(kind, Some(Fix::RepairVisualCppRuntime)).unwrap_err()
+    else {
+        unreachable!()
+    };
+    assert!(damaged.contains("Modify › Repair"), "{damaged}");
 }
 
 /// A reinstall is offered where the daemon's install is a download, and not

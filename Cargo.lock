@@ -2620,6 +2620,7 @@ dependencies = [
  "gglib-proxy",
  "gglib-runtime",
  "gglib-test-http",
+ "gglib-test-proc",
  "http-body-util",
  "reqwest",
  "rust-embed",
