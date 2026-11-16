@@ -594,6 +594,14 @@ jobs:
       - name: Check gglib-cli compilation
         run: cargo test -p gglib-cli --no-run
 
+      # A Windows machine without the Visual C++ Redistributable does not
+      # start a program that imports its DLLs (#1959, A1). This is the debug
+      # build, linked as the release one is; release.yml checks the shipped
+      # files themselves.
+      - name: Check gglib.exe needs no Visual C++ runtime
+        if: runner.os == 'Windows'
+        run: python scripts/check_pe_imports.py target/debug/gglib.exe
+
       # The pinned engines themselves, on all three platforms. The `gglib`
       # just built installs each one as a user's
       # machine would, into a folder of the job's own, and the action fetches

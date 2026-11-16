@@ -75,6 +75,8 @@ REACHES = [
     "scripts/known-failures/**",
     "scripts/known_failures.py",
     "scripts/split_test_output.py",
+    # `cli-cross-os` reads the Windows gglib.exe's imports with it.
+    "scripts/check_pe_imports.py",
 ]
 
 # Paths that cannot reach a Rust build on macOS, Windows or iOS. A path ending
@@ -426,6 +428,7 @@ PATHS = [
     ("scripts/known-failures/windows.txt", True),
     ("scripts/known_failures.py", True),
     ("scripts/split_test_output.py", True),
+    ("scripts/check_pe_imports.py", True),
     ("scripts/status_card/requirements.txt", False),
     (".github/workflows/coverage.yml", False),
     (".github/dependabot.yml", False),

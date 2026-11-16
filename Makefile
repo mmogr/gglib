@@ -381,6 +381,9 @@ enforce: ## Run the architecture enforcement checks
 	@# known_failures.py is the verdict of CI's macOS and Windows test job. Its
 	@# fixtures plant each way a run and its list can disagree.
 	@./scripts/known_failures.py --self-test
+	@# check_pe_imports.py reads Windows programs, which only Windows CI and a
+	@# release build make, so its planted images run here, on every OS.
+	@./scripts/check_pe_imports.py --self-test
 	@# ts-rs reads Rust types, not serde's behaviour, so two annotations stand
 	@# between the generated bindings and a new class of lie: i64 becomes a
 	@# `bigint` no `JSON.parse` can produce, and `skip_serializing_if` becomes a
