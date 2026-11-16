@@ -64,7 +64,7 @@ LINUX_APP_NAMES=("gglib-gui" "GGLib GUI")
 APP_IDS="com.gglib.gui gglib-app gglib-gui gglib-tauri"
 # What gglib writes at the top of its data folder, and so what a build from
 # before every build shared one folder left at the top of its checkout.
-STATE_NAMES="data .llama .sd .python .gglib-runtime .conda logs pids daemon.lock"
+STATE_NAMES="data .llama .sd .python .gglib-runtime .conda logs pids daemon.lock daemon.json"
 
 if [ -z "$REPO" ] || [ -z "$HOME_DIR" ]; then
     echo "✗ Could not work out where this checkout or the home folder is."

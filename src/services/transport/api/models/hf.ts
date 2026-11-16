@@ -4,6 +4,7 @@
  */
 
 import { get, post } from '../client';
+import { HUB_READ_LIMIT_MS } from '../timeLimit';
 import type { HfModelId } from '../../types/ids';
 import type {
   HfModelSummary,
@@ -16,6 +17,10 @@ import type {
 
 /**
  * Browse HuggingFace models with search and filtering.
+ *
+ * The reads below are answered from the Hub, which can take minutes where a
+ * read of the daemon's own takes moments: they are held to the Hub's limit
+ * (`HUB_READ_LIMIT_MS`) rather than 30 s.
  */
 export async function browseHfModels(params: HfSearchRequest): Promise<HfSearchResponse> {
   return post<HfSearchResponse>('/api/models/hf/search', params);
@@ -33,7 +38,7 @@ export async function browseHfModels(params: HfSearchRequest): Promise<HfSearchR
  */
 export async function getHfModelSummary(modelId: HfModelId): Promise<HfModelSummary> {
   // Don't encode the modelId - the wildcard route expects the raw path
-  return get<HfModelSummary>(`/api/models/hf/model/${modelId}`);
+  return get<HfModelSummary>(`/api/models/hf/model/${modelId}`, { timeoutMs: HUB_READ_LIMIT_MS });
 }
 
 /**
@@ -41,7 +46,8 @@ export async function getHfModelSummary(modelId: HfModelId): Promise<HfModelSumm
  */
 export async function getHfQuantizations(modelId: HfModelId): Promise<HfQuantizationsResponse> {
   return get<HfQuantizationsResponse>(
-    `/api/models/hf/quantizations/${encodeURIComponent(modelId)}`
+    `/api/models/hf/quantizations/${encodeURIComponent(modelId)}`,
+    { timeoutMs: HUB_READ_LIMIT_MS },
   );
 }
 
@@ -51,7 +57,7 @@ export async function getHfQuantizations(modelId: HfModelId): Promise<HfQuantiza
  * the headers the listing's heads stop short of.
  */
 export async function getHfPick(modelId: HfModelId): Promise<HfPickResponse> {
-  return get<HfPickResponse>(`/api/models/hf/pick/${encodeURIComponent(modelId)}`);
+  return get<HfPickResponse>(`/api/models/hf/pick/${encodeURIComponent(modelId)}`, { timeoutMs: HUB_READ_LIMIT_MS });
 }
 
 /**
@@ -59,6 +65,7 @@ export async function getHfPick(modelId: HfModelId): Promise<HfPickResponse> {
  */
 export async function getHfToolSupport(modelId: HfModelId): Promise<ToolSupportResponse> {
   return get<ToolSupportResponse>(
-    `/api/models/hf/tool-support/${encodeURIComponent(modelId)}`
+    `/api/models/hf/tool-support/${encodeURIComponent(modelId)}`,
+    { timeoutMs: HUB_READ_LIMIT_MS },
   );
 }

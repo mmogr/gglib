@@ -20,6 +20,7 @@ import type { RunList } from '../../../types/generated/RunList';
 import type { Thinking } from '../../../types/generated/Thinking';
 import { get, post, put } from './client';
 import { readRunStream, type RunStreamItem } from './runs';
+import { FAR_STREAMED_LIMIT_MS } from './timeLimit';
 
 function farRunPath(id: string): string {
   return `/api/remote/runs/${encodeURIComponent(id)}`;
@@ -77,11 +78,15 @@ export async function cancelFarRun(id: string): Promise<RunInfo> {
   return post<RunInfo>(`${farRunPath(id)}/cancel`);
 }
 
-/** A far run's events after `after`, then its final state. */
+/**
+ * A far run's events after `after`, then its final state. The daemon opens
+ * the far machine's stream before it answers, so the headers are given that
+ * machine's time.
+ */
 export function readFarRunEvents(
   id: string,
   after: number,
   signal: AbortSignal,
 ): AsyncGenerator<RunStreamItem> {
-  return readRunStream(`${farRunPath(id)}/events?after=${after}`, signal);
+  return readRunStream(`${farRunPath(id)}/events?after=${after}`, signal, FAR_STREAMED_LIMIT_MS);
 }

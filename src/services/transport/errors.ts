@@ -4,8 +4,9 @@
  * `readData` below maps HTTP-status failures and body-decode failures to
  * TransportError. Errors from other sources — a `fetch` rejection, a failed
  * Tauri `invoke` — are rethrown unchanged by `api/client.ts`, so a caller can
- * still receive a plain `Error`. Note `TransportErrorCode` declares `NETWORK`,
- * which nothing in this directory constructs.
+ * still receive a plain `Error`. A request that ran out of time is a
+ * `TIMEOUT` (`api/timeLimit.ts`). Note `TransportErrorCode` declares
+ * `NETWORK`, which nothing in this directory constructs.
  *
  * This header previously described two classes, `TauriTransport` and
  * `HttpTransport`. Neither appears anywhere in the tree.

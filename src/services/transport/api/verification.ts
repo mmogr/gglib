@@ -4,6 +4,7 @@
  */
 
 import { get, post } from './client';
+import { HUB_READ_LIMIT_MS } from './timeLimit';
 import type { ModelId } from '../types/ids';
 import type {
   VerificationReport,
@@ -26,10 +27,11 @@ export async function verifyModel(modelId: ModelId): Promise<VerificationReport>
 }
 
 /**
- * Check if updates are available for a model on HuggingFace.
+ * Check if updates are available for a model on HuggingFace: up to three
+ * listings of the repo on the Hub, so held to the Hub's limit.
  */
 export async function checkModelUpdates(modelId: ModelId): Promise<UpdateCheckResult> {
-  const response = await get<CheckUpdatesResponse>(`/api/models/${modelId}/updates`);
+  const response = await get<CheckUpdatesResponse>(`/api/models/${modelId}/updates`, { timeoutMs: HUB_READ_LIMIT_MS });
   return response.result;
 }
 

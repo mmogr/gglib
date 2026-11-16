@@ -7,8 +7,10 @@
  * counts only an answer that says it is gglib's (`service: "gglib-daemon"`):
  * another program on the port is no daemon. The daemon lets the pages it
  * lets read `/api` read `/health` too (CORS), the desktop window included.
- * It is a plain `fetch`, so it never runs the client's 401 handling (the
- * token re-read).
+ * It is a plain `fetch` outside the client's 401 handling (the token
+ * re-read), through the same time limit as every request
+ * (`timeLimit.ts`): 1.5 s, the reply included, so a daemon that does not
+ * answer reads as not there instead of leaving the question open.
  *
  * `tokenRefusal` is the one `/api` read (`/api/version`) a browser tab makes
  * to learn whether the daemon takes the token it holds. A daemon that
@@ -21,14 +23,21 @@
 import { TransportError } from '../errors';
 import { apiFetch, healthUrl } from './client';
 import { TOKEN_REQUIRED } from './daemonToken';
+import { fetchWithin, HEALTH_LIMIT_MS, limitFor } from './timeLimit';
 
 /** Whether a daemon answers at this session's address. */
 export async function probeDaemon(): Promise<boolean> {
   try {
-    const response = await fetch(await healthUrl(), { cache: 'no-store' });
-    if (!response.ok) return false;
-    const body = (await response.json()) as { service?: unknown } | null;
-    return body?.service === GGLIB_DAEMON;
+    return await fetchWithin(
+      await healthUrl(),
+      { cache: 'no-store' },
+      limitFor('GET', { timeoutMs: HEALTH_LIMIT_MS }),
+      async (response) => {
+        if (!response.ok) return false;
+        const body = (await response.json()) as { service?: unknown } | null;
+        return body?.service === GGLIB_DAEMON;
+      },
+    );
   } catch {
     return false;
   }
