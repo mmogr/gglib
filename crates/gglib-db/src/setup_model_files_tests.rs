@@ -81,7 +81,7 @@ fn projector(dir: &Path, name: &str) -> String {
 fn write(dir: &Path, name: &str, header: &[u8]) -> String {
     let path = dir.join(name);
     std::fs::write(&path, header).unwrap();
-    std::fs::canonicalize(path)
+    gglib_core::paths::canonical(path)
         .unwrap()
         .to_string_lossy()
         .into_owned()

@@ -193,6 +193,8 @@ interface EventBridge {
   cleanup: () => void;
   /** Read again. Never rejects, so an ignored result cannot become an unhandled one. */
   refresh: () => Promise<Reread>;
+  /** The registry was just written from elsewhere (a command's own answer): a read still out is dropped. */
+  overtake: () => void;
 }
 
 export function bridgeEvents<K extends AppEventType, T>({
@@ -231,5 +233,5 @@ export function bridgeEvents<K extends AppEventType, T>({
     reset?.();
   }
 
-  return { init, cleanup, refresh: kept.refresh };
+  return { init, cleanup, refresh: kept.refresh, overtake: kept.overtake };
 }

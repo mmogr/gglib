@@ -33,7 +33,7 @@ struct Library {
 fn file(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
     let path = dir.join(name);
     std::fs::write(&path, bytes).unwrap();
-    path.canonicalize().unwrap()
+    gglib_core::paths::canonical(&path).unwrap()
 }
 
 /// The library, its model linked to the projector named `linked` in its
@@ -126,7 +126,7 @@ async fn an_unlinked_model_is_linked_to_the_projector_its_upgrade_brought() {
     assert!(library.upgrade().await.updated);
 
     let model = library.model().await;
-    let projector = library.dir.path().join(PROJECTOR).canonicalize().unwrap();
+    let projector = gglib_core::paths::canonical(library.dir.path().join(PROJECTOR)).unwrap();
     assert_eq!(model.projector_path, Some(projector));
     assert_eq!(model.hf_commit_sha.as_deref(), Some(NEWER));
 }

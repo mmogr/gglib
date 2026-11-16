@@ -237,7 +237,11 @@ async fn a_model_the_catalogue_does_not_hold_is_offered_every_tool() {
 }
 
 fn canonical(path: &Path) -> String {
-    path.canonicalize().unwrap().to_str().unwrap().to_owned()
+    gglib_core::paths::canonical(path)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned()
 }
 
 /// A folder this machine's turn says is the run's, by its canonical path,

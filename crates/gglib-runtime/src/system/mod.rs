@@ -2,6 +2,7 @@
 mod deps;
 pub(crate) mod gpu;
 mod host;
+pub(crate) mod vulkan_devices;
 
 use gglib_core::ports::SystemProbePort;
 use gglib_core::utils::system::{

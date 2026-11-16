@@ -118,7 +118,7 @@ async fn refused(state: &AppState, id: i64, folder: Option<&str>) -> (u16, &'sta
 }
 
 fn canonical(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap()
+    gglib_core::paths::canonical(path).unwrap()
 }
 
 fn shown(path: &Path) -> String {

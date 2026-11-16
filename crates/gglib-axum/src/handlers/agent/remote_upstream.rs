@@ -15,12 +15,9 @@ use gglib_app_services::GuiError;
 use gglib_app_services::transcript::MadeBy;
 use gglib_core::Settings;
 use gglib_core::domain::{InferenceProfile, Machine, ModelRef};
-use gglib_core::events::AppEvent;
-use gglib_core::ports::AppEventEmitter;
 use gglib_core::ports::ModelRuntimePort;
 use gglib_core::request_pipeline::{self, ModelContext, SamplingLayers};
 use gglib_runtime::Door;
-use gglib_runtime::proxy::ProxyStatus;
 
 use super::chat_sampling::ChatSampling;
 use super::hub_model::Loaded;
@@ -79,8 +76,9 @@ async fn launched_context(
 }
 
 /// This machine's endpoint, as a turn on one of its models dials it: turned
-/// on first when it is off, as starting a model turns it on, and said to be
-/// on (`proxy_started`) so every window showing it Off hears it.
+/// on first when it is off, as starting a model turns it on, which says it
+/// is on (`proxy_started`, from `ProxyOps`) so every window showing it Off
+/// hears it.
 ///
 /// # Errors
 ///
@@ -89,11 +87,7 @@ async fn launched_context(
 /// that it is off, should it stop between the two; `internal_error` (500)
 /// when the settings that hold its key cannot be read.
 pub(super) async fn this_machines_door(state: &AppState) -> Result<Door, HttpError> {
-    let was_off = !matches!(state.proxy.status().await, ProxyStatus::Running { .. });
-    let address = state.proxy.ensure_running().await?;
-    if was_off {
-        state.sse.emit(AppEvent::proxy_started(address.port()));
-    }
+    state.proxy.ensure_running().await?;
     state
         .proxy
         .door()

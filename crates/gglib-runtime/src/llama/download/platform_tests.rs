@@ -9,6 +9,7 @@ use super::tests::B11429_ASSETS;
 use super::{
     CUDART_PATTERN, LLAMA_CPU_WARNING, PrebuiltAvailability, llama_matcher, llama_platform_asset,
 };
+use crate::system::vulkan_devices::{VulkanDevices, fixtures, vulkan_gpu_present};
 
 fn gpu(has_nvidia_gpu: bool, cuda: bool, has_vulkan: bool) -> GpuInfo {
     GpuInfo {
@@ -169,6 +170,54 @@ fn windows_takes_the_build_its_gpu_runs() {
             true,
         ),
     ]);
+}
+
+/// Every platform with a CPU build, and that build's archive.
+const CPU_BUILDS: [(&str, &str, &str); 4] = [
+    ("linux", "x86_64", "bin-ubuntu-x64.tar.gz"),
+    ("linux", "aarch64", "bin-ubuntu-arm64.tar.gz"),
+    ("windows", "x86_64", "bin-win-cpu-x64.zip"),
+    ("windows", "aarch64", "bin-win-cpu-arm64.zip"),
+];
+
+/// The GPU a machine with `devices` and the Vulkan loader reports on `os`,
+/// with no NVIDIA card.
+fn found(os: &str, devices: &VulkanDevices) -> GpuInfo {
+    GpuInfo {
+        has_vulkan: vulkan_gpu_present(os, true, devices),
+        ..gpu(false, false, false)
+    }
+}
+
+/// The Vulkan loader alone, a software rasteriser or a list with no device
+/// in it is no GPU: the CPU build is installed, and said to be.
+#[test]
+fn the_cpu_build_is_chosen_when_no_vulkan_device_is_a_gpu() {
+    let mut wrong = Vec::new();
+    for (os, arch, cpu) in CPU_BUILDS {
+        for (what, devices) in fixtures::without_a_gpu() {
+            let (pattern, description, warning) = picked(os, arch, &found(os, &devices)).unwrap();
+            if pattern != cpu || warning != Some(LLAMA_CPU_WARNING) {
+                wrong.push(format!("{os} {arch}, {what}: {description}"));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "not the CPU build:\n{}", wrong.join("\n"));
+}
+
+/// A GPU among the devices, or a GPU driver where no list could be read, is
+/// the Vulkan build.
+#[test]
+fn the_vulkan_build_is_chosen_when_a_vulkan_device_is_a_gpu() {
+    for (os, arch, _) in CPU_BUILDS {
+        for (what, devices) in fixtures::with_a_gpu() {
+            let (_, description, warning) = picked(os, arch, &found(os, &devices)).unwrap();
+            assert!(
+                description.ends_with("(Vulkan)") && warning.is_none(),
+                "{os} {arch}, {what}: {description}"
+            );
+        }
+    }
 }
 
 #[test]

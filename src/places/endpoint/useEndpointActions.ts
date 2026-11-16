@@ -7,14 +7,16 @@
  * get. Serving only one model, or every model again, restarts it: the
  * daemon answers a start while it runs with a refusal, so the endpoint is
  * stopped first, then started pinned (`start-pinned`, the GUI's
- * `gglib serve`) or plain. A failed call leaves the daemon's message
- * verbatim (EP-1); nothing here rewords it.
+ * `gglib serve`) or plain. A start's answer is the endpoint's status at
+ * once (`startEndpoint`), not only when its event arrives. A failed call
+ * leaves the daemon's message verbatim (EP-1); nothing here rewords it.
  *
  * @module places/endpoint/useEndpointActions
  */
 
 import { useCallback, useState } from 'react';
 import { proofAnswered, proofFailed } from '../../readings/connect';
+import { startEndpoint, startEndpointPinned } from '../../services/proxyEvents';
 import { getTransport } from '../../services/transport';
 import { formatError } from '../../utils/errors';
 
@@ -60,15 +62,14 @@ export function useEndpointActions(): EndpointActions {
     }
   }, []);
 
-  const turnOn = useCallback(() => run('on', () => getTransport().startProxy({})), [run]);
+  const turnOn = useCallback(() => run('on', () => startEndpoint({})), [run]);
   const turnOff = useCallback(() => run('off', () => getTransport().stopProxy()), [run]);
   const serve = useCallback(
     (modelId: number | null) =>
       run('serve', async () => {
-        const transport = getTransport();
-        await transport.stopProxy();
-        if (modelId === null) await transport.startProxy({});
-        else await transport.startPinnedProxy({ model_id: modelId });
+        await getTransport().stopProxy();
+        if (modelId === null) await startEndpoint({});
+        else await startEndpointPinned({ model_id: modelId });
       }),
     [run],
   );

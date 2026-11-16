@@ -12,6 +12,8 @@
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
+use gglib_core::paths::{canonical, inside, join};
+
 /// How a refusal for a path that names nothing ends, after the path.
 ///
 /// The whole message is `No file or folder '<path>' ` followed by this.
@@ -37,9 +39,7 @@ pub(crate) struct Resolved {
 /// The canonical form of `sandbox_root`, or the refusal the model reads when
 /// the folder has gone.
 fn canonical_root(sandbox_root: &Path) -> Result<PathBuf, String> {
-    sandbox_root
-        .canonicalize()
-        .map_err(|e| format!("The working folder cannot be read: {e}"))
+    canonical(sandbox_root).map_err(|e| format!("The working folder cannot be read: {e}"))
 }
 
 /// Resolve `user_path` relative to `sandbox_root`, rejecting escapes.
@@ -96,20 +96,23 @@ pub(crate) fn resolve_sandboxed_path(
                 .components()
                 .filter(|c| !matches!(c, Component::Prefix(_) | Component::RootDir))
                 .collect();
-            (sandbox_root.join(relative), user_path.to_string())
+            (join(sandbox_root, &relative), user_path.to_string())
         }
-        _ => (sandbox_root.join(raw), user_path.to_string()),
+        // Joined through the owner, so a name such as `notes.` opens that
+        // file and not `notes` under a plain root.
+        _ => (join(sandbox_root, raw), user_path.to_string()),
     };
 
     // Canonicalize to resolve symlinks and `..`
-    let path = candidate.canonicalize().map_err(|e| match e.kind() {
+    let path = canonical(&candidate).map_err(|e| match e.kind() {
         ErrorKind::NotFound | ErrorKind::NotADirectory => {
             format!("No file or folder '{shown}' {MISSING}")
         }
         _ => format!("'{shown}' cannot be read: {e}"),
     })?;
 
-    if !path.starts_with(&canon_root) {
+    // The root and the path may each be plain or verbatim on Windows.
+    if inside(&path, &canon_root).is_none() {
         return Err(format!("'{shown}' {OUTSIDE}."));
     }
 
@@ -138,14 +141,14 @@ fn under_root(raw: &Path, sandbox_root: &Path, canon_root: &Path) -> Option<Path
     if let Ok(rest) = raw.strip_prefix(sandbox_root) {
         return Some(rest.to_path_buf());
     }
-    if let Ok(rest) = raw.strip_prefix(canon_root) {
-        return Some(rest.to_path_buf());
+    if let Some(rest) = inside(raw, canon_root) {
+        return Some(rest);
     }
     let canon = raw.ancestors().find_map(|known| {
         let tail = raw.strip_prefix(known).ok()?;
-        Some(known.canonicalize().ok()?.join(tail))
+        Some(join(&canonical(known).ok()?, tail))
     })?;
-    canon.strip_prefix(canon_root).ok().map(Path::to_path_buf)
+    inside(&canon, canon_root)
 }
 
 /// Check whether a file appears to be binary by scanning for null bytes.

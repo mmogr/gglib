@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod canonical;
 mod config;
 mod database;
 mod ensure;
@@ -22,6 +23,9 @@ pub(crate) mod test_utils;
 
 // Error type
 pub use error::PathError;
+
+// A path's one canonical form
+pub use canonical::{canonical, child, inside, is_verbatim, join};
 
 // Platform detection and roots
 pub use platform::{data_root, data_root_source, resource_root, source_checkout};

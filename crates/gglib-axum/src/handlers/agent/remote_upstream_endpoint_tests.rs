@@ -273,8 +273,18 @@ async fn an_endpoint_that_is_off_is_turned_on_and_dialled() {
         serde_json::to_value(&told).unwrap(),
         serde_json::to_value(gglib_core::events::AppEvent::proxy_started(port)).unwrap()
     );
+    // The next word is the stop's, not a second start's.
+    let next = tokio::time::timeout(std::time::Duration::from_secs(5), events.next())
+        .await
+        .expect("an event")
+        .expect("the stream");
+    assert_eq!(
+        serde_json::to_value(&next).unwrap(),
+        serde_json::to_value(gglib_core::events::AppEvent::proxy_stopped()).unwrap(),
+        "told twice"
+    );
     let more = tokio::time::timeout(std::time::Duration::from_millis(200), events.next()).await;
-    assert!(more.is_err(), "told twice: {more:?}");
+    assert!(more.is_err(), "told more: {more:?}");
     assert!(again.is_ok());
 
     let opened = opened.expect("a door");
