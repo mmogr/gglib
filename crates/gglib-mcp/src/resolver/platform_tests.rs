@@ -68,6 +68,15 @@ fn the_names_a_command_is_looked_for_under_are_its_extensions_then_itself() {
     );
     let pathext = Platform::windows(Some(OsStr::new(".EXE;;.CMD")));
     assert_eq!(pathext.names("tool"), ["tool.exe", "tool.cmd", "tool"]);
+    // What the shell hands to another program is no program to gglib.
+    let wider = Platform::windows(Some(OsStr::new(".JS;.EXE;.VBS;.CMD;.MSC")));
+    assert_eq!(wider.names("tool"), ["tool.exe", "tool.cmd", "tool"]);
+    let none = Platform::windows(Some(OsStr::new(".JS;.VBS")));
+    assert_eq!(
+        none.names("tool"),
+        ["tool.com", "tool.exe", "tool.bat", "tool.cmd", "tool"],
+        "a PATHEXT with nothing gglib can start is read as unset"
+    );
     assert_eq!(Platform::unix().names("npx"), ["npx"]);
     assert_eq!(Platform::unix().names("tool.exe"), ["tool.exe"]);
 }

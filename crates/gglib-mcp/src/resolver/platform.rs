@@ -43,6 +43,11 @@ pub(crate) const DEFAULT_DIRS: &[&str] = {
 /// order it tries them.
 const WINDOWS_EXTENSIONS: &str = ".COM;.EXE;.BAT;.CMD";
 
+/// The extensions of a file gglib can start as a program. `PATHEXT` often
+/// lists more (`.JS`, `.VBS`, `.MSC`), which the shell hands to another
+/// program; started directly, such a file is refused as not a program.
+const STARTABLE: [&str; 4] = [".com", ".exe", ".bat", ".cmd"];
+
 /// How a file is known to be a program.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Runnable {
@@ -98,19 +103,22 @@ impl Platform {
 
     /// Windows's rules, given the value of `PATHEXT` if it is set.
     ///
-    /// The extensions are lower-cased: a file system that tells case apart
-    /// holds `npx.cmd`, not the `npx.CMD` that `PATHEXT` would spell.
+    /// The extensions are `PATHEXT`'s, in its order, less the ones gglib
+    /// cannot start ([`STARTABLE`]); a `PATHEXT` that names none of those is
+    /// read as unset. They are lower-cased: a file system that tells case
+    /// apart holds `npx.cmd`, not the `npx.CMD` that `PATHEXT` would spell.
     pub(crate) fn windows(pathext: Option<&OsStr>) -> Self {
-        let list = pathext
+        let startable = |list: &str| -> Vec<String> {
+            list.split(';')
+                .map(|ext| ext.trim().to_ascii_lowercase())
+                .filter(|ext| STARTABLE.contains(&ext.as_str()))
+                .collect()
+        };
+        let extensions = pathext
             .and_then(OsStr::to_str)
-            .filter(|list| !list.trim().is_empty())
-            .unwrap_or(WINDOWS_EXTENSIONS);
-        let extensions = list
-            .split(';')
-            .map(str::trim)
-            .filter(|ext| !ext.is_empty())
-            .map(str::to_ascii_lowercase)
-            .collect();
+            .map(startable)
+            .filter(|extensions| !extensions.is_empty())
+            .unwrap_or_else(|| startable(WINDOWS_EXTENSIONS));
         Self {
             extensions,
             separator: ';',
