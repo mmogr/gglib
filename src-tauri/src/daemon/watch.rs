@@ -66,13 +66,24 @@ impl Refresh {
 /// Polls once immediately so the first paint shows the daemon's real state
 /// rather than the struct defaults, which read "proxy stopped" on a launch
 /// with `proxy_autostart` on.
+///
+/// Except while a launch is in flight (the app's own at startup, or a Start
+/// gglib): then every surface says gglib is starting, and the poll waits for
+/// the launch's answer. A poll before then would find nothing listening and
+/// paint "not running" over a daemon that is on its way.
 pub(crate) fn spawn(app: &AppHandle) {
     let app = app.clone();
 
     tauri::async_runtime::spawn(async move {
-        let refresh = app.state::<AppState>().refresh.clone();
+        let state = app.state::<AppState>();
+        let refresh = state.refresh.clone();
 
         loop {
+            if state.daemon.service.is_starting() {
+                publish(&app, DaemonSnapshot::starting()).await;
+                // Its outcome is the next poll's to read.
+                let _ = state.daemon.service.settled().await;
+            }
             poll_once(&app).await;
             refresh.wait().await;
 
@@ -87,10 +98,21 @@ pub(crate) fn spawn(app: &AppHandle) {
 }
 
 /// One poll: read the daemon, and repaint only if anything changed.
+///
+/// A daemon that answers is the app's daemon, which clears a launch that
+/// failed earlier (one started from a terminal since is found).
 async fn poll_once(app: &AppHandle) {
     let state = app.state::<AppState>();
     let next = read(&state.daemon).await;
+    if next.reachable {
+        state.daemon.service.found();
+    }
+    publish(app, next).await;
+}
 
+/// Store `next` as the picture of the daemon, and repaint only if it changed.
+async fn publish(app: &AppHandle, next: DaemonSnapshot) {
+    let state = app.state::<AppState>();
     {
         let mut current = state.snapshot.write().await;
         if *current == next {

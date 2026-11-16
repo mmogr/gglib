@@ -173,6 +173,114 @@ describe("the window's gate in a browser", () => {
   });
 });
 
+describe("the window while the desktop app's launch of gglib is in flight", () => {
+  const STARTING = 'gglib is starting…';
+  const DOWN = "gglib isn't running, so nothing can be served.";
+  const WHY = 'the gglib daemon did not come up within 15s';
+
+  /** The app's lookup of the daemon's address: out until `settle`, as the launch is. */
+  function launchInFlight() {
+    let outcome: { ok: true } | { ok: false } | null = null;
+    const waiting: Array<() => void> = [];
+    const answer = () =>
+      outcome!.ok ? Promise.resolve({ port: 9887, token: 'minted' }) : Promise.reject(WHY);
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {
+      invoke: vi.fn((cmd: string) => {
+        if (cmd !== 'get_embedded_api_info') return Promise.resolve(null);
+        if (outcome) return answer();
+        return new Promise((resolve, reject) => waiting.push(() => void answer().then(resolve, reject)));
+      }),
+    };
+    return async (ok: boolean) => {
+      outcome = ok ? { ok: true } : { ok: false };
+      await act(async () => {
+        for (const settle of waiting.splice(0)) settle();
+      });
+    };
+  }
+
+  it('says gglib is starting while the answer is out, never that it is not running', async () => {
+    launchInFlight();
+    daemon.up = false;
+    await renderGate();
+    expect(await screen.findByText(STARTING)).toBeInTheDocument();
+    await nextProbe();
+    await nextProbe();
+    expect(screen.getByText(STARTING)).toBeInTheDocument();
+    expect(screen.queryByText(DOWN)).not.toBeInTheDocument();
+    expect(screen.queryByText('the window')).not.toBeInTheDocument();
+  });
+
+  it('draws the window once the launch answers', async () => {
+    const settle = launchInFlight();
+    await renderGate();
+    expect(await screen.findByText(STARTING)).toBeInTheDocument();
+
+    await settle(true);
+    expect(await screen.findByText('the window')).toBeInTheDocument();
+    expect(screen.queryByText(STARTING)).not.toBeInTheDocument();
+  });
+
+  it("says gglib isn't running, in the launch's own words, when the launch failed", async () => {
+    const settle = launchInFlight();
+    daemon.up = false;
+    await renderGate();
+    expect(await screen.findByText(STARTING)).toBeInTheDocument();
+
+    await settle(false);
+    expect(await screen.findByText(DOWN)).toBeInTheDocument();
+    expect(screen.getByText(WHY)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start gglib' })).toBeInTheDocument();
+    expect(screen.queryByText(STARTING)).not.toBeInTheDocument();
+  });
+
+  it('keeps the failed launch\'s sentence up, the same node, while every probe asks again', async () => {
+    const settle = launchInFlight();
+    daemon.up = false;
+    await renderGate();
+    // The same module instance the gate reads (both imported after the reset).
+    const lookup = await import('../../../src/services/transport/api/addressLookup');
+    const seen: string[] = [];
+    lookup.onAddressLookup(() => seen.push(lookup.addressLookup().state));
+
+    await settle(false);
+    const sentence = await screen.findByRole('alert');
+    expect(sentence).toHaveTextContent(WHY);
+
+    for (let tick = 0; tick < 4; tick += 1) {
+      await nextProbe();
+      expect(screen.getByRole('alert')).toBe(sentence);
+    }
+    expect(seen).not.toContain('pending');
+    expect(seen.filter((state) => state === 'failed')).toHaveLength(1);
+
+    // A later answer (a daemon heard since) replaces it.
+    daemon.up = true;
+    await settle(true);
+    await nextProbe();
+    expect(await screen.findByText('the window')).toBeInTheDocument();
+    expect(lookup.addressLookup().state).toBe('known');
+    expect(screen.queryByText(WHY)).not.toBeInTheDocument();
+  });
+
+  it('draws the window once the address is known, before the probe has answered', async () => {
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {
+      invoke: vi.fn(async (cmd: string) => (cmd === 'get_embedded_api_info' ? { port: 9887, token: 'desk' } : null)),
+    };
+    daemon.health = () => new Promise<Response>(() => {}) as unknown as Response;
+    await renderGate();
+    expect(await screen.findByText('the window')).toBeInTheDocument();
+    expect(screen.queryByText(STARTING)).not.toBeInTheDocument();
+  });
+
+  it('leaves a browser tab as it was before its first answer: the window, never starting', async () => {
+    daemon.health = () => new Promise<Response>(() => {}) as unknown as Response;
+    await renderGate();
+    expect(await screen.findByText('the window')).toBeInTheDocument();
+    expect(screen.queryByText(STARTING)).not.toBeInTheDocument();
+  });
+});
+
 describe("the window's gate in the desktop app", () => {
   it("asks the daemon's own address, and never asks about a tab's token", async () => {
     (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {

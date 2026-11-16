@@ -13,9 +13,31 @@ The daemon — not this app — owns llama-server. On startup `connect_or_launch
 probes the fixed daemon port; if nothing answers it launches `gglib daemon run`
 detached when a CLI binary can be found, and otherwise hosts the same daemon
 composition in-process as a fallback for bundle-only installs, still behind the
-daemon's own file lock. A daemon that will not start is not fatal:
-`Daemon::disconnected` lets the app come up anyway, so the tray exists to say
-so and to offer a way back.
+daemon's own file lock. A daemon that will not start is not fatal: the app is
+already up, the tray says so and offers a way back.
+
+## Service: known once the launch has an answer
+
+The app comes up before its daemon does. `AppState` is managed on the builder,
+before `build` creates the windows, and `setup` starts the launch
+(`daemon::start`) beside the window instead of waiting for it. `service.rs`
+owns the one question that leaves open, where the daemon is and whose it is:
+while a launch (or a Start gglib) is in flight, `Service::settled` waits for
+its answer. The page's `get_embedded_api_info` asks it, so the page's first
+requests go to a daemon that listens, with the token it minted; quitting asks
+it, so a daemon this app has just spawned is not left behind as unclaimed.
+
+Every launch settles: its `Launch` hands over the outcome, and one dropped
+unsettled (a panicked task) settles as a failure. The launch's own budget
+(`LAUNCH_WAIT`, plus its first probe and its last poll: a little over 15 s)
+is therefore the bound on every wait, with no second clock. A second start
+while one is in flight joins it rather than spawning another, and leaves
+reporting a failure to the launch's owner; nothing is reported once the app
+is shutting down. A failed launch is not final: a daemon the watcher hears
+answering later is found. A failure keeps the ownership the launch had, so a
+failed Start gglib after this app's own daemon stopped still owns what it
+spawned, and quitting stops it; a first launch that failed finds a late
+daemon (or one started from a terminal) as not this app's to stop.
 
 ## Ownership
 
@@ -35,7 +57,8 @@ it in this process" — so quitting left the ordinary case, an external daemon
 this app had launched itself, running and serving after a dialog had said it
 would stop.
 
-It is decided once, at connect, and can go stale: a daemon this app started
+It is decided once, when the launch settles (unknown, and waited for, while it
+is in flight), and can go stale: a daemon this app started
 that a CLI session later began using still reads `Launched`. Knowing better
 needs the daemon to report who is attached.
 
@@ -43,6 +66,8 @@ needs the daemon to report who is attached.
 
 `snapshot` is what the daemon reports; `watch` is the task that polls it every
 couple of seconds and repaints every surface when — and only when — it changed.
+While a launch is in flight it paints "starting" and waits for the answer, so
+no surface calls a daemon on its way "not running".
 
 Nothing in this process used to ask the daemon anything, so the tray showed
 whatever it had last done itself and a proxy started by `proxy_autostart`, the
