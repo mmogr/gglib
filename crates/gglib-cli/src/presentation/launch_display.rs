@@ -167,6 +167,7 @@ mod tests {
                 ),
                 arg("--spec-draft-n-max", Some("2"), ChoiceSource::You, "set"),
             ],
+            not_installed: None,
             narration: LaunchNarration::new("q", None, 0),
             unloads: None,
             fit: None,
@@ -191,6 +192,33 @@ mod tests {
         )));
     }
 
+    /// An engine that is not installed has no line to give: the plan's
+    /// sentence stands in the line's place, each of its lines indented as
+    /// the line is, and no older service is blamed.
+    #[test]
+    fn an_engine_not_installed_is_said_in_the_lines_place() {
+        let plan = LaunchPlan {
+            program: "/data/.llama/bin/llama-server".to_owned(),
+            args: vec![],
+            not_installed: Some(
+                "llama-server not found at: /data/.llama/bin/llama-server\n\n\
+                 Run 'gglib config llama install' to install it."
+                    .to_owned(),
+            ),
+            narration: LaunchNarration::new("q", None, 0),
+            unloads: None,
+            fit: None,
+        };
+        assert!(
+            launch_text("q", 3, &plan, None).starts_with(
+                "\n  Launch for q (id 3)\n  llama-server not found at: /data/.llama/bin/llama-server\n\n  \
+                 Run 'gglib config llama install' to install it.\n\n"
+            ),
+            "{}",
+            launch_text("q", 3, &plan, None)
+        );
+    }
+
     /// A launch that would unload says which model goes and why, in the
     /// plan's reason; one that unloads nothing has no line.
     #[test]
@@ -198,6 +226,7 @@ mod tests {
         let base = LaunchPlan {
             program: "llama-server".to_owned(),
             args: vec![],
+            not_installed: None,
             narration: LaunchNarration::new("q", None, 0),
             unloads: Some(Unload::new(
                 "qwen3-8b".to_owned(),
@@ -280,13 +309,17 @@ mod tests {
     /// llama launch, one whose values need quoting for a shell (a space, a
     /// single quote, a double quote, a tab, an empty value, a `$`, a
     /// pattern with `\` and `*`) beside one that needs none in a POSIX
-    /// shell for all its `=,+%:@`, an image model's, and one on Windows
-    /// paths.
+    /// shell for all its `=,+%:@`, an image model's, and two on Windows
+    /// paths. Each program is the path of an engine, as gglib runs it: one
+    /// in a folder with a space, which each shell quotes (and PowerShell
+    /// calls with `&`), one with none, which neither does on a Mac, a
+    /// Windows path PowerShell takes as it is; the port is `0`.
     fn recorded_plans() -> Vec<LaunchPlan> {
         use ChoiceSource::{Gglib, ModelAuthor, You};
         let plan = |program: &str, args: Vec<LaunchArg>| LaunchPlan {
             program: program.to_owned(),
             args,
+            not_installed: None,
             narration: LaunchNarration::new("m", None, 0),
             unloads: None,
             fit: None,
@@ -297,11 +330,11 @@ mod tests {
         };
         vec![
             plan(
-                "llama-server",
+                "/Users/m/Library/Application Support/gglib/.llama/bin/llama-server",
                 vec![
                     a("-m", Some("/models/qwen3-4b.gguf"), "model", ModelAuthor),
                     a("--host", Some("127.0.0.1"), "host", Gglib),
-                    a("--port", Some("auto"), "port", Gglib),
+                    a("--port", Some("0"), "port", Gglib),
                     a("--metrics", None, "metrics", Gglib),
                     a("--parallel", Some("1"), "parallel", Gglib),
                     a("-c", Some("32768"), "ctx", Gglib),
@@ -317,7 +350,7 @@ mod tests {
                 ],
             ),
             plan(
-                "llama-server",
+                "/opt/gglib/.llama/bin/llama-server",
                 vec![
                     a(
                         "-m",
@@ -335,7 +368,7 @@ mod tests {
                 ],
             ),
             plan(
-                "sd-server",
+                "/Users/m/Library/Application Support/gglib/.sd/bin/sd-server",
                 vec![
                     a(
                         "--diffusion-model",
@@ -345,12 +378,30 @@ mod tests {
                     ),
                     a("--vae", Some("/m/ae.safetensors"), "parts", You),
                     a("--listen-ip", Some("127.0.0.1"), "host", Gglib),
-                    a("--listen-port", Some("auto"), "port", Gglib),
+                    a("--listen-port", Some("0"), "port", Gglib),
                     a("--steps", Some("4"), "recipe", Gglib),
                 ],
             ),
             plan(
-                "llama-server",
+                r"C:\Users\Jane Doe\AppData\Local\gglib\.llama\bin\llama-server.exe",
+                vec![
+                    a(
+                        "-m",
+                        Some(r"C:\Users\Jane Doe\AppData\Local\gglib\models\qwen3-4b.Q8_0.gguf"),
+                        "model",
+                        ModelAuthor,
+                    ),
+                    a(
+                        "--mmproj",
+                        Some(r"C:\Users\Jane Doe\My Models\mmproj-F16.gguf"),
+                        "images",
+                        You,
+                    ),
+                    a("--port", Some("0"), "port", Gglib),
+                ],
+            ),
+            plan(
+                r"C:\Users\m\AppData\Local\gglib\.llama\bin\llama-server.exe",
                 vec![
                     a(
                         "-m",
@@ -358,13 +409,7 @@ mod tests {
                         "model",
                         ModelAuthor,
                     ),
-                    a(
-                        "--mmproj",
-                        Some(r"C:\Users\m\My Models\mmproj-F16.gguf"),
-                        "images",
-                        You,
-                    ),
-                    a("--port", Some("auto"), "port", Gglib),
+                    a("--port", Some("0"), "port", Gglib),
                 ],
             ),
         ]

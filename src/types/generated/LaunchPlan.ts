@@ -18,6 +18,13 @@ program: string,
  */
 args: Array<LaunchArg>, 
 /**
+ * Why the program cannot run, when it is not installed: the sentence a
+ * load would fail with, which a surface says in the command line's
+ * place. `None` when it is installed, and from a service older than
+ * the field.
+ */
+notInstalled?: string, 
+/**
  * The decisions a launch prints, the same words.
  */
 narration: LaunchNarration, 

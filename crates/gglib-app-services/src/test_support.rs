@@ -255,9 +255,26 @@ impl RunningRuntime {
 }
 
 /// A runtime with nothing running that plans a launch as the daemon's does,
-/// and starts nothing: for a test of what `explain` answers.
-#[derive(Debug, Default)]
-pub(crate) struct PlansOnly;
+/// with its engines at `binaries`, and starts nothing: for a test of what
+/// `explain` answers.
+#[derive(Debug)]
+pub(crate) struct PlansOnly {
+    pub(crate) binaries: gglib_runtime::process::RuntimeBinaries,
+}
+
+impl Default for PlansOnly {
+    /// This test binary as both engines: a file that is there, so a plan
+    /// names it and says nothing of an install.
+    fn default() -> Self {
+        let this = std::env::current_exe().expect("the test binary's path");
+        Self {
+            binaries: gglib_runtime::process::RuntimeBinaries {
+                llama: this.clone(),
+                sd: this,
+            },
+        }
+    }
+}
 
 #[async_trait]
 impl ModelRuntimePort for PlansOnly {
@@ -282,6 +299,7 @@ impl ModelRuntimePort for PlansOnly {
     ) -> Result<gglib_core::domain::LaunchPlan, ModelRuntimeError> {
         gglib_runtime::process::residency::explain::plan_launch(
             spec.clone(),
+            &self.binaries,
             &gglib_core::server_config::ServerConfigOptions::default(),
             gglib_core::cache_config::CacheRamSetting::Auto,
             num_ctx,

@@ -224,7 +224,9 @@ describe('the inspector, a model on this machine', () => {
 
     const line = await screen.findByLabelText('Launch line');
     expect(line.textContent).toBe(
-      "llama-server -m C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf --mmproj 'C:\\Users\\m\\My Models\\mmproj-F16.gguf' --port auto",
+      "& 'C:\\Users\\Jane Doe\\AppData\\Local\\gglib\\.llama\\bin\\llama-server.exe'" +
+        " -m 'C:\\Users\\Jane Doe\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf'" +
+        " --mmproj 'C:\\Users\\Jane Doe\\My Models\\mmproj-F16.gguf' --port 0",
     );
     expect(within(row('Images')).getByText('mmproj-F16.gguf')).toBeInTheDocument();
   });
@@ -245,6 +247,20 @@ describe('the inspector, a model on this machine', () => {
     expect(within(row('Images')).getByText('mmproj-F16.gguf')).toBeInTheDocument();
   });
 
+  it("says an engine that is not installed in the line's place, with nothing to copy, and still draws the rows", async () => {
+    // The service sends no line for an engine that is not installed; the plan says why.
+    const notInstalled = "llama-server not found at: /data/.llama/bin/llama-server\n\nRun 'gglib config llama install' to install it.";
+    const { command: _none, ...missing } = launchExplanation(samplingExplanation(), { ...chatPlan(), notInstalled });
+    explain.answer = missing;
+    renderInspector();
+
+    expect(await screen.findByText(/^llama-server not found at: \/data\/\.llama\/bin\/llama-server/)).toBeInTheDocument();
+    expect(screen.queryByText(/older build/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Launch line')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Copy as command' })).not.toBeInTheDocument();
+    expect(within(row('Images')).getByText('mmproj-F16.gguf')).toBeInTheDocument();
+  });
+
   it('⧉ beside the launch line copies the whole command as one shell line, then says Copied for one second', async () => {
     const recorded = RECORDED_LINES()[1];
     explain.answer = launchExplanation(samplingExplanation(), { ...recorded.plan, fit: chatPlan().fit }, recorded.commands[0]);
@@ -255,7 +271,7 @@ describe('the inspector, a model on this machine', () => {
       await user.click(await screen.findByRole('button', { name: 'Copy as command' }));
 
       expect(await navigator.clipboard.readText()).toBe(
-        "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf'" +
+        "/opt/gglib/.llama/bin/llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf'" +
           " --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv k=v,a+b%c:d@e",
       );
       expect(await screen.findByText('Copied')).toBeInTheDocument();

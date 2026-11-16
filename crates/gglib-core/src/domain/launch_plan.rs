@@ -212,6 +212,13 @@ pub struct LaunchPlan {
     /// Its arguments, in the order they would be given, the port spelled
     /// `auto` because it is taken when the launch happens.
     pub args: Vec<LaunchArg>,
+    /// Why the program cannot run, when it is not installed: the sentence a
+    /// load would fail with, which a surface says in the command line's
+    /// place. `None` when it is installed, and from a service older than
+    /// the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub not_installed: Option<String>,
     /// The decisions a launch prints, the same words.
     pub narration: LaunchNarration,
     /// The loaded model this launch would unload first, and why, by the

@@ -22,7 +22,7 @@ fn make_ops(core: Arc<AppCore>) -> ModelOps {
 fn make_ops_with_emitter(core: Arc<AppCore>, emitter: Arc<dyn AppEventEmitter>) -> ModelOps {
     ModelOps::new(ModelDeps {
         core,
-        runtime: Arc::new(PlansOnly),
+        runtime: Arc::new(PlansOnly::default()),
         gguf_parser: Arc::new(NoopGgufParser),
         emitter,
     })
@@ -925,7 +925,9 @@ async fn explain_carries_the_runtimes_plan_of_a_bare_start() {
 
     let plan = ops.explain(id, None).await.expect("explain").plan;
 
-    assert_eq!(plan.program, "llama-server");
+    let engine = PlansOnly::default().binaries.llama;
+    assert_eq!(plan.program, engine.to_string_lossy());
+    assert_eq!(plan.not_installed, None);
     let weights = plan.args.iter().find(|a| a.flag == "-m").expect("-m");
     // The library stores the file's canonical path (`/private/var/…` on a
     // Mac), and the plan names the file as the library has it.
@@ -938,8 +940,39 @@ async fn explain_carries_the_runtimes_plan_of_a_bare_start() {
         .iter()
         .find(|a| a.flag == "--port")
         .expect("--port");
-    assert_eq!(port.value.as_deref(), Some("auto"));
+    assert_eq!(port.value.as_deref(), Some("0"));
     assert!(plan.fit.is_some(), "a chat model has a context");
+}
+
+/// With the engine not installed there is no line to give: the service
+/// sends none, and the plan says why, in the words a load would fail with.
+#[tokio::test]
+async fn explain_gives_no_line_for_an_engine_not_installed_and_says_why() {
+    // Nothing is installed under this binary's own data root, so the
+    // llama-server a launch falls back to is not there either.
+    gglib_core::paths::isolate_data_root();
+    let core = test_core().await;
+    let dir = tempdir().unwrap();
+    let missing = dir.path().join("llama-server");
+    let ops = ModelOps::new(ModelDeps {
+        core: Arc::clone(&core),
+        runtime: Arc::new(PlansOnly {
+            binaries: gglib_runtime::process::RuntimeBinaries {
+                llama: missing.clone(),
+                sd: dir.path().join("sd-server"),
+            },
+        }),
+        gguf_parser: Arc::new(NoopGgufParser),
+        emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
+    });
+    let id = seed_model(&ops, &dir).await;
+
+    let dto = ops.explain(id, None).await.expect("explain");
+
+    assert_eq!(dto.command, None);
+    assert_eq!(dto.plan.program, missing.to_string_lossy());
+    let said = dto.plan.not_installed.expect("the plan says why");
+    assert!(said.contains("gglib config llama install"), "{said}");
 }
 
 /// The id a client sends is named over the whole catalogue: a listing a

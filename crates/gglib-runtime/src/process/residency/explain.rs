@@ -22,8 +22,8 @@ use gglib_core::server_config::ServerConfigOptions;
 use super::context::fit_or_undivided;
 use super::launch::{LaunchRequest, LlamaResolutions, plan_llama, plan_sd};
 use super::{explain_args, prepare, vram};
-use crate::process::SpawnConfig;
 use crate::process::admission::Resident;
+use crate::process::{RuntimeBinaries, SpawnConfig};
 use crate::system::FitMemory;
 
 /// What this machine would fit for a model, and what that answer worked from.
@@ -130,8 +130,13 @@ impl Loaded<'static> {
 /// # Errors
 ///
 /// As a launch's planning: an image model with no family.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "what a launch is planned from, each its own value: the model, its engine, the cascade and what is loaded"
+)]
 pub fn plan_launch(
     spec: ModelLaunchSpec,
+    binaries: &RuntimeBinaries,
     template: &ServerConfigOptions,
     cache_ram: CacheRamSetting,
     num_ctx: Option<u64>,
@@ -144,6 +149,7 @@ pub fn plan_launch(
         others,
         already_resident,
     } = loaded;
+    let _ = binaries;
     let request = prepare(spec, template, cache_ram, num_ctx, default_ctx, overrides);
     let planned = match request.spec.runtime() {
         RuntimeKind::Llama => plan_llama(others, &request),
@@ -175,6 +181,7 @@ pub fn plan_launch(
     Ok(LaunchPlan {
         program: program.to_owned(),
         args,
+        not_installed: None,
         narration: planned.narration,
         unloads,
         // The same value the narration carries: one fit, read twice.

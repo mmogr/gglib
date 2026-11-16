@@ -33,6 +33,10 @@ use crate::process::residency::ResidentSet;
 /// them — with the process-level queries the GUI and CLI need.
 pub struct ProcessManager {
     core: Arc<RwLock<GuiProcessCore>>,
+    /// The binaries `core` launches from, which never change, held here too
+    /// so a plan (made without awaiting the core's lock) names the same
+    /// engine a launch runs.
+    binaries: RuntimeBinaries,
     residency: ResidentSet,
 }
 
@@ -79,9 +83,10 @@ impl ProcessManager {
         cache_ram: CacheRamSetting,
         observer: Arc<dyn ResidencyObserver>,
     ) -> Self {
-        let core = GuiProcessCore::new(base_port, binaries);
+        let core = GuiProcessCore::new(base_port, binaries.clone());
         Self {
             core: Arc::new(RwLock::new(core)),
+            binaries,
             residency: ResidentSet::new(catalog, launch_overrides, cache_ram, observer),
         }
     }
@@ -187,7 +192,8 @@ impl ProcessManager {
         default_ctx: Option<u64>,
         overrides: &LaunchOverrides,
     ) -> Result<LaunchPlan, ModelRuntimeError> {
-        self.residency.plan(spec, num_ctx, default_ctx, overrides)
+        self.residency
+            .plan(spec, &self.binaries, num_ctx, default_ctx, overrides)
     }
 
     /// What the admission queue and resident set look like right now.

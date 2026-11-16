@@ -298,6 +298,7 @@ fn a_launch_narration_carries_the_fit_its_context_was_sized_by() {
 fn a_plan_shows_the_fit_its_narration_carries() {
     let plan = plan_launch(
         sized_spec(),
+        &crate::process::RuntimeBinaries::stand_in(),
         &ServerConfigOptions::default(),
         CacheRamSetting::Auto,
         None,

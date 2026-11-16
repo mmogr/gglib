@@ -42,3 +42,42 @@ async fn a_record_whose_pid_is_not_our_llama_server_is_not_listed() {
 async fn the_view_does_not_say_it_stopped_a_server() {
     assert!(RecordedServers.stop_current().await.is_err());
 }
+
+/// The issue's check (#2025): a one-shot plan's program is the engine where
+/// `gglib config paths` says gglib keeps it, not a bare `llama-server`,
+/// which nobody's PATH holds. Nothing is installed under this binary's
+/// data root, so the plan also says so, in the words a load would fail
+/// with.
+#[test]
+fn a_one_shot_plan_names_the_engine_where_gglib_keeps_it() {
+    gglib_core::paths::isolate_data_root();
+    let engine = gglib_core::paths::llama_server_path().expect("the data root resolves");
+    let plan = RecordedServers
+        .plan(
+            &gglib_core::ports::ModelLaunchSpec {
+                id: 1,
+                name: "qwen".to_owned(),
+                file_path: "/models/qwen.gguf".into(),
+                projector: None,
+                image_family: None,
+                components: Vec::new(),
+                tags: Vec::new(),
+                architecture: None,
+                quantization: None,
+                context_length: None,
+                server_defaults: None,
+                file_size_bytes: 0,
+                kv_shape: None,
+                kv_memory_is_partial: false,
+                model_sampling: gglib_core::domain::ModelSamplingDefaults::default(),
+            },
+            None,
+            None,
+            &gglib_core::ports::LaunchOverrides::default(),
+        )
+        .expect("a chat model plans");
+
+    assert_eq!(plan.program, engine.to_string_lossy());
+    let said = plan.not_installed.expect("nothing is installed here");
+    assert!(said.contains(&*engine.to_string_lossy()), "{said}");
+}
