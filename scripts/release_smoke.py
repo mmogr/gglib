@@ -1337,6 +1337,35 @@ def self_test() -> int:
 
     attempt("the user's PATH checks", user_paths)
 
+    def plans() -> None:
+        again = ("install again over a running service", "the service runs again before the uninstall")
+        windows = step_plan(PLATFORMS["windows"])
+        at = windows.index("no lock is left in the data folder")
+        expect("the steps after the stop on Windows", windows[at + 1 : at + 4], [*again, "uninstall"])
+        for name in ("macos", "linux"):
+            plan = step_plan(PLATFORMS[name])
+            for step in again:
+                if step in plan:
+                    wrong.append(f"{name} runs {step!r}, which only an installer that stops the service runs")
+        for name, platform in PLATFORMS.items():
+            plan = step_plan(platform)
+            expect(f"{name}: its steps in STEPS' order", plan, [step for step in STEPS if step in plan])
+            expect(f"{name}: the stop is checked before anything else stops it", plan.index("gglib daemon stop") < plan.index("uninstall"), True)
+        planted = {**PLATFORMS, "windows": replace(PLATFORMS["windows"], over_a_running_service=True, uninstall=())}
+        if not any("over_a_running_service" in problem for problem in check_table(planted, targets)):
+            wrong.append("a table that uninstalls over a running service with no uninstall passed")
+
+    attempt("the steps each OS runs", plans)
+
+    def installer_exits() -> None:
+        expect("an installer that finished", installer_exit(0), None)
+        for code, word in ((1, "cancelled"), (2, "aborted"), (5, "5")):
+            reason = installer_exit(code)
+            if not reason or word not in reason:
+                wrong.append(f"the installer's exit {code} read as {reason!r}, which does not say {word!r}")
+
+    attempt("the installer's exit codes", installer_exits)
+
     if wrong:
         print("❌ self-test: a planted case was not judged as planted:")
         for line in wrong:
