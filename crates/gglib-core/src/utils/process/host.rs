@@ -34,6 +34,12 @@
 //! and take it off (#1959). Off Windows there is no such variable, and
 //! `Registry` says so. No other crate may call it.
 //!
+//! And it reads one value for the desktop app's tray: whether the taskbar
+//! is light ([`taskbar_is_light`]), which is the system's mode and not the
+//! app's, so the tray icon can be drawn dark on a light taskbar and light on
+//! a dark one (#2050). Off Windows there is no such taskbar, and the
+//! answer is `None`.
+//!
 //! These calls have no safe form in the standard library, so the Windows
 //! half of this file allows `unsafe`, and Windows is called directly from
 //! here only (ADR 0030).
@@ -113,6 +119,28 @@ impl Store for Registry {
             Err(not_kept())
         }
     }
+}
+
+// --- The taskbar's colour (#2050) ---
+
+/// Whether Windows draws its taskbar light, and with it the notification
+/// area and its overflow flyout, where the tray icon is shown.
+///
+/// That is the system's mode ("Choose your default Windows mode"), the
+/// value `SystemUsesLightTheme` of
+/// `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`,
+/// and not the app mode beside it, `AppsUseLightTheme`, which is what a
+/// window's theme follows: the two can differ. Read afresh at each call.
+///
+/// `None` off Windows, where no taskbar of this kind exists, and on a
+/// Windows that keeps no such value (before Windows 10 1903) or will not
+/// give it.
+#[must_use]
+pub fn taskbar_is_light() -> Option<bool> {
+    #[cfg(windows)]
+    return windows::taskbar_is_light();
+    #[cfg(not(windows))]
+    None
 }
 
 #[cfg(not(windows))]
@@ -644,6 +672,67 @@ mod windows {
         unsafe { SetErrorMode(GetErrorMode() | QUIET) };
     }
 
+    // --- The taskbar's colour (#2050) ---
+
+    pub(super) use taskbar::taskbar_is_light;
+
+    mod taskbar {
+        use std::io;
+        use std::ptr;
+
+        use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
+        use windows_sys::Win32::System::Registry::{
+            HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW,
+        };
+
+        use super::{status_error, wide};
+
+        /// The key that holds the user's light and dark modes, and the
+        /// value for the system's (the taskbar's) mode: 1 for light.
+        pub(super) const PERSONALIZE: &str =
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+        pub(super) const SYSTEM_USES_LIGHT_THEME: &str = "SystemUsesLightTheme";
+
+        pub(in crate::utils::process) fn taskbar_is_light() -> Option<bool> {
+            read_dword(PERSONALIZE, SYSTEM_USES_LIGHT_THEME)
+                .ok()
+                .flatten()
+                .map(|value| value != 0)
+        }
+
+        /// The `REG_DWORD` value `value` of the key `subkey` under
+        /// `HKEY_CURRENT_USER`; `None` when there is no such value or key.
+        /// A value of another type is an error.
+        pub(super) fn read_dword(subkey: &str, value: &str) -> io::Result<Option<u32>> {
+            let key = wide(subkey);
+            let name = wide(value);
+            let mut data: u32 = 0;
+            let mut size = u32::try_from(size_of::<u32>()).expect("four bytes fit a u32");
+            // SAFETY: the two names are NUL-terminated UTF-16 that outlive
+            // the call, which only reads them. The call writes at most
+            // `size` bytes, four, to `data`, a live u32, and the count it
+            // wrote to `size`; RRF_RT_REG_DWORD accepts only a 32-bit
+            // value, and a value of another type fails with
+            // ERROR_UNSUPPORTED_TYPE (RegGetValueW). No type is asked for.
+            let status = unsafe {
+                RegGetValueW(
+                    HKEY_CURRENT_USER,
+                    key.as_ptr(),
+                    name.as_ptr(),
+                    RRF_RT_REG_DWORD,
+                    ptr::null_mut(),
+                    (&raw mut data).cast(),
+                    &raw mut size,
+                )
+            };
+            match status {
+                ERROR_SUCCESS => Ok(Some(data)),
+                ERROR_FILE_NOT_FOUND => Ok(None),
+                other => Err(status_error(other)),
+            }
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use std::ptr;
@@ -788,6 +877,68 @@ mod windows {
             delete_value(&key.0, "PathEntriesAdded").expect("removed");
             assert_eq!(read_string(&key.0, "PathEntriesAdded").expect("read"), None);
             delete_value(&key.0, "PathEntriesAdded").expect("removing nothing is no error");
+        }
+
+        // --- The taskbar's colour (#2050) ---
+
+        mod taskbar {
+            use windows_sys::Win32::System::Registry::{REG_DWORD, RegSetKeyValueW};
+
+            use super::super::taskbar::{PERSONALIZE, SYSTEM_USES_LIGHT_THEME, read_dword};
+            use super::super::{ERROR_SUCCESS, HKEY_CURRENT_USER, wide, write_string};
+            use super::ScratchKey;
+
+            /// Store `data` as the `REG_DWORD` value `value` of `key`.
+            fn write_dword(key: &ScratchKey, value: &str, data: u32) {
+                let subkey = wide(&key.0);
+                let name = wide(value);
+                // SAFETY: the names are NUL-terminated UTF-16 and `data` is
+                // four bytes, all outliving the call, which only reads
+                // them. A missing key "is created" (RegSetKeyValueW).
+                let status = unsafe {
+                    RegSetKeyValueW(
+                        HKEY_CURRENT_USER,
+                        subkey.as_ptr(),
+                        name.as_ptr(),
+                        REG_DWORD,
+                        (&raw const data).cast(),
+                        4,
+                    )
+                };
+                assert_eq!(status, ERROR_SUCCESS, "storing {value}");
+            }
+
+            /// A 32-bit value is read back as stored, a missing one is
+            /// `None`, and a string where a number belongs is an error.
+            #[test]
+            fn a_dword_value_is_read_back_and_a_missing_one_is_none() {
+                let key = ScratchKey::new("taskbar-theme");
+
+                write_dword(&key, "SystemUsesLightTheme", 1);
+                assert_eq!(
+                    read_dword(&key.0, "SystemUsesLightTheme").expect("read"),
+                    Some(1)
+                );
+                write_dword(&key, "SystemUsesLightTheme", 0);
+                assert_eq!(
+                    read_dword(&key.0, "SystemUsesLightTheme").expect("read"),
+                    Some(0)
+                );
+
+                assert_eq!(read_dword(&key.0, "Absent").expect("read"), None);
+
+                write_string(&key.0, "Text", "1", false).expect("stored");
+                assert!(read_dword(&key.0, "Text").is_err());
+            }
+
+            /// The machine's own answer reads without error: a value of 0
+            /// or 1, or none on a Windows that keeps none.
+            #[test]
+            fn the_taskbar_mode_reads() {
+                let value = read_dword(PERSONALIZE, SYSTEM_USES_LIGHT_THEME)
+                    .expect("the value reads, or is absent");
+                assert!(matches!(value, None | Some(0 | 1)), "{value:?}");
+            }
         }
     }
 }
