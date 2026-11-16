@@ -9,7 +9,8 @@
 //! parser test would see it. Nothing is paired and no daemon answers on the
 //! port given, so a command that is not refused stops at the pairing.
 
-use std::process::{Command, Output};
+use gglib_core::utils::process::cmd;
+use std::process::Output;
 
 /// `gglib <args>` over an empty data folder, with `GGLIB_API_KEY` set and a
 /// daemon port nothing listens on.
@@ -19,7 +20,7 @@ fn run(args: &[&str]) -> Output {
         .and_then(|listener| listener.local_addr())
         .expect("a loopback port")
         .port();
-    Command::new(env!("CARGO_BIN_EXE_gglib"))
+    cmd(env!("CARGO_BIN_EXE_gglib"))
         .args(args)
         .env("GGLIB_DATA_DIR", dir.path())
         .env("GGLIB_DAEMON_PORT", nobody.to_string())

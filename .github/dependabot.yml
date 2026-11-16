@@ -162,8 +162,9 @@ updates:
         patterns: ["@tauri-apps/*"]
       # Families whose members pin or peer each other. Each family moves as
       # one pull request, and a family that fails holds up nothing else.
-      # @vitest/coverage-v8 peers one exact vitest, @tailwindcss/vite depends
-      # on one exact tailwindcss, and react-dom peers react at its own version.
+      # @vitest/coverage-v8 and @vitest/browser-playwright each peer one
+      # exact vitest, @tailwindcss/vite depends on one exact tailwindcss, and
+      # react-dom peers react at its own version.
       vitest:
         patterns: ["vitest", "@vitest/*"]
       react:

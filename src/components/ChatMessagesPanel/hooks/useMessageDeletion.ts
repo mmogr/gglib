@@ -89,8 +89,10 @@ export function useMessageDeletion({
   /** A delete is asked or under way. */
   const busy = useRef(false);
   // Leaving the chat answers its open question no.
-  useEffect(() => () => {
-    if (asking.current) dismissConfirm();
+  useEffect(() => {
+    return () => {
+      if (asking.current) dismissConfirm();
+    };
   }, [activeConversationId]);
 
   /** The target message plus every non-system message after it. */

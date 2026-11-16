@@ -44,12 +44,11 @@ const TITLE: Record<Step, string> = { view: 'Picture', fix: 'Fix a part', redo: 
 /** A blob's `blob:` URL, for as long as the blob is shown. */
 function useBlobUrl(blob: Blob | null): string | null {
   const url = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    return () => {
       if (url) URL.revokeObjectURL(url);
-    },
-    [url],
-  );
+    };
+  }, [url]);
   return url;
 }
 
@@ -100,12 +99,11 @@ export const PictureWork: FC<PictureWorkProps> = ({ url, size, picture, prompt, 
   const [comparing, setComparing] = useState(false);
   // The question asked on closing, open now: a sheet that goes answers it no.
   const asking = useRef(false);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    return () => {
       if (asking.current) dismissConfirm();
-    },
-    [],
-  );
+    };
+  }, []);
 
   const source = useMemo<RedrawSource>(
     () => ({

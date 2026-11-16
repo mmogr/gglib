@@ -38,7 +38,9 @@ export function useRequestBlink(served: number | null): boolean {
   const seen = useRef<number | null>(null);
   const blinkedAt = useRef<number | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => {
+    return () => clearTimeout(timer.current);
+  }, []);
   useEffect(() => {
     const before = seen.current;
     // Idle forgets the count: the first frame after it is a baseline again.

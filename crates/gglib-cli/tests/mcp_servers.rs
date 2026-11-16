@@ -9,10 +9,11 @@
 //! are pointed at a port nothing listens on, and a `gglib mcp` command's
 //! daemon is a port nothing listens on or a stand-in in this process.
 
+use gglib_core::utils::process::cmd;
 use std::io::Write as _;
 use std::net::TcpListener;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 use std::sync::{Arc, Mutex};
 
 use gglib_app_services::types::{McpServerConfigDto, McpServerDto, McpServerInfo, McpToolInfo};
@@ -38,7 +39,7 @@ fn mcp(root: &Path, args: &[&str]) -> Output {
 /// `gglib mcp <args>` over the data directory `root`, with the daemon on
 /// `port`.
 fn mcp_on(root: &Path, port: u16, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_gglib"))
+    cmd(env!("CARGO_BIN_EXE_gglib"))
         .arg("mcp")
         .args(args)
         .env("GGLIB_DATA_DIR", root)

@@ -29,6 +29,12 @@ CLI": both are clients of a single daemon, and the daemon is the product.
   detached on Unix only — `src-tauri/src/daemon/launch.rs` calls
   `process_group(0)` under `#[cfg(unix)]` and sets no Windows creation flags,
   so on Windows the daemon stays in the launcher's process group.
+
+  > **Amended 2026-11-16.** Both binaries now start the daemon through
+  > `gglib_core::utils::process::detached::spawn_daemon`
+  > ([ADR 0030](0030-gglib-starts-every-program-through-one-module.md)). On
+  > Windows it gets a console of its own with no window, and none of the
+  > launcher's standard handles; on Unix, its own process group as before.
 - `gglib gui` (`crates/gglib-cli/src/handlers/gui.rs`) launches whichever GUI
   artifact sits beside the running executable.
 

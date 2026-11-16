@@ -10,9 +10,10 @@
 #[path = "support/stub_tools.rs"]
 mod stub_tools;
 
+use gglib_core::utils::process::cmd;
 use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Output, Stdio};
+use std::process::{Output, Stdio};
 
 /// `gglib <args>` over `root` with nothing on its `PATH`, and `typed` on its
 /// standard input, or the end of input when there is none.
@@ -24,7 +25,7 @@ fn gglib(root: &Path, args: &[&str], typed: Option<&str>) -> Output {
 /// [`gglib`] with `path` as its whole `PATH`.
 fn gglib_on(path: &Path, root: &Path, args: &[&str], typed: Option<&str>) -> Output {
     let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_gglib"))
+    let mut child = cmd(env!("CARGO_BIN_EXE_gglib"))
         .args(args)
         .current_dir(elsewhere.path())
         .env_clear()

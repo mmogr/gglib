@@ -16,7 +16,7 @@
 //! test must not. `up`'s lookup is tested beside it, in `handlers/up`, and the
 //! door itself in `handlers/model/resolver_tests.rs`.
 
-use std::process::Command;
+use gglib_core::utils::process::cmd;
 
 /// An identifier no library holds.
 const MISSING: &str = "__no_such_model__";
@@ -51,7 +51,7 @@ fn an_unknown_identifier_fails_the_same_way_everywhere() {
     let dir = tempfile::tempdir().expect("temp data dir");
 
     for args in IDENTIFIER_COMMANDS {
-        let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
+        let out = cmd(env!("CARGO_BIN_EXE_gglib"))
             .args(*args)
             .env("GGLIB_DATA_DIR", dir.path())
             .output()

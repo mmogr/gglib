@@ -6,8 +6,9 @@
 //! loads a `.env` into its environment, and the stored directory is read
 //! from the data root's `.env` alone.
 
+use gglib_core::utils::process::cmd;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 /// `gglib config <args>` over `data` as its data root, started in `cwd`, with
 /// `models_dir` as the directory its environment names, if any. `data` is
@@ -15,7 +16,7 @@ use std::process::{Command, Output};
 /// `PATH` is a directory that is not there, so `config paths` finds no gglib
 /// of this machine's to ask for a version.
 fn config(data: &Path, cwd: &Path, models_dir: Option<&Path>, args: &[&str]) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_gglib"));
+    let mut command = cmd(env!("CARGO_BIN_EXE_gglib"));
     command
         .arg("config")
         .args(args)

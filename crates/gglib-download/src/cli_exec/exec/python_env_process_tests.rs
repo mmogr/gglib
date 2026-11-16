@@ -39,7 +39,7 @@ fn write_stand_in(python: &Path, version: &str) {
     )
     .expect("write the stand-in");
     fs::set_permissions(python, fs::Permissions::from_mode(0o755)).expect("make it executable");
-    once_not_busy(|| std::process::Command::new(python).output()).expect("the stand-in runs");
+    once_not_busy(|| gglib_core::utils::process::cmd(python).output()).expect("the stand-in runs");
 }
 
 /// A stand-in interpreter: a script that answers the version probe with
@@ -112,7 +112,7 @@ fn a_stand_in_still_open_for_writing_is_waited_out() {
         .append(true)
         .open(&python)
         .expect("open the stand-in for writing");
-    let refused = std::process::Command::new(&python).output();
+    let refused = gglib_core::utils::process::cmd(&python).output();
     if !matches!(&refused, Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy) {
         return;
     }

@@ -7,9 +7,10 @@
 //! killed when its wait is up; one that fails, or prints something that is
 //! not a version, has none.
 
+use gglib_core::utils::process::cmd;
 use std::io::Read as _;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -22,7 +23,7 @@ pub(crate) const VERSION_WAIT: Duration = Duration::from_secs(2);
 /// has no version.
 pub(crate) fn read_version(bin: &Path, wait: Duration) -> Option<String> {
     let deadline = Instant::now() + wait;
-    let mut child = Command::new(bin)
+    let mut child = cmd(bin)
         .arg("--version")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

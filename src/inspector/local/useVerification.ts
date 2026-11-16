@@ -126,7 +126,9 @@ export function useVerification(modelId: number, modelName: string): Verificatio
   const status = useSyncExternalStore(listen, () => statuses.get(modelId) ?? IDLE);
   const [busyFor, setBusyFor] = useState<number | null>(null);
 
-  useEffect(() => getTransport().subscribe('verification', onEvent), []);
+  useEffect(() => {
+    return getTransport().subscribe('verification', onEvent);
+  }, []);
 
   const verify = useCallback(() => void runVerify(modelId), [modelId]);
   const checkUpdates = useCallback(() => void runCheck(modelId), [modelId]);

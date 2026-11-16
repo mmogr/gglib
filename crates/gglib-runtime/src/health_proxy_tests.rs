@@ -22,9 +22,10 @@
 //! string. Without `--ignored` the worst a wrong filter can do is run ordinary
 //! tests twice.
 
+use gglib_core::utils::process::cmd;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, channel};
@@ -115,7 +116,7 @@ fn a_health_check_of_this_machine_ignores_a_proxy_in_the_environment() {
     });
 
     let proxy = format!("http://127.0.0.1:{recorder_port}");
-    let mut child = Command::new(std::env::current_exe().expect("this test binary"))
+    let mut child = cmd(std::env::current_exe().expect("this test binary"))
         .args(["--exact", CHILD, "--nocapture", "--test-threads=1"])
         .env(CHILD_ENV, "1")
         .env("HTTP_PROXY", &proxy)

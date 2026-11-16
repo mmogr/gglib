@@ -134,6 +134,10 @@ fn built() -> &'static Path {
     PROGRAM.get_or_init(build)
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "gglib-test-proc has no dependencies, so it cannot take gglib_core::utils::process; a test program needs no Windows console flag"
+)]
 fn build() -> PathBuf {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
@@ -175,6 +179,10 @@ fn build() -> PathBuf {
 /// process forked elsewhere in the test binary still holds the descriptor it
 /// was written through; that is retried. Once a run has started, no such
 /// descriptor is left to reach the test's own.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "gglib-test-proc has no dependencies, so it cannot take gglib_core::utils::process; a test program needs no Windows console flag"
+)]
 fn run_once(program: &Path) {
     let mut busy = 0;
     let ran = loop {

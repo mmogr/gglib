@@ -8,6 +8,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 
 use gglib_core::daemon_port;
+use gglib_core::utils::process::{cmd, detached};
 
 /// How long one identity probe may take. The daemon answers `/health` from
 /// memory; anything slower than this is not a healthy daemon.
@@ -257,21 +258,9 @@ fn spawn_daemon() -> Result<std::path::PathBuf> {
         .open(&log_path)
         .with_context(|| format!("opening {}", log_path.display()))?;
 
-    let mut cmd = std::process::Command::new(exe);
-    cmd.args(["daemon", "run"])
-        .stdin(std::process::Stdio::null())
-        .stdout(log.try_clone()?)
-        .stderr(log);
-
-    // Detach from this command's process group so terminal signals (Ctrl-C)
-    // sent to the foreground command never reach the daemon.
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        cmd.process_group(0);
-    }
-
-    cmd.spawn().context("spawning `gglib daemon run`")?;
+    let mut command = cmd(exe);
+    command.args(["daemon", "run"]);
+    detached::spawn_daemon(command, &log).context("spawning `gglib daemon run`")?;
     Ok(log_path)
 }
 

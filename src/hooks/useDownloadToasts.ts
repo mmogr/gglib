@@ -10,13 +10,11 @@ import { onDownloadEndings } from '../services/downloadsEvents';
  */
 export function useDownloadToasts(): void {
   const { showToast } = useToastContext();
-  useEffect(
-    () =>
-      onDownloadEndings({
-        completed: (items) =>
-          showToast(items.length === 1 ? items[0].text : `${items.length} models downloaded`, 'success'),
-        failed: (info) => showToast(info.text, 'error'),
-      }),
-    [showToast],
-  );
+  useEffect(() => {
+    return onDownloadEndings({
+      completed: (items) =>
+        showToast(items.length === 1 ? items[0].text : `${items.length} models downloaded`, 'success'),
+      failed: (info) => showToast(info.text, 'error'),
+    });
+  }, [showToast]);
 }

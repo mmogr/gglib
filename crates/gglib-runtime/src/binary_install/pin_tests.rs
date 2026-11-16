@@ -1,11 +1,10 @@
 //! Where an install stands against the pin.
 
-use std::path::Path;
-#[cfg(unix)]
-use std::process::Command;
-
 use super::{Installed, PinStanding, Recorded, installed_release, standing};
 use crate::binary_install::ReleaseSelector;
+#[cfg(unix)]
+use gglib_core::utils::process::cmd;
+use std::path::Path;
 
 fn pin(tag: &str) -> ReleaseSelector {
     ReleaseSelector::Tag(tag.to_owned())
@@ -149,7 +148,7 @@ fn only_missing_and_older_want_an_install() {
 #[cfg(unix)]
 fn checkout_with_tags(dir: &Path, tags: &[&str]) -> String {
     let git = |args: &[&str]| {
-        let output = Command::new("git")
+        let output = cmd("git")
             .env_remove("GIT_DIR")
             .env_remove("GIT_WORK_TREE")
             .env_remove("GIT_INDEX_FILE")

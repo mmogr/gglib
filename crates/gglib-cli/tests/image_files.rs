@@ -8,13 +8,14 @@
 //! gets its receipt line and then that refusal. These bind nothing and
 //! contact nothing.
 
+use gglib_core::utils::process::cmd;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 /// Run `gglib <args>` over the empty data directory `dir`, with nothing on
 /// stdin.
 fn gglib(dir: &tempfile::TempDir, args: &[&str], path: &Path) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_gglib"))
+    cmd(env!("CARGO_BIN_EXE_gglib"))
         .args(args)
         .arg(path)
         .arg("x")

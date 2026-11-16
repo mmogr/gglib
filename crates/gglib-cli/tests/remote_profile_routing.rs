@@ -16,7 +16,7 @@
 //! Unlike `daemon_lifecycle`, these bind nothing and need no daemon: the
 //! refusal happens before any upstream is resolved.
 
-use std::process::Command;
+use gglib_core::utils::process::cmd;
 
 /// Both commands that compose an agent session, each naming a profile this
 /// machine would happily resolve if it were the one serving the turn.
@@ -30,7 +30,7 @@ fn a_profile_flag_under_remote_is_refused_by_both_agent_commands() {
     let dir = tempfile::tempdir().expect("temp data dir");
 
     for args in INVOCATIONS {
-        let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
+        let out = cmd(env!("CARGO_BIN_EXE_gglib"))
             .args(*args)
             .env("GGLIB_DATA_DIR", dir.path())
             .output()

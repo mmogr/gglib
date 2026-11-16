@@ -1,5 +1,5 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import { loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -99,6 +99,8 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       setupFiles: ['./tests/ts/setup.ts'],
       include: ['tests/ts/**/*.test.{ts,tsx}'],
+      // Real engines run these, from vitest.browser.config.ts.
+      exclude: [...configDefaults.exclude, 'tests/ts/browser/**'],
       // Vitest's five seconds is the wait in tests/ts/setup.ts, so a test of
       // several steps gets room for more than one slow wait.
       testTimeout: 20000,

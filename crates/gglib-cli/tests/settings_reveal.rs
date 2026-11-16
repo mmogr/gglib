@@ -11,9 +11,10 @@
 //! a daemon port nothing listens on, so no run can reach a daemon of the
 //! machine's own.
 
+use gglib_core::utils::process::cmd;
 use std::net::TcpListener;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 use gglib_core::RemotePairing;
 
@@ -49,7 +50,7 @@ fn closed_port() -> u16 {
 /// `gglib config <args>` with `root` as its data directory, and a models
 /// directory inside it.
 fn settings(root: &Path, args: &[&str]) -> (Output, String, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
+    let out = cmd(env!("CARGO_BIN_EXE_gglib"))
         .arg("config")
         .args(args)
         .env("GGLIB_DATA_DIR", root)
