@@ -204,7 +204,7 @@ pub(super) mod readers {
         })
     }
 
-    /// Whether `reg query`'s listing of [`KHRONOS_DRIVERS`] holds a driver:
+    /// Whether `reg query`'s listing of the Khronos drivers key holds a driver:
     /// a value named by a manifest's path.
     pub(crate) fn names_a_driver(listing: &str) -> bool {
         listing
