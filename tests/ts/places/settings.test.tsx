@@ -87,13 +87,15 @@ describe('saving as you go', () => {
   it('writes a ticked box alone, the moment it moves, and Undo writes back what was stored', async () => {
     renderApp('/settings/general');
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('checkbox', { name: /^Start the endpoint when gglib launches/ }));
-    await waitFor(() => expect(writes()).toEqual([{ proxyAutostart: true }]));
-    expect(check('Start the endpoint when gglib launches')).toBeChecked();
+    // A fresh install's endpoint comes on at launch, and the box says so.
+    expect(await screen.findByRole('checkbox', { name: /^Start the endpoint when gglib launches/ })).toBeChecked();
+    await user.click(check('Start the endpoint when gglib launches'));
+    await waitFor(() => expect(writes()).toEqual([{ proxyAutostart: false }]));
+    expect(check('Start the endpoint when gglib launches')).not.toBeChecked();
 
     await user.click(await screen.findByRole('button', { name: 'Undo' }));
-    await waitFor(() => expect(writes()).toEqual([{ proxyAutostart: true }, { proxyAutostart: null }]));
-    expect(check('Start the endpoint when gglib launches')).not.toBeChecked();
+    await waitFor(() => expect(writes()).toEqual([{ proxyAutostart: false }, { proxyAutostart: true }]));
+    expect(check('Start the endpoint when gglib launches')).toBeChecked();
     expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
   });
 
@@ -209,7 +211,7 @@ describe('a write on its way', () => {
     expect(writes()).toHaveLength(1);
     release();
     await waitFor(() => expect(box).not.toHaveAttribute('aria-busy'));
-    expect(box).toBeChecked();
+    expect(box).not.toBeChecked();
   });
 
   it('keeps Undo for five seconds after the latest of two writes, not the first', async () => {

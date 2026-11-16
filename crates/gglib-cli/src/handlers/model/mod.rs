@@ -260,8 +260,9 @@ async fn dispatch_with(
             identifier,
             context,
             pin,
+            yes,
         } => {
-            load::load(ctx, &identifier, context.as_deref(), pin).await?;
+            load::load(ctx, &identifier, context.as_deref(), pin, yes).await?;
         }
         ModelCommand::Unload { identifier } => {
             load::unload(ctx, &identifier).await?;

@@ -188,7 +188,20 @@ pub(in crate::handlers) async fn started(
     };
 
     let answered = STAND_IN_PORT
-        .scope(port, start_on(&handle, body, settings))
+        .scope(
+            port,
+            start_on(
+                &handle,
+                body,
+                settings,
+                &mut crate::handlers::inference::switch::Consent {
+                    yes: false,
+                    terminal: false,
+                    command: "gglib proxy".to_owned(),
+                    ask: Box::new(|_| Ok(false)),
+                },
+            ),
+        )
         .await
         .expect("the daemon's answer");
 

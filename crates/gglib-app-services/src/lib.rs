@@ -29,7 +29,9 @@ mod proxy_door;
 mod proxy_guard;
 mod proxy_port;
 pub mod proxy_prove;
+mod proxy_refusal;
 pub mod proxy_settings;
+pub mod proxy_switch;
 mod remote;
 mod residency_events;
 mod runs;
@@ -56,6 +58,7 @@ pub use proxy_clients::{ClientFacts, ClientRecipe, ClientRecipes, RecipeLine, re
 pub use proxy_door::DoorClosed;
 pub use proxy_prove::{ProofOutcome, ProofRefusal};
 pub use proxy_settings::proxy_config_from_settings;
+pub use proxy_switch::{EndpointChange, StartAnswer, StartOutcome, shape_words};
 pub use remote::{
     EnableRequest, Enabled, FarCredentials, FarError, FarProxy, JoinRequest, Joined,
     OfferedPairing, PairedModels, RemoteConnection, RemoteDevice, RemoteEnableBody,

@@ -15,6 +15,7 @@ $ gglib up
     model     Qwen3.8-27B  (already installed; --model picks another)
 
 [4/5] Endpoint
+  The endpoint is already on at port 8080, serving every model, as asked.
 
   ✓ answered in 2.6s by Qwen3.8-27B
 

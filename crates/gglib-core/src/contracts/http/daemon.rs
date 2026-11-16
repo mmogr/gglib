@@ -53,6 +53,20 @@ pub const PROXY_STATUS_FIELDS: &[&str] = &[
     "pinned_model_id",
 ];
 
+/// The keys a start's answer adds to [`PROXY_STATUS_FIELDS`]: what the start
+/// did, `started`, `unchanged` or `replaced`.
+pub const PROXY_START_ANSWER_FIELDS: &[&str] = &["outcome"];
+
+/// The keys a status adds to [`PROXY_STATUS_FIELDS`] while the endpoint is
+/// off because a start could not bind its port: why, in words.
+pub const PROXY_STATUS_REFUSED_FIELDS: &[&str] = &["refused"];
+
+/// The `type` of a start's refusal when the endpoint is on otherwise (409).
+///
+/// Its `metadata` holds `now`, what runs, and `action`, what switching does.
+/// The same start with `replace` switches.
+pub const ENDPOINT_DIFFERS_TYPE: &str = "endpoint_differs";
+
 /// How a client connects to the endpoint for one model (`?model=<gglib id>`).
 ///
 /// The address, the key rule, the id a client sends, and the recipes per
@@ -429,6 +443,7 @@ pub const PROXY_START_CLI_FIELDS: &[&str] = &[
     "default_profile",
     "api_key",
     "allowed_hosts",
+    "replace",
 ];
 
 /// Keys the daemon accepts on that body which the CLI never sends.

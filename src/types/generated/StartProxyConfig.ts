@@ -53,4 +53,10 @@ api_key: string | null,
  * Empty falls through to the stored `proxy_allowed_hosts`; given, the
  * list replaces it for this run.
  */
-allowed_hosts: Array<string>, };
+allowed_hosts: Array<string>, 
+/**
+ * When the endpoint is on otherwise than this start asks, stop it and
+ * start it as asked, in one operation. Without it such a start is
+ * refused with `endpoint_differs`, naming how it differs.
+ */
+replace: boolean, };

@@ -220,6 +220,9 @@ describe('the words of the endpoint line', () => {
   it('second line: off, starting, the pin, none, a count', () => {
     const facts = { state: 'on' as const, baseUrl: 'http://127.0.0.1:8080/v1', key: null, pinned: null, pinnedTo: null };
     expect(secondLine({ ...facts, state: 'off' }, 3)).toBe('click to turn on');
+    expect(secondLine({ ...facts, state: 'off' }, 3, 'The endpoint is off: port 8080 is in use by another program.')).toBe(
+      'did not start, click for why',
+    );
     expect(secondLine({ ...facts, state: 'starting' }, 3)).toBe('Starting');
     expect(secondLine({ ...facts, state: 'pinned', pinned: { id: 8, name: 'qwen3-8b' }, pinnedTo: 'Pinned to qwen3-8b' }, 1)).toBe('qwen3-8b');
     expect(secondLine(facts, 0)).toBe('nothing loaded yet');

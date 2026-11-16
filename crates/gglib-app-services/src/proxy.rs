@@ -90,6 +90,17 @@ pub struct ProxyOps {
     /// settings, so handing the tunnel the stored value would give it a
     /// credential the proxy refuses.
     effective_key: std::sync::RwLock<Option<(String, ApiKeySource)>>,
+    /// What the running endpoint was started with, as this started it: what
+    /// a second start is compared against, and what a replacement that
+    /// fails puts back. `None` while stopped.
+    running: std::sync::RwLock<Option<start_as::Running>>,
+    /// Held across a start that may compare and switch, so two of them
+    /// cannot interleave a stop and a start.
+    switching: tokio::sync::Mutex<()>,
+    /// Why the last start did not bind, in words, until a start binds: the
+    /// reason an endpoint that should be on is off, the service's own launch
+    /// above all, which nobody is watching when it fails.
+    refused: std::sync::RwLock<Option<String>>,
 }
 
 impl ProxyOps {
@@ -109,6 +120,9 @@ impl ProxyOps {
             turns: std::sync::OnceLock::new(),
             images: std::sync::OnceLock::new(),
             effective_key: std::sync::RwLock::new(None),
+            running: std::sync::RwLock::new(None),
+            switching: tokio::sync::Mutex::new(()),
+            refused: std::sync::RwLock::new(None),
         }
     }
 
@@ -221,17 +235,38 @@ impl ProxyOps {
         config: ProxyConfig,
         pin: Option<gglib_core::ports::PinnedSpec>,
     ) -> Result<SocketAddr, GuiError> {
+        let _one = self.switching.lock().await;
+        self.start_unlocked(config, pin).await
+    }
+
+    /// [`Self::start`], with `switching` already held.
+    ///
+    /// The pin is the run's: a start that loses the supervisor's slot to
+    /// another puts back the pin that run had, so it never pins an endpoint
+    /// it did not start.
+    async fn start_unlocked(
+        &self,
+        config: ProxyConfig,
+        pin: Option<gglib_core::ports::PinnedSpec>,
+    ) -> Result<SocketAddr, GuiError> {
         if let ProxyStatus::Running { address } = self.supervisor.status().await {
             return Err(GuiError::Conflict(format!(
                 "Proxy already running at {address}"
             )));
         }
+        let before = self.runtime.pinned();
         if let Err(e) = self.runtime.set_pin(pin) {
             return Err(GuiError::Internal(format!(
                 "could not apply model pin: {e}"
             )));
         }
-        self.start_raw(config).await.map_err(Self::map_start_error)
+        let started = self.start_raw(config).await;
+        if matches!(started, Err(SupervisorError::AlreadyRunning(_)))
+            && let Err(e) = self.runtime.set_pin(before)
+        {
+            tracing::debug!("could not put back the running endpoint's pin: {e}");
+        }
+        started.map_err(Self::map_start_error)
     }
 
     /// Shared setup behind [`Self::start`] and [`Self::ensure_running`],
@@ -267,8 +302,10 @@ impl ProxyOps {
             Arc::new(CatalogPortImpl::new(self.model_repo.clone()));
 
         let runtime = Arc::clone(&self.runtime);
+        let kept = config.clone();
 
-        self.supervisor
+        let started = self
+            .supervisor
             .start(
                 config,
                 runtime,
@@ -276,7 +313,21 @@ impl ProxyOps {
                 self.mcp.clone(),
                 self.core.settings().repo(),
             )
-            .await
+            .await;
+        // A port another program holds is kept as the reason the endpoint is
+        // off, so every surface that shows the endpoint can say why; the
+        // next start that binds clears it.
+        if let Err(SupervisorError::BindFailed { address, .. }) = &started {
+            let why = crate::proxy_refusal::port_in_use(address).await;
+            *self
+                .refused
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(why);
+            // Said, so a window that read the status before the reason was
+            // known reads it again: the endpoint is off, and now says why.
+            self.emitter.emit(AppEvent::proxy_stopped());
+        }
+        started
             // The token the supervisor settled on is kept here and not
             // returned. These callers are the GUI and the desktop tray, which
             // read it back from settings rather than being handed a
@@ -294,6 +345,17 @@ impl ProxyOps {
                 // the supervisor answers `Ok` only to the start that took
                 // its slot, under its own lock, so a racing start or one
                 // that finds it on (`AlreadyRunning`) says nothing.
+                *self
+                    .running
+                    .write()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(start_as::Running {
+                    config: kept,
+                    pin: self.runtime.pinned(),
+                });
+                *self
+                    .refused
+                    .write()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
                 self.emitter.emit(AppEvent::proxy_started(bind.addr.port()));
                 bind.addr
             })
@@ -350,6 +412,9 @@ impl ProxyOps {
     /// `map_start_error` produces if the proxy cannot start — a bind failure or
     /// an already-running supervisor both surface as `GuiError::Conflict`.
     pub async fn ensure_running(&self) -> Result<SocketAddr, GuiError> {
+        // Under the lock every start and stop takes, so it cannot land
+        // between a switch's stop and its start.
+        let _one = self.switching.lock().await;
         if let ProxyStatus::Running { address } = self.supervisor.status().await {
             return Ok(address);
         }
@@ -391,11 +456,21 @@ impl ProxyOps {
     /// handle before it waits, so the endpoint is off either way. A stop
     /// that finds nothing running says nothing.
     pub async fn stop(&self) -> Result<(), GuiError> {
+        let _one = self.switching.lock().await;
+        self.stop_unlocked().await
+    }
+
+    /// [`Self::stop`], with `switching` already held.
+    async fn stop_unlocked(&self) -> Result<(), GuiError> {
         if let Err(e) = self.runtime.set_pin(None) {
             tracing::debug!("could not clear model pin on stop: {e}");
         }
         *self
             .effective_key
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        *self
+            .running
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         let stopped = self.supervisor.stop().await;
@@ -412,6 +487,16 @@ impl ProxyOps {
             }
             SupervisorError::Internal(msg) => GuiError::Internal(msg),
         })
+    }
+
+    /// Why the endpoint is off when a start could not bind it, until a start
+    /// does: the port, and what holds it when that can be told.
+    #[must_use]
+    pub fn refused(&self) -> Option<String> {
+        self.refused
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// Get the current proxy status.
@@ -552,6 +637,9 @@ impl ProxyOps {
         self.supervisor.exit_receiver()
     }
 }
+#[path = "proxy_start_as.rs"]
+mod start_as;
+
 #[cfg(test)]
 #[path = "proxy_tests.rs"]
 mod tests;

@@ -255,18 +255,22 @@ pub struct Settings {
     /// [`Self::effective_mcp_drawing`].
     pub mcp_drawing: Option<bool>,
 
-    // ── Always-on proxy (desktop app) ───────────────────────────────
-    /// Whether the desktop app starts the OpenAI-compatible proxy as soon as
-    /// it launches, rather than waiting for the user to switch it on.
+    // ── Always-on proxy ─────────────────────────────────────────────
+    /// Whether the service starts the OpenAI-compatible endpoint when it
+    /// starts, rather than waiting for the user to switch it on.
     ///
-    /// This is what makes the proxy a background service rather than a
+    /// `None` (the default) means **on**: a new user's first step is
+    /// pointing a client at gglib, and an endpoint that is off refuses that
+    /// client with nothing to say why. `Some(false)` keeps it off until it is
+    /// turned on. Read through [`Self::effective_proxy_autostart`].
+    ///
+    /// This is what makes the endpoint a background service rather than a
     /// feature you remember to enable: combined with [`Self::start_at_login`]
-    /// and [`Self::close_to_tray`], the endpoint is simply always there for
-    /// clients like VS Code Copilot, with no terminal held open.
+    /// and [`Self::close_to_tray`], it is simply always there for clients
+    /// like VS Code Copilot, with no terminal held open.
     ///
-    /// Read by the desktop app only. `gglib proxy` and `gglib serve` are
-    /// explicit foreground commands — starting a second proxy underneath them
-    /// would contend for the same port.
+    /// Read once, when the service starts, whatever started it: the desktop
+    /// app, `gglib up` or any other command.
     pub proxy_autostart: Option<bool>,
 
     /// Whether closing the desktop app's window hides it to the system tray
@@ -414,6 +418,16 @@ impl Settings {
     #[must_use]
     pub const fn effective_loop_guard(&self) -> bool {
         !matches!(self.loop_guard, Some(false))
+    }
+
+    /// Whether the service starts the endpoint when it starts: the stored
+    /// [`Self::proxy_autostart`], else on.
+    ///
+    /// The one place the default is supplied, so the service, `gglib config
+    /// show` and the settings the app reads cannot disagree about it.
+    #[must_use]
+    pub const fn effective_proxy_autostart(&self) -> bool {
+        !matches!(self.proxy_autostart, Some(false))
     }
 
     /// Whether `/mcp` offers the drawing tool: the stored
@@ -591,6 +605,10 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
 #[cfg(test)]
 #[path = "settings_loop_guard_tests.rs"]
 mod settings_loop_guard_tests;
+
+#[cfg(test)]
+#[path = "settings_autostart_tests.rs"]
+mod settings_autostart_tests;
 
 #[cfg(test)]
 #[path = "settings_tests.rs"]

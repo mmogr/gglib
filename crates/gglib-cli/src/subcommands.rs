@@ -147,6 +147,11 @@ pub enum DaemonCommand {
         /// one.
         #[arg(long = "allowed-host", value_name = "HOST")]
         allowed_host: Vec<String>,
+        /// Leave the endpoint off at this start, whatever proxy-autostart
+        /// says. Passed by a command that launches the daemon to start the
+        /// endpoint its own way.
+        #[arg(long = "without-endpoint", hide = true)]
+        without_endpoint: bool,
     },
     /// Show whether the daemon is running, and what it is doing
     Status,

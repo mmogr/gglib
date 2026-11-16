@@ -63,9 +63,11 @@ const SERVE_NON_SAMPLING: &[&str] = &[
     // Loads the model on the paired machine instead (ADR 0028).
     "remote",
     "slot-dir",
+    // Switches an endpoint that is on otherwise without asking.
+    "yes",
 ];
 
-/// The same for `gglib proxy`: `CacheArgs`, `AccessArgs`, and the three it
+/// The same for `gglib proxy`: `CacheArgs`, `AccessArgs`, and the four it
 /// declares inline. No context or MTP flags — a standalone proxy has no
 /// specific model in scope, so `--default-context-size` stands in for `--context-size`.
 const PROXY_NON_SAMPLING: &[&str] = &[
@@ -77,6 +79,8 @@ const PROXY_NON_SAMPLING: &[&str] = &[
     "host",
     "port",
     "slot-dir",
+    // Switches an endpoint that is on otherwise without asking.
+    "yes",
 ];
 
 /// Both directions: neither command may be missing a `SamplingArgs` flag, and

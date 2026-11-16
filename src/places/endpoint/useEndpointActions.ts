@@ -4,12 +4,13 @@
  *
  * Turn on names nothing, not even a port (EP-2): the daemon starts the
  * endpoint as the settings say, the same start the tray and `gglib proxy`
- * get. Serving only one model, or every model again, restarts it: the
- * daemon answers a start while it runs with a refusal, so the endpoint is
- * stopped first, then started pinned (`start-pinned`, the GUI's
- * `gglib serve`) or plain. A start's answer is the endpoint's status at
- * once (`startEndpoint`), not only when its event arrives. A failed call
- * leaves the daemon's message verbatim (EP-1); nothing here rewords it.
+ * get. Serving only one model, or every model again, is one start with
+ * `replace`, pinned (`start-pinned`, the GUI's `gglib serve`) or plain: the
+ * daemon switches the endpoint as one operation. A start's answer is the
+ * endpoint's status at once (`startEndpoint`), not only when its event
+ * arrives. A failed call leaves the daemon's message verbatim (EP-1);
+ * nothing here rewords it. An answer that does not show what was asked is
+ * an older service, which does not know `replace`: said in `OLDER_SERVICE`.
  *
  * @module places/endpoint/useEndpointActions
  */
@@ -21,6 +22,14 @@ import { getTransport } from '../../services/transport';
 import { formatError } from '../../utils/errors';
 
 export type EndpointBusy = 'on' | 'off' | 'serve' | null;
+
+/**
+ * What a switch says when the service answered without switching: a service
+ * older than this app ignores `replace`, so the endpoint is as it was. Not the
+ * daemon's words, since that service has none for it.
+ */
+export const OLDER_SERVICE =
+  'The gglib service running is older than this app and did not switch the endpoint. Stop gglib… in Settings › About, then Start gglib.';
 
 /** The proof's outcome as the page says it. */
 export interface Proof {
@@ -66,10 +75,15 @@ export function useEndpointActions(): EndpointActions {
   const turnOff = useCallback(() => run('off', () => getTransport().stopProxy()), [run]);
   const serve = useCallback(
     (modelId: number | null) =>
+      // One call: the daemon switches the endpoint, stopping and starting
+      // it as one operation, as `gglib serve` and `gglib proxy` do after a
+      // yes; a refused start puts back what ran.
       run('serve', async () => {
-        await getTransport().stopProxy();
-        if (modelId === null) await startEndpoint({});
-        else await startEndpointPinned({ model_id: modelId });
+        const status =
+          modelId === null
+            ? await startEndpoint({ replace: true })
+            : await startEndpointPinned({ model_id: modelId, proxy: { replace: true } });
+        if ((status.pinned_model_id ?? null) !== modelId) throw new Error(OLDER_SERVICE);
       }),
     [run],
   );

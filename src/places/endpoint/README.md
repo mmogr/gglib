@@ -35,8 +35,10 @@ address bar in `gglib web`.
 Turn on names no port (EP-2); a failed start or stop is the daemon's
 message as it said it (EP-1), so a port in use or llama.cpp missing is said
 when the daemon says it, never detected here. Serving one model, or every
-model again, restarts the endpoint: stop, then `start-pinned` or `start`,
-since the daemon refuses a start while it runs. Unload asks the daemon
+model again, switches the endpoint in one call, `start-pinned` or `start`
+with `replace`: the daemon stops and starts it as one operation and puts
+back what ran when the start is refused, as `gglib serve` and `gglib proxy`
+do after a yes. Unload asks the daemon
 whatever this window believes (TX-12). Using it says "Apps on this Mac"
 (the machine in the service's words, `useThisMachine`) for every request in flight: the proxy records no client's identity, so
 apps are not told apart. Not drawn here, for want of a fact:
@@ -94,6 +96,6 @@ only while it can act (the endpoint up and its key revealed), and a row's
 | `Activity.tsx` | ▸ Activity: the dashboard's other sections as sentences, Clear prompt cache, Live numbers › |
 | `lines.ts` | Pure: the loaded rows (`residentRows`: the dashboard's, else the running servers once the list's read has landed, the tray's too), the queue's lines, the room line, the recent rows with the proxy's rate, and the activity sentences (the cache's reuse in the proxy's own sentence, `CacheUsage.summary`), from one dashboard frame |
 | `useClearCache.ts` | Clear prompt cache with the revealed key, its toast either way; also Diagnostics › Live's Clear |
-| `useEndpointActions.ts` | Turn on (no port), Turn off, serve one model or every model (stop, then start), and Test it, with the daemon's message for a failure |
+| `useEndpointActions.ts` | Turn on (no port), Turn off, serve one model or every model (one start with `replace`), and Test it, with the daemon's message for a failure |
 
 <!-- module-docs:end -->
