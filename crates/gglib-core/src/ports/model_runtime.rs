@@ -708,6 +708,18 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
         self.stop_current().await
     }
 
+    /// Kill every model server this runtime owns, at once, and wait for none
+    /// of them: for a service that has seconds left, as on Windows after its
+    /// console window is closed, where an orderly stop of an image model that
+    /// is drawing could outlast the process.
+    ///
+    /// Not a stop: what is resident stays recorded, so an orderly stop
+    /// afterwards ([`Self::stop_model`]) still empties the slots and reaps
+    /// each process. Defaults to nothing, for runtimes that own no processes
+    /// (test doubles, remote backends), as [`Self::list_running`] defaults to
+    /// none.
+    async fn kill_all_now(&self) {}
+
     /// The one model this runtime is pinned to, if any.
     ///
     /// `Some(pin)` means a request for any model whose id is not `pin.id` is

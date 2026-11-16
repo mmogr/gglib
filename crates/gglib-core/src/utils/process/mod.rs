@@ -2,6 +2,7 @@
 
 pub mod detached;
 pub mod host;
+pub mod stop;
 
 use std::ffi::OsStr;
 

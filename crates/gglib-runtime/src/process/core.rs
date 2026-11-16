@@ -164,6 +164,25 @@ impl GuiProcessCore {
         Ok(())
     }
 
+    /// Kill every child outright and wait for none of them: for a process
+    /// with seconds left, such as the service after its console window is
+    /// closed on Windows.
+    ///
+    /// Each child is killed through its own handle: `start_kill` is SIGKILL
+    /// on Unix and `TerminateProcess` on Windows, needs no runtime, and
+    /// signals nothing once the handle has reaped its child, so no pid the OS
+    /// may since have handed on is touched. The children stay tracked and
+    /// their pidfiles stay: a [`Self::kill`] afterwards reaps the child and
+    /// deletes its pidfile as it always does, and if the process ends first
+    /// the next start's sweep finds the pidfile.
+    pub fn kill_all_now(&mut self) {
+        for (model_id, running) in &mut self.processes {
+            if let Err(e) = running.child.start_kill() {
+                debug!(model_id = %model_id, error = %e, "could not kill the child at once");
+            }
+        }
+    }
+
     /// Stop the child tracked for `model_id`, but only if it is still the one
     /// with `pid`.
     ///
@@ -265,15 +284,11 @@ impl GuiProcessCore {
 
 // Drop cannot await, so the SIGTERM-then-SIGKILL sequence `kill` uses cannot
 // run here; anything wanting a graceful stop goes through `kill` first. This
-// backstop kills outright through each child's own handle: `start_kill` is
-// SIGKILL on Unix and `TerminateProcess` on Windows, needs no runtime, and
-// signals nothing once the handle has reaped its child. The pidfiles stay, so
-// the next sweep can still find a child this failed to stop.
+// backstop kills outright, as `kill_all_now` does. The pidfiles stay, so the
+// next sweep can still find a child this failed to stop.
 impl Drop for GuiProcessCore {
     fn drop(&mut self) {
-        for (_, mut running) in self.processes.drain() {
-            let _ = running.child.start_kill();
-        }
+        self.kill_all_now();
     }
 }
 
