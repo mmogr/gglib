@@ -14,6 +14,7 @@ use gglib_core::ports::{
 };
 use gglib_core::server_config::ServerConfigOptions;
 use gglib_runtime::pidfile::{list_pidfiles, server_runtime};
+use gglib_runtime::process::RuntimeBinaries;
 use gglib_runtime::process::residency::explain::{Loaded, plan_launch};
 
 /// The model servers recorded under this data root that are still running.
@@ -52,9 +53,11 @@ impl ModelRuntimePort for RecordedServers {
     }
 
     /// The launch the daemon would make, planned here as the daemon plans
-    /// it (`plan_launch`), with what a one-shot command knows: the standing
-    /// template and no other model loaded, so the RAM cache is sized as if
-    /// alone. The daemon's plan nets out the models it has loaded.
+    /// it (`plan_launch`), with what a one-shot command knows: the engines
+    /// where gglib installs them under this data root, which the daemon is
+    /// started with, the standing template and no other model loaded, so
+    /// the RAM cache is sized as if alone. The daemon's plan nets out the
+    /// models it has loaded.
     fn plan(
         &self,
         spec: &ModelLaunchSpec,
@@ -62,8 +65,11 @@ impl ModelRuntimePort for RecordedServers {
         default_ctx: Option<u64>,
         overrides: &LaunchOverrides,
     ) -> Result<LaunchPlan, ModelRuntimeError> {
+        let binaries = RuntimeBinaries::under_data_root()
+            .map_err(|e| ModelRuntimeError::Internal(format!("no data folder: {e}")))?;
         plan_launch(
             spec.clone(),
+            &binaries,
             &ServerConfigOptions::default(),
             CacheRamSetting::Auto,
             num_ctx,

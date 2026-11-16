@@ -30,7 +30,10 @@ Speculative too once
 the person has set it, under the launch line
 (the daemon's `LaunchExplanation.command`, which `LaunchPlan::command_line`
 writes for the shell of the machine the service runs on, drawn token by
-token: POSIX on Linux and macOS, PowerShell on Windows). Sampling and Reasoning
+token: POSIX on Linux and macOS, PowerShell on Windows; its program is the
+engine's path, as gglib runs it, and its port `0`, any free one; for an
+engine not installed, the plan's `notInstalled` sentence in its place, with
+nothing to copy). Sampling and Reasoning
 rows count the explanation's sources. Change turns a row into its control
 and saves the one field of the update it changes; a row the person set
 reads `set by you · Reset`. A token of the launch line whose decision the Load

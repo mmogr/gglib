@@ -158,10 +158,19 @@ async fn a_load_that_unloads_nothing_has_no_unload_line() {
 async fn an_older_service_without_the_line_is_said_so() {
     let dir = tempfile::tempdir().unwrap();
     let (ctx, model) = library(dir.path()).await;
+    // An older service sends neither the line nor the plan's word on an
+    // engine that is not installed. (Nothing is installed under this
+    // binary's data root, so this build's own answer has the second.)
     let mut answer = serde_json::to_value(local(&ctx, &model).await).unwrap();
+    let fields = answer.as_object_mut().unwrap();
+    fields.remove("command");
     assert!(
-        answer.as_object_mut().unwrap().remove("command").is_some(),
-        "this build sends the line"
+        fields["plan"]
+            .as_object_mut()
+            .unwrap()
+            .remove("notInstalled")
+            .is_some(),
+        "this build says the engine is not installed"
     );
     let (port, _) = daemon("200 OK", answer.to_string());
 

@@ -22,9 +22,12 @@ plan: LaunchPlan,
  * made the plan ([`HostOs::shell`]): what every surface shows and
  * copies, so none quotes a line itself.
  *
- * Always sent. `None` is the answer of a service older than this
- * field, which a newer CLI or desktop app can meet while it runs: each
- * says the service does not give the line, rather than quote one.
+ * Sent whenever the plan's engine is installed. With none installed
+ * there is nothing to paste, and the plan's `not_installed` says why
+ * in the line's place. Otherwise `None` is the answer of a service
+ * older than this field, which a newer CLI or desktop app can meet
+ * while it runs: each says the service does not give the line, rather
+ * than quote one.
  *
  * [`HostOs::shell`]: gglib_core::host::HostOs::shell
  */

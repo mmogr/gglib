@@ -22,6 +22,7 @@ fn plan_of(program: &str, args: Vec<LaunchArg>) -> LaunchPlan {
     LaunchPlan {
         program: program.to_owned(),
         args,
+        not_installed: None,
         narration: LaunchNarration::new("m", None, 0),
         unloads: None,
         fit: None,
@@ -45,7 +46,7 @@ fn the_command_line_is_the_program_and_each_token_in_order() {
     let plan = plan(vec![
         arg("-m", Some("/models/qwen.gguf")),
         arg("--metrics", None),
-        arg("--port", Some("auto")),
+        arg("--port", Some("0")),
     ]);
     for shell in [Shell::Posix, Shell::PowerShell] {
         let command = plan.command_line(shell);
@@ -53,11 +54,11 @@ fn the_command_line_is_the_program_and_each_token_in_order() {
         assert_eq!(command.program, "llama-server");
         assert_eq!(
             command.args,
-            ["-m /models/qwen.gguf", "--metrics", "--port auto"]
+            ["-m /models/qwen.gguf", "--metrics", "--port 0"]
         );
         assert_eq!(
             command.line,
-            "llama-server -m /models/qwen.gguf --metrics --port auto"
+            "llama-server -m /models/qwen.gguf --metrics --port 0"
         );
     }
 }
@@ -179,17 +180,17 @@ const VALUES: [&str; 17] = [
 const WINDOWS_POWERSHELL_LOSES: [&str; 3] = ["", r#"say "hi""#, r"D:\My Cache\"];
 
 /// The arguments a program received when `interpreter` ran the line `shell`
-/// writes for `values`, or `None` when this machine has no such program.
+/// writes for `values`, the program by its path in `folder` under `dir`, or
+/// `None` when this machine has no such program.
 fn run_through(
     dir: &Path,
+    folder: &str,
     interpreter: &str,
     shell: Shell,
     values: &[&str],
 ) -> Option<Vec<String>> {
     let received = dir.join(format!("{interpreter}.argv"));
-    // In a folder with a space, so the program itself is quoted (and, in
-    // PowerShell, called with `&`).
-    let folder = dir.join("with space");
+    let folder = dir.join(folder);
     std::fs::create_dir_all(&folder).unwrap();
     let program = gglib_test_proc::install(
         &folder,
@@ -201,11 +202,11 @@ fn run_through(
         .command_line(shell)
         .line;
     let (script, text, flags): (_, _, &[&str]) = match shell {
-        Shell::Posix => (dir.join("line.sh"), line.clone(), &[]),
+        Shell::Posix => (folder.join("line.sh"), line.clone(), &[]),
         // A byte-order mark, or Windows PowerShell reads the file in the
         // machine's code page.
         Shell::PowerShell => (
-            dir.join(format!("line-{interpreter}.ps1")),
+            folder.join(format!("line-{interpreter}.ps1")),
             format!("\u{feff}{line}\n"),
             &[
                 "-NoProfile",
@@ -237,9 +238,19 @@ fn run_through(
 
 /// The line this machine writes, run by its own shell, hands the program
 /// exactly the plan's values; and where PowerShell 7 is installed (every
-/// GitHub runner has it), the PowerShell line run by it does too.
+/// GitHub runner has it), the PowerShell line run by it does too. The
+/// program is named by its path, as gglib's engines are: in a folder with a
+/// space, so the shell quotes it (and PowerShell calls it with `&`), and in
+/// one without, which the line names as it is (unless the temporary folder
+/// above it needs quoting).
 #[test]
 fn a_line_run_by_its_shell_gives_the_program_the_plans_values() {
+    for folder in ["with space", "plain"] {
+        through_each_shell(folder);
+    }
+}
+
+fn through_each_shell(folder: &str) {
     let dir = tempfile::tempdir().unwrap();
     let host = HostOs::current().shell();
     let mut runs = vec![(
@@ -256,7 +267,7 @@ fn a_line_run_by_its_shell_gives_the_program_the_plans_values() {
             .into_iter()
             .filter(|v| interpreter != "powershell" || !WINDOWS_POWERSHELL_LOSES.contains(v))
             .collect();
-        let Some(got) = run_through(dir.path(), interpreter, shell, &values) else {
+        let Some(got) = run_through(dir.path(), folder, interpreter, shell, &values) else {
             assert!(!required, "this machine has no {interpreter}");
             continue;
         };
@@ -264,6 +275,6 @@ fn a_line_run_by_its_shell_gives_the_program_the_plans_values() {
             .iter()
             .flat_map(|v| ["--v".to_owned(), (*v).to_owned()])
             .collect();
-        assert_eq!(got, want, "through {interpreter}");
+        assert_eq!(got, want, "through {interpreter}, from {folder}");
     }
 }

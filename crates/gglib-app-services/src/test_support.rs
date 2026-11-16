@@ -255,9 +255,31 @@ impl RunningRuntime {
 }
 
 /// A runtime with nothing running that plans a launch as the daemon's does,
-/// and starts nothing: for a test of what `explain` answers.
-#[derive(Debug, Default)]
-pub(crate) struct PlansOnly;
+/// with its engines at `binaries`, and starts nothing: for a test of what
+/// `explain` answers. With `not_installed` set, each plan says its engine
+/// is not installed in those words: whether an engine is there is the
+/// runtime's to say, and this binary's tests share one data root, where
+/// some write a stand-in llama-server.
+#[derive(Debug)]
+pub(crate) struct PlansOnly {
+    pub(crate) binaries: gglib_runtime::process::RuntimeBinaries,
+    pub(crate) not_installed: Option<String>,
+}
+
+impl Default for PlansOnly {
+    /// This test binary as both engines: a file that is there, so a plan
+    /// names it and says nothing of an install.
+    fn default() -> Self {
+        let this = std::env::current_exe().expect("the test binary's path");
+        Self {
+            binaries: gglib_runtime::process::RuntimeBinaries {
+                llama: this.clone(),
+                sd: this,
+            },
+            not_installed: None,
+        }
+    }
+}
 
 #[async_trait]
 impl ModelRuntimePort for PlansOnly {
@@ -282,6 +304,7 @@ impl ModelRuntimePort for PlansOnly {
     ) -> Result<gglib_core::domain::LaunchPlan, ModelRuntimeError> {
         gglib_runtime::process::residency::explain::plan_launch(
             spec.clone(),
+            &self.binaries,
             &gglib_core::server_config::ServerConfigOptions::default(),
             gglib_core::cache_config::CacheRamSetting::Auto,
             num_ctx,
@@ -289,6 +312,12 @@ impl ModelRuntimePort for PlansOnly {
             overrides,
             gglib_runtime::process::residency::explain::Loaded::NOTHING,
         )
+        .map(|mut plan| {
+            if let Some(said) = &self.not_installed {
+                plan.not_installed = Some(said.clone());
+            }
+            plan
+        })
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {

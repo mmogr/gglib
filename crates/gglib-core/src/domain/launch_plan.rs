@@ -207,11 +207,21 @@ impl Unload {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct LaunchPlan {
-    /// The server that would run: `llama-server` or `sd-server`.
+    /// The server that would run, by its path: gglib's own `llama-server`
+    /// or `sd-server`, the binary the launch runs, which is on nobody's
+    /// PATH. Where gglib would run it from when it is not installed.
     pub program: String,
     /// Its arguments, in the order they would be given, the port spelled
-    /// `auto` because it is taken when the launch happens.
+    /// `0`, which the server reads as any free port: the port a load takes
+    /// is known only when it loads.
     pub args: Vec<LaunchArg>,
+    /// Why the program cannot run, when it is not installed: the sentence a
+    /// load would fail with, which a surface says in the command line's
+    /// place. `None` when it is installed, and from a service older than
+    /// the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub not_installed: Option<String>,
     /// The decisions a launch prints, the same words.
     pub narration: LaunchNarration,
     /// The loaded model this launch would unload first, and why, by the
@@ -228,7 +238,11 @@ pub struct LaunchPlan {
 }
 
 /// A launch's command line, written for one shell: what a person on the
-/// machine that would run it pastes into that shell to make the same launch.
+/// machine that would run it pastes into that shell to start the same
+/// server with the same arguments.
+///
+/// On any free port, where a load takes the next free one above gglib's
+/// base.
 ///
 /// The daemon writes it for its own machine's shell
 /// ([`HostOs::shell`](crate::host::HostOs::shell)) and serves it beside the

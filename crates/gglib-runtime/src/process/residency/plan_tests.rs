@@ -38,8 +38,14 @@ fn value_of<'a>(plan: &'a LaunchPlan, flag: &str) -> Option<&'a str> {
 }
 
 fn plan(set: &ResidentSet, spec: &ModelLaunchSpec) -> LaunchPlan {
-    set.plan(spec, None, None, &LaunchOverrides::default())
-        .expect("a chat model plans")
+    set.plan(
+        spec,
+        &RuntimeBinaries::stand_in(),
+        None,
+        None,
+        &LaunchOverrides::default(),
+    )
+    .expect("a chat model plans")
 }
 
 /// A pin on `qwen2.5` (id 3) with an option of its own reaches a plan of
@@ -186,13 +192,47 @@ async fn the_other_slots_residents_are_netted_out_of_the_plans_ram_cache() {
     assert_eq!(with_primary, alone, "a primary resident would be displaced");
 }
 
+/// The manager's plan names the engines it launches from, the binaries its
+/// process core was given: a chat model's llama-server, an image model's
+/// sd-server.
+#[test]
+fn a_plan_names_the_engine_the_manager_launches_from() {
+    let dir = tempfile::tempdir().unwrap();
+    let binaries = RuntimeBinaries {
+        llama: dir.path().join("llama-server"),
+        sd: dir.path().join("sd-server"),
+    };
+    std::fs::write(&binaries.llama, "").unwrap();
+    std::fs::write(&binaries.sd, "").unwrap();
+    let runtime = RuntimePortImpl::new(Arc::new(ProcessManager::new(
+        9000,
+        binaries.clone(),
+        Arc::new(StubCatalog),
+        ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+        Arc::new(NoopResidencyObserver),
+    )));
+    let mut image = launch_spec(6, "flux");
+    image.image_family = Some(gglib_core::domain::ImageFamily::Flux1);
+
+    for (spec, binary) in [
+        (launch_spec(3, "qwen2.5"), &binaries.llama),
+        (image, &binaries.sd),
+    ] {
+        let plan = runtime
+            .plan(&spec, None, None, &LaunchOverrides::default())
+            .expect("plans");
+        assert_eq!(plan.program, binary.to_string_lossy());
+    }
+}
+
 /// A runtime handed its own cache setting (the benchmark's, no prompt
 /// cache) plans with it, as it launches with it.
 #[test]
 fn a_runtime_with_its_own_cache_setting_plans_with_it() {
     let manager = Arc::new(ProcessManager::new(
         9000,
-        RuntimeBinaries::llama_only("llama-server"),
+        RuntimeBinaries::stand_in(),
         Arc::new(StubCatalog),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,

@@ -86,6 +86,20 @@ impl RuntimeBinaries {
             RuntimeKind::StableDiffusion => &self.sd,
         }
     }
+
+    /// Where gglib installs each engine under this data root, installed or
+    /// not: the paths `gglib config paths` prints, which the daemon is
+    /// started with.
+    ///
+    /// # Errors
+    ///
+    /// When the data root cannot be resolved.
+    pub fn under_data_root() -> Result<Self, gglib_core::paths::PathError> {
+        Ok(Self {
+            llama: gglib_core::paths::llama_server_path()?,
+            sd: gglib_core::paths::sd_server_path()?,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -96,6 +110,16 @@ impl RuntimeBinaries {
         Self {
             llama: PathBuf::from(llama.into()),
             sd: PathBuf::from("/nonexistent/sd-server"),
+        }
+    }
+
+    /// This test binary as both engines: a file that is there, so a plan
+    /// names it as its program and says nothing of an install.
+    pub(crate) fn stand_in() -> Self {
+        let this = std::env::current_exe().expect("the test binary's path");
+        Self {
+            llama: this.clone(),
+            sd: this,
         }
     }
 }

@@ -1,8 +1,9 @@
 /**
  * How it runs: the launch gglib would make, as the launch line (the
  * daemon's, written for its machine's shell: `LaunchExplanation.command`,
- * which ⧉ copies whole; from a service older than the line, `NO_LINE` in
- * its place) and then one row per decision (`runRows`), each saying the
+ * which ⧉ copies whole; for an engine that is not installed, the plan's
+ * `notInstalled` sentence in its place; from a service older than the line,
+ * `NO_LINE`) and then one row per decision (`runRows`), each saying the
  * plan's narration for that decision where it has one (the words How it ran says), else its
  * arguments, with whose choice it was and why on hover. On a loaded model it is How it ran: the decisions its launch
  * recorded (`LaunchFacts.narration`), as launched, where a change applies
@@ -179,7 +180,7 @@ export const HowItRuns: FC<HowItRunsProps> = (props) => {
           <CopyValue value={command.line} label="Copy as command" />
         </div>
       ) : (
-        <p className="m-0 text-xs text-text-secondary">{NO_LINE}</p>
+        <p className="m-0 whitespace-pre-line text-xs text-text-secondary">{plan.notInstalled ?? NO_LINE}</p>
       )}
       <dl className="m-0">
         {rows.map((row) => (

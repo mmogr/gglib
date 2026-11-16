@@ -6,7 +6,9 @@
 use std::path::PathBuf;
 
 use gglib_core::cache_config::{CacheRamSetting, KvCacheType};
-use gglib_core::domain::{ChoiceSource, ComponentRole, ImageFamily, ModelComponent};
+use gglib_core::domain::{
+    ChoiceSource, ComponentRole, ImageFamily, LaunchPlan, ModelComponent, RuntimeKind,
+};
 use gglib_core::host::Shell;
 use gglib_core::ports::{LaunchOverrides, ModelLaunchSpec};
 use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
@@ -14,6 +16,7 @@ use std::collections::BTreeMap;
 
 use super::super::explain::{Loaded, plan_launch};
 use super::super::residency_tests::launch_spec;
+use crate::process::RuntimeBinaries;
 
 /// A chat model tagged for everything a tag can turn on.
 fn tagged() -> ModelLaunchSpec {
@@ -42,6 +45,7 @@ fn planned_with(
     let overrides = LaunchOverrides { options, cache_ram };
     plan_launch(
         spec,
+        &RuntimeBinaries::stand_in(),
         &ServerConfigOptions::default(),
         CacheRamSetting::Auto,
         None,
@@ -139,23 +143,120 @@ fn every_llama_flag_has_a_reason() {
     ] {
         assert!(flags(&plan).contains(&expected), "{expected} is sent");
     }
-    assert_eq!(plan.program, "llama-server");
+    assert_eq!(plan.program, stand_in(RuntimeKind::Llama));
 }
 
-/// The port is taken when the launch happens, so the plan spells it `auto`
-/// and the command line shows it so.
+/// The port is taken when the launch happens. The plan spells it `0`,
+/// which each engine reads as any free port (`auto` it refuses), so the
+/// line is one the engine accepts; the reason says what gglib does.
 #[test]
-fn the_port_is_auto_and_the_line_is_the_tokens_in_order() {
+fn the_port_is_any_free_one_and_the_line_is_the_tokens_in_order() {
     let plan = planned(launch_spec(3, "qwen"), ServerConfigOptions::default());
     let port = plan.args.iter().find(|a| a.flag == "--port").unwrap();
-    assert_eq!(port.value.as_deref(), Some("auto"));
-    let line = plan.command_line(Shell::Posix).line;
-    assert!(
-        line.starts_with(
-            "llama-server -m /nonexistent/qwen.gguf --host 127.0.0.1 --port auto --metrics --parallel 1"
-        ),
-        "{line}"
+    assert_eq!(port.value.as_deref(), Some("0"));
+    assert!(port.reason.starts_with("any free port"), "{}", port.reason);
+    let line = plan.command_line(Shell::Posix);
+    assert_eq!(
+        line.args[..5],
+        [
+            "-m /nonexistent/qwen.gguf",
+            "--host 127.0.0.1",
+            "--port 0",
+            "--metrics",
+            "--parallel 1"
+        ]
     );
+}
+
+/// The path of the stand-in engine, as a plan names it.
+fn stand_in(runtime: RuntimeKind) -> String {
+    RuntimeBinaries::stand_in()
+        .for_runtime(runtime)
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// A plan of `spec` with the engines at `binaries`.
+fn planned_at(spec: ModelLaunchSpec, binaries: &RuntimeBinaries) -> LaunchPlan {
+    plan_launch(
+        spec,
+        binaries,
+        &ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+        None,
+        None,
+        &LaunchOverrides::default(),
+        Loaded::NOTHING,
+    )
+    .expect("plans")
+}
+
+/// An image model, to plan sd-server's launch.
+fn image_spec() -> ModelLaunchSpec {
+    ModelLaunchSpec {
+        image_family: Some(ImageFamily::Flux1),
+        ..launch_spec(9, "flux")
+    }
+}
+
+/// The program is the engine the launch runs, by its path: gglib's own
+/// engines are in its data folder, on nobody's PATH, so a line naming
+/// `llama-server` bare starts nothing when pasted (#2025). In a folder with
+/// a space, as a home folder can be.
+#[test]
+fn the_program_is_the_path_of_the_engine_the_launch_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().join("My Engines");
+    std::fs::create_dir_all(&folder).unwrap();
+    let binaries = RuntimeBinaries {
+        llama: folder.join("llama-server"),
+        sd: folder.join("sd-server"),
+    };
+    std::fs::write(&binaries.llama, "").unwrap();
+    std::fs::write(&binaries.sd, "").unwrap();
+
+    let chat = planned_at(launch_spec(3, "qwen"), &binaries);
+    assert_eq!(chat.program, binaries.llama.to_string_lossy());
+    assert_eq!(chat.not_installed, None);
+
+    let image = planned_at(image_spec(), &binaries);
+    assert_eq!(image.program, binaries.sd.to_string_lossy());
+    assert_eq!(image.not_installed, None);
+}
+
+/// An engine that is not installed is still named where gglib would run it
+/// from, and the plan says it is not there in the words a load that tried
+/// would fail with, which a surface shows in the line's place.
+#[test]
+fn an_engine_not_installed_is_said_in_the_words_a_load_would_fail_with() {
+    // Nothing is installed under this binary's own data root, so the
+    // llama-server a launch falls back to is not there either.
+    gglib_core::paths::isolate_data_root();
+    let dir = tempfile::tempdir().unwrap();
+    let binaries = RuntimeBinaries {
+        llama: dir.path().join("llama-server"),
+        sd: dir.path().join("sd-server"),
+    };
+    for (spec, runtime) in [
+        (launch_spec(3, "qwen"), RuntimeKind::Llama),
+        (image_spec(), RuntimeKind::StableDiffusion),
+    ] {
+        let binary = binaries.for_runtime(runtime);
+        let plan = planned_at(spec, &binaries);
+        assert_eq!(plan.program, binary.to_string_lossy(), "{runtime:?}");
+        assert_eq!(
+            plan.not_installed,
+            Some(
+                crate::engine::NotWorking::when_started(
+                    runtime,
+                    binary,
+                    gglib_core::utils::process::bounded::Failure::NotFound
+                )
+                .to_string()
+            ),
+            "{runtime:?}"
+        );
+    }
 }
 
 /// The context flag's source is the rung that chose it: asked for, this
@@ -272,7 +373,7 @@ fn an_image_models_plan_is_sd_servers_command_with_no_fit() {
 
     let plan = planned(spec, ServerConfigOptions::default());
 
-    assert_eq!(plan.program, "sd-server");
+    assert_eq!(plan.program, stand_in(RuntimeKind::StableDiffusion));
     assert!(plan.fit.is_none(), "an image model has no context");
     let unexplained: Vec<&str> = plan
         .args
@@ -288,7 +389,7 @@ fn an_image_models_plan_is_sd_servers_command_with_no_fit() {
     );
     assert_eq!(by_flag("--vae").source, ChoiceSource::You);
     assert_eq!(by_flag("--vae").decision, "parts");
-    assert_eq!(by_flag("--listen-port").value.as_deref(), Some("auto"));
+    assert_eq!(by_flag("--listen-port").value.as_deref(), Some("0"));
     assert_eq!(by_flag("--steps").decision, "recipe");
     assert!(
         plan.narration.decisions.iter().any(|d| d.label == "family"),
@@ -335,6 +436,7 @@ fn a_global_default_context_is_yours() {
     let overrides = LaunchOverrides::default();
     let plan = plan_launch(
         launch_spec(3, "qwen"),
+        &RuntimeBinaries::stand_in(),
         &ServerConfigOptions::default(),
         CacheRamSetting::Auto,
         None,
@@ -375,7 +477,11 @@ fn every_image_familys_command_is_explained() {
                 ..launch_spec(11, "image")
             };
             let plan = planned(spec, ServerConfigOptions::default());
-            assert_eq!(plan.program, "sd-server", "{family:?} {file}");
+            assert_eq!(
+                plan.program,
+                stand_in(RuntimeKind::StableDiffusion),
+                "{family:?} {file}"
+            );
             assert_eq!(
                 unexplained(&plan),
                 Vec::<&str>::new(),

@@ -222,8 +222,14 @@ impl ModelRuntimePort for Runtime {
         default_ctx: Option<u64>,
         overrides: &LaunchOverrides,
     ) -> Result<gglib_core::domain::LaunchPlan, ModelRuntimeError> {
+        // This test binary as both engines: a file that is there.
+        let this = std::env::current_exe().expect("the test binary's path");
         gglib_runtime::process::residency::explain::plan_launch(
             spec.clone(),
+            &gglib_runtime::process::RuntimeBinaries {
+                llama: this.clone(),
+                sd: this,
+            },
             &gglib_core::server_config::ServerConfigOptions::default(),
             gglib_core::cache_config::CacheRamSetting::Auto,
             num_ctx,

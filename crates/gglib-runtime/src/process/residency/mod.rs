@@ -23,6 +23,7 @@ use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
+use crate::process::RuntimeBinaries;
 use crate::process::admission::{
     AdmissionDecision, AdmissionQueue, Candidate, PRIMARY_SLOT, Resident, Ticket, launch_timeout,
 };
@@ -250,6 +251,9 @@ impl ResidentSet {
     /// The launch gglib would make for `spec` now, without making it: the
     /// resolutions a launch of it runs, over the other models loaded now.
     ///
+    /// The engine is the one of `binaries` for the model's runtime: the
+    /// binaries the process core launches from.
+    ///
     /// No pin check and no preflight: this says what a load would be, and
     /// a file that is missing is the inspector's to name. A pin on this
     /// model layers its overrides as a launch would; a pin on another model
@@ -261,6 +265,7 @@ impl ResidentSet {
     pub(super) fn plan(
         &self,
         spec: &ModelLaunchSpec,
+        binaries: &RuntimeBinaries,
         num_ctx: Option<u64>,
         default_ctx: Option<u64>,
         overrides: &LaunchOverrides,
@@ -277,6 +282,7 @@ impl ResidentSet {
         let others = others_for_a_primary_launch(residents, spec.id);
         explain::plan_launch(
             spec.clone(),
+            binaries,
             &self.template_for(spec.id),
             self.cache_ram,
             num_ctx,

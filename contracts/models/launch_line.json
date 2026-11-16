@@ -1,7 +1,7 @@
 [
   {
     "plan": {
-      "program": "llama-server",
+      "program": "/Users/m/Library/Application Support/gglib/.llama/bin/llama-server",
       "args": [
         {
           "flag": "-m",
@@ -19,7 +19,7 @@
         },
         {
           "flag": "--port",
-          "value": "auto",
+          "value": "0",
           "decision": "port",
           "source": "gglib",
           "reason": "why"
@@ -84,11 +84,11 @@
     "commands": [
       {
         "shell": "posix",
-        "program": "llama-server",
+        "program": "'/Users/m/Library/Application Support/gglib/.llama/bin/llama-server'",
         "args": [
           "-m /models/qwen3-4b.gguf",
           "--host 127.0.0.1",
-          "--port auto",
+          "--port 0",
           "--metrics",
           "--parallel 1",
           "-c 32768",
@@ -97,15 +97,15 @@
           "--cache-type-v q8_0",
           "--reasoning-format deepseek"
         ],
-        "line": "llama-server -m /models/qwen3-4b.gguf --host 127.0.0.1 --port auto --metrics --parallel 1 -c 32768 --jinja --cache-type-k q8_0 --cache-type-v q8_0 --reasoning-format deepseek"
+        "line": "'/Users/m/Library/Application Support/gglib/.llama/bin/llama-server' -m /models/qwen3-4b.gguf --host 127.0.0.1 --port 0 --metrics --parallel 1 -c 32768 --jinja --cache-type-k q8_0 --cache-type-v q8_0 --reasoning-format deepseek"
       },
       {
         "shell": "powershell",
-        "program": "llama-server",
+        "program": "& '/Users/m/Library/Application Support/gglib/.llama/bin/llama-server'",
         "args": [
           "-m /models/qwen3-4b.gguf",
           "--host 127.0.0.1",
-          "--port auto",
+          "--port 0",
           "--metrics",
           "--parallel 1",
           "-c 32768",
@@ -114,13 +114,13 @@
           "--cache-type-v q8_0",
           "--reasoning-format deepseek"
         ],
-        "line": "llama-server -m /models/qwen3-4b.gguf --host 127.0.0.1 --port auto --metrics --parallel 1 -c 32768 --jinja --cache-type-k q8_0 --cache-type-v q8_0 --reasoning-format deepseek"
+        "line": "& '/Users/m/Library/Application Support/gglib/.llama/bin/llama-server' -m /models/qwen3-4b.gguf --host 127.0.0.1 --port 0 --metrics --parallel 1 -c 32768 --jinja --cache-type-k q8_0 --cache-type-v q8_0 --reasoning-format deepseek"
       }
     ]
   },
   {
     "plan": {
-      "program": "llama-server",
+      "program": "/opt/gglib/.llama/bin/llama-server",
       "args": [
         {
           "flag": "-m",
@@ -191,7 +191,7 @@
     "commands": [
       {
         "shell": "posix",
-        "program": "llama-server",
+        "program": "/opt/gglib/.llama/bin/llama-server",
         "args": [
           "-m '/Users/m/Library/Application Support/gglib/a b.gguf'",
           "--mmproj '/it'\\''s/mmproj.gguf'",
@@ -202,11 +202,11 @@
           "-ot 'blk\\.\\d+\\.ffn_.*=CPU'",
           "--override-kv k=v,a+b%c:d@e"
         ],
-        "line": "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf' --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv k=v,a+b%c:d@e"
+        "line": "/opt/gglib/.llama/bin/llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf' --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv k=v,a+b%c:d@e"
       },
       {
         "shell": "powershell",
-        "program": "llama-server",
+        "program": "/opt/gglib/.llama/bin/llama-server",
         "args": [
           "-m '/Users/m/Library/Application Support/gglib/a b.gguf'",
           "--mmproj '/it''s/mmproj.gguf'",
@@ -217,13 +217,13 @@
           "-ot 'blk\\.\\d+\\.ffn_.*=CPU'",
           "--override-kv 'k=v,a+b%c:d@e'"
         ],
-        "line": "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it''s/mmproj.gguf' --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv 'k=v,a+b%c:d@e'"
+        "line": "/opt/gglib/.llama/bin/llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it''s/mmproj.gguf' --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv 'k=v,a+b%c:d@e'"
       }
     ]
   },
   {
     "plan": {
-      "program": "sd-server",
+      "program": "/Users/m/Library/Application Support/gglib/.sd/bin/sd-server",
       "args": [
         {
           "flag": "--diffusion-model",
@@ -248,7 +248,7 @@
         },
         {
           "flag": "--listen-port",
-          "value": "auto",
+          "value": "0",
           "decision": "port",
           "source": "gglib",
           "reason": "why"
@@ -273,51 +273,51 @@
     "commands": [
       {
         "shell": "posix",
-        "program": "sd-server",
+        "program": "'/Users/m/Library/Application Support/gglib/.sd/bin/sd-server'",
         "args": [
           "--diffusion-model /m/flux1-schnell-q8_0.gguf",
           "--vae /m/ae.safetensors",
           "--listen-ip 127.0.0.1",
-          "--listen-port auto",
+          "--listen-port 0",
           "--steps 4"
         ],
-        "line": "sd-server --diffusion-model /m/flux1-schnell-q8_0.gguf --vae /m/ae.safetensors --listen-ip 127.0.0.1 --listen-port auto --steps 4"
+        "line": "'/Users/m/Library/Application Support/gglib/.sd/bin/sd-server' --diffusion-model /m/flux1-schnell-q8_0.gguf --vae /m/ae.safetensors --listen-ip 127.0.0.1 --listen-port 0 --steps 4"
       },
       {
         "shell": "powershell",
-        "program": "sd-server",
+        "program": "& '/Users/m/Library/Application Support/gglib/.sd/bin/sd-server'",
         "args": [
           "--diffusion-model /m/flux1-schnell-q8_0.gguf",
           "--vae /m/ae.safetensors",
           "--listen-ip 127.0.0.1",
-          "--listen-port auto",
+          "--listen-port 0",
           "--steps 4"
         ],
-        "line": "sd-server --diffusion-model /m/flux1-schnell-q8_0.gguf --vae /m/ae.safetensors --listen-ip 127.0.0.1 --listen-port auto --steps 4"
+        "line": "& '/Users/m/Library/Application Support/gglib/.sd/bin/sd-server' --diffusion-model /m/flux1-schnell-q8_0.gguf --vae /m/ae.safetensors --listen-ip 127.0.0.1 --listen-port 0 --steps 4"
       }
     ]
   },
   {
     "plan": {
-      "program": "llama-server",
+      "program": "C:\\Users\\Jane Doe\\AppData\\Local\\gglib\\.llama\\bin\\llama-server.exe",
       "args": [
         {
           "flag": "-m",
-          "value": "C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf",
+          "value": "C:\\Users\\Jane Doe\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf",
           "decision": "model",
           "source": "model_author",
           "reason": "why"
         },
         {
           "flag": "--mmproj",
-          "value": "C:\\Users\\m\\My Models\\mmproj-F16.gguf",
+          "value": "C:\\Users\\Jane Doe\\My Models\\mmproj-F16.gguf",
           "decision": "images",
           "source": "you",
           "reason": "why"
         },
         {
           "flag": "--port",
-          "value": "auto",
+          "value": "0",
           "decision": "port",
           "source": "gglib",
           "reason": "why"
@@ -335,23 +335,72 @@
     "commands": [
       {
         "shell": "posix",
-        "program": "llama-server",
+        "program": "'C:\\Users\\Jane Doe\\AppData\\Local\\gglib\\.llama\\bin\\llama-server.exe'",
         "args": [
-          "-m 'C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf'",
-          "--mmproj 'C:\\Users\\m\\My Models\\mmproj-F16.gguf'",
-          "--port auto"
+          "-m 'C:\\Users\\Jane Doe\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf'",
+          "--mmproj 'C:\\Users\\Jane Doe\\My Models\\mmproj-F16.gguf'",
+          "--port 0"
         ],
-        "line": "llama-server -m 'C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf' --mmproj 'C:\\Users\\m\\My Models\\mmproj-F16.gguf' --port auto"
+        "line": "'C:\\Users\\Jane Doe\\AppData\\Local\\gglib\\.llama\\bin\\llama-server.exe' -m 'C:\\Users\\Jane Doe\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf' --mmproj 'C:\\Users\\Jane Doe\\My Models\\mmproj-F16.gguf' --port 0"
       },
       {
         "shell": "powershell",
-        "program": "llama-server",
+        "program": "& 'C:\\Users\\Jane Doe\\AppData\\Local\\gglib\\.llama\\bin\\llama-server.exe'",
+        "args": [
+          "-m 'C:\\Users\\Jane Doe\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf'",
+          "--mmproj 'C:\\Users\\Jane Doe\\My Models\\mmproj-F16.gguf'",
+          "--port 0"
+        ],
+        "line": "& 'C:\\Users\\Jane Doe\\AppData\\Local\\gglib\\.llama\\bin\\llama-server.exe' -m 'C:\\Users\\Jane Doe\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf' --mmproj 'C:\\Users\\Jane Doe\\My Models\\mmproj-F16.gguf' --port 0"
+      }
+    ]
+  },
+  {
+    "plan": {
+      "program": "C:\\Users\\m\\AppData\\Local\\gglib\\.llama\\bin\\llama-server.exe",
+      "args": [
+        {
+          "flag": "-m",
+          "value": "C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf",
+          "decision": "model",
+          "source": "model_author",
+          "reason": "why"
+        },
+        {
+          "flag": "--port",
+          "value": "0",
+          "decision": "port",
+          "source": "gglib",
+          "reason": "why"
+        }
+      ],
+      "narration": {
+        "model_name": "m",
+        "quantization": null,
+        "weights_bytes": 0,
+        "decisions": [],
+        "fit": null
+      },
+      "fit": null
+    },
+    "commands": [
+      {
+        "shell": "posix",
+        "program": "'C:\\Users\\m\\AppData\\Local\\gglib\\.llama\\bin\\llama-server.exe'",
+        "args": [
+          "-m 'C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf'",
+          "--port 0"
+        ],
+        "line": "'C:\\Users\\m\\AppData\\Local\\gglib\\.llama\\bin\\llama-server.exe' -m 'C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf' --port 0"
+      },
+      {
+        "shell": "powershell",
+        "program": "C:\\Users\\m\\AppData\\Local\\gglib\\.llama\\bin\\llama-server.exe",
         "args": [
           "-m C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf",
-          "--mmproj 'C:\\Users\\m\\My Models\\mmproj-F16.gguf'",
-          "--port auto"
+          "--port 0"
         ],
-        "line": "llama-server -m C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf --mmproj 'C:\\Users\\m\\My Models\\mmproj-F16.gguf' --port auto"
+        "line": "C:\\Users\\m\\AppData\\Local\\gglib\\.llama\\bin\\llama-server.exe -m C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf --port 0"
       }
     ]
   }
