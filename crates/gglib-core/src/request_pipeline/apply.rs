@@ -157,3 +157,7 @@ mod live_shape_probe {
 #[cfg(test)]
 #[path = "apply_tests.rs"]
 mod apply_tests;
+
+#[cfg(test)]
+#[path = "apply_thinking_off_tests.rs"]
+mod apply_thinking_off_tests;
