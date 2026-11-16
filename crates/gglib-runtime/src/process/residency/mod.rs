@@ -731,7 +731,7 @@ fn prepare(
     // reports as in effect — filters by the same call.
     let fit_on = !gglib_core::debug_switches::enabled("GGLIB_DISABLE_CONTEXT_FIT");
     prepare_with(
-        fit_on,
+        fit_on.then(crate::system::fit_memory),
         spec,
         template,
         cache_ram,
@@ -741,10 +741,11 @@ fn prepare(
     )
 }
 
-/// [`prepare`], told whether the context fit is on rather than reading the
-/// switch, so both answers can be tested.
+/// [`prepare`], told the memory the context is fitted against, or `None`
+/// with the fit switched off, rather than reading the switch and the
+/// machine, so every answer can be tested on any machine.
 fn prepare_with(
-    fit_on: bool,
+    fit_memory: Option<crate::system::FitMemory>,
     spec: ModelLaunchSpec,
     template: &ServerConfigOptions,
     cache_ram: CacheRamSetting,
@@ -795,8 +796,9 @@ fn prepare_with(
     // full-ceiling secondary could never have loaded anyway. Known
     // consequence, deliberate: the served context is non-monotonic in
     // device size.
-    let fit = fit_on.then(|| {
-        let (fitted, inputs) = explain::explain_fit(
+    let fit = fit_memory.map(|memory| {
+        let (fitted, inputs) = explain::explain_fit_against(
+            memory,
             spec.context_length,
             Some(spec.file_size_bytes),
             spec.kv_shape,
@@ -890,6 +892,9 @@ mod launch_sd_tests;
 #[cfg(test)]
 #[path = "load_failure_tests.rs"]
 mod load_failure_tests;
+#[cfg(test)]
+#[path = "machine_fit_tests.rs"]
+mod machine_fit_tests;
 #[cfg(test)]
 #[path = "observe_tests.rs"]
 mod observe_tests;

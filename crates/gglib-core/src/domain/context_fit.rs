@@ -102,6 +102,10 @@ pub fn fit_context(
 pub struct FitInputs {
     /// Device memory the fit was allowed to spend against.
     pub budget_bytes: Option<u64>,
+    /// The machine's system RAM, when it has no GPU and `budget_bytes` is a
+    /// share of that RAM; `None` when the budget is a GPU's memory or none
+    /// was read. Set by the caller that chose the budget, never here.
+    pub system_ram_bytes: Option<u64>,
     /// The model's weights, summed across shards, plus its projector.
     pub weights_bytes: Option<u64>,
     /// The KV cache at the resolved types, which [`KvBytes::at`] sizes at
@@ -144,6 +148,7 @@ pub fn fit_context_explained(
 
     let inputs = FitInputs {
         budget_bytes,
+        system_ram_bytes: None,
         weights_bytes: weights,
         kv,
         trained_ctx,

@@ -36,6 +36,11 @@ pub(super) async fn run(handle: &DaemonHandle, model_id: i64) {
     for line in lines {
         println!("{line}");
     }
+    if proved.is_ok()
+        && let Some(line) = served_context(handle, model_id).await
+    {
+        println!("{line}");
+    }
     if proved.is_err() {
         // A failed proof leaves the endpoint `up` just started running.
         let (dim, reset) = if use_color() { (DIM, RESET) } else { ("", "") };
@@ -52,6 +57,15 @@ pub(super) async fn run(handle: &DaemonHandle, model_id: i64) {
         }
         Err(e) => println!("  The daemon did not say how a client connects: {e}"),
     }
+}
+
+/// The context the model was served at and what it was sized against, in
+/// the daemon's own sentence, the one the inspector shows under the model's
+/// name: `Fits this machine's 7.9 GiB of RAM (no GPU) with 16K context, of
+/// 40K trained.` Nothing when the daemon does not say.
+async fn served_context(handle: &DaemonHandle, model_id: i64) -> Option<String> {
+    let explanation = handle.explain_model(model_id, None).await.ok()??;
+    Some(format!("  {}", explanation.plan.fit?.sentence))
 }
 
 /// What to run once `up` is done, as data: the endpoint keeps serving on the

@@ -124,17 +124,11 @@ const SECONDARY_SLOT_RESERVE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// The caller falls back to the undivided device when reserving would mean no
 /// fit at all — see `ResidentSet::admit`.
 ///
-/// `None` when gglib cannot read the device's memory — see
-/// [`crate::system::total_device_memory_bytes`].
+/// Applied to the figure [`crate::system::fit_memory`] answers, whatever
+/// memory it is: a GPU's, or with no GPU a share of the machine's RAM.
+/// Lifted into a parameter so it can be asserted without a GPU.
 #[must_use]
-pub(super) fn fit_budget_for() -> Option<u64> {
-    Some(fit_budget_from(crate::system::total_device_memory_bytes()?))
-}
-
-/// The arithmetic, with the hardware reading lifted into a parameter so it can
-/// be asserted without a GPU.
-#[must_use]
-fn fit_budget_from(total: u64) -> u64 {
+pub(super) fn fit_budget_from(total: u64) -> u64 {
     // Only top up what the utilisation margin does not already leave free.
     //
     // `fit_context` spends at most `BUDGET_UTILISATION` of what it is given, so
