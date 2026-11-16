@@ -4,6 +4,7 @@ pub mod bounded;
 pub mod detached;
 pub mod host;
 pub mod stop;
+pub mod tied;
 
 use std::ffi::OsStr;
 

@@ -17,6 +17,7 @@ use crate::pidfile::{delete_pidfile, write_pidfile};
 use crate::sd::build_and_spawn_sd;
 use anyhow::{Result, anyhow};
 use gglib_core::domain::RuntimeKind;
+use gglib_core::utils::process::tied::tie_to_this_process;
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -98,6 +99,17 @@ impl GuiProcessCore {
             SpawnConfig::Llama(llama) => build_and_spawn(Some(binary), llama, port)?,
             SpawnConfig::Sd(sd) => build_and_spawn_sd(binary, sd, port)?,
         };
+        // So it ends with this process even if this process dies without
+        // its teardown (#1985).
+        if let Err(e) = tie_to_this_process(&child) {
+            warn!(
+                model_id = %model_id,
+                runtime = runtime.label(),
+                error = %e,
+                "the server is not tied to this process: if gglib dies without its teardown, \
+                 it keeps running until the next start"
+            );
+        }
         let pid = child
             .id()
             .ok_or_else(|| anyhow!("Failed to get child PID"))?;

@@ -20,6 +20,12 @@ This module provides shared infrastructure for managing llama-server and
 - `check_http_health` / `wait_for_http_health` - Health checks, at each runtime's own path
 - `shutdown_child` / `kill_pid` (`shutdown/`) - Stopping a server: SIGTERM, then SIGKILL with a bounded wait
 
+`GuiProcessCore::spawn` ties each server it starts to this process with
+`gglib_core::utils::process::tied::tie_to_this_process`. On Windows a
+kill-on-close job ends the server when this process ends, however it ends;
+on macOS and Linux its process group, the teardown and the startup sweep
+stop it.
+
 # Residency and admission
 
 `ProcessManager` routes; [`ResidentSet`] (`residency/`) owns the state. M9
