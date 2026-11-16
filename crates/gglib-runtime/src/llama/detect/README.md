@@ -27,9 +27,10 @@ one for building llama.cpp.
 4. **CPU** — no GPU at all: the build runs, slowly, and says so
 
 A Vulkan GPU whose build packages are missing is refused, with the
-packages to install, rather than built for the CPU. On Linux a GPU is a
-device (a DRM render node, NVIDIA's device node, or WSL2's `/dev/dxg`) with
-a Vulkan driver's ICD manifest, not only the Vulkan loader, which many
+packages to install, rather than built for the CPU. Whether a Vulkan GPU
+is there is decided once, in `system::vulkan_devices`, for this choice and
+the downloads alike: a GPU the Vulkan driver lists, or one the operating
+system shows with a Vulkan driver, not only the Vulkan loader, which many
 systems install with no GPU or driver for it to drive.
 
 <!-- module-docs:end -->
