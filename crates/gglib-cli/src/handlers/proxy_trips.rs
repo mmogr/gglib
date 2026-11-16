@@ -23,6 +23,8 @@ use gglib_core::domain::loop_guard_log::{
 use gglib_db::SqliteLoopGuardTripLog;
 
 use crate::bootstrap::CliContext;
+use crate::presentation::table_layout::{Column, Shorten, Table};
+use crate::presentation::terminal::stdout_width;
 
 /// Execute `gglib proxy trips`.
 pub(crate) async fn execute(ctx: &CliContext, since_days: u32) -> Result<()> {
@@ -31,7 +33,12 @@ pub(crate) async fn execute(ctx: &CliContext, since_days: u32) -> Result<()> {
         .unwrap_or_default()
         .as_secs();
     let days = read(&ctx.loop_guard_trips, since_days, now).await?;
-    render(&mut std::io::stdout().lock(), &days, since_days)?;
+    render(
+        &mut std::io::stdout().lock(),
+        &days,
+        since_days,
+        stdout_width(),
+    )?;
     Ok(())
 }
 
@@ -45,8 +52,14 @@ async fn read(
     Ok(log.summary(first_day_of_window(now, since_days)).await?)
 }
 
-/// Print the days as a table, or say that there were none.
-fn render(out: &mut impl Write, days: &[LoopGuardTripDay], since_days: u32) -> std::io::Result<()> {
+/// Print the days as a table fitted to `width`, or whole when there is
+/// none, or say that there were none.
+fn render(
+    out: &mut impl Write,
+    days: &[LoopGuardTripDay],
+    since_days: u32,
+    width: Option<usize>,
+) -> std::io::Result<()> {
     let window = since_days.clamp(1, LOOP_GUARD_LOG_RETENTION_DAYS);
     if days.is_empty() {
         writeln!(
@@ -57,36 +70,33 @@ fn render(out: &mut impl Write, days: &[LoopGuardTripDay], since_days: u32) -> s
         return Ok(());
     }
     // MODEL and VERSION are as wide as their widest value, so an rc version
-    // or a long model name never pushes its row out of line.
-    let width = |header: &str, cell: fn(&LoopGuardTripDay) -> &str| {
-        days.iter()
-            .map(|d| cell(d).chars().count())
-            .max()
-            .unwrap_or(0)
-            .max(header.len())
-    };
-    let model_w = width("MODEL", |d| &d.model_name);
-    let version_w = width("VERSION", |d| &d.gglib_version);
-    writeln!(out, "The loop guard's log, the last {window} day(s):")?;
-    writeln!(
-        out,
-        "{:<10}  {:<model_w$}  {:<version_w$}  {:>7}  {:>5}  {:>5}  {:>6}  {:>8}",
-        "DAY (UTC)", "MODEL", "VERSION", "SCANNED", "TRIPS", "LOOPS", "STAGN.", "SESSIONS"
-    )?;
+    // or a long model name never pushes its row out of line. In a narrow
+    // terminal the day, the model, the trips and the scans stay longest.
+    let mut table = Table::new(vec![
+        Column::new("DAY (UTC)").pad(10),
+        Column::new("MODEL").shorten(Shorten::End { min: 12 }),
+        Column::new("VERSION").droppable(1),
+        Column::new("SCANNED").right().pad(7).droppable(5),
+        Column::new("TRIPS").right().pad(5).droppable(6),
+        Column::new("LOOPS").right().pad(5).droppable(4),
+        Column::new("STAGN.").right().pad(6).droppable(3),
+        Column::new("SESSIONS").right().pad(8).droppable(2),
+    ])
+    .gap(2);
     for d in days {
-        writeln!(
-            out,
-            "{:<10}  {:<model_w$}  {:<version_w$}  {:>7}  {:>5}  {:>5}  {:>6}  {:>8}",
-            d.day,
-            d.model_name,
-            d.gglib_version,
-            d.scanned,
-            d.trips,
-            d.loops,
-            d.stagnations,
-            d.sessions
-        )?;
+        table.row(vec![
+            d.day.clone(),
+            d.model_name.clone(),
+            d.gglib_version.clone(),
+            d.scanned.to_string(),
+            d.trips.to_string(),
+            d.loops.to_string(),
+            d.stagnations.to_string(),
+            d.sessions.to_string(),
+        ]);
     }
+    writeln!(out, "The loop guard's log, the last {window} day(s):")?;
+    write!(out, "{}", table.lay_out(width).text())?;
     writeln!(
         out,
         "\nA trip is the guard's decision, not a delivery: a noted request can still fail \

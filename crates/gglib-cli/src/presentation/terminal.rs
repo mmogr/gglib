@@ -13,6 +13,12 @@ pub(crate) fn stdout_width() -> Option<usize> {
     width_of(&console::Term::stdout())
 }
 
+/// The width of standard error, in columns, while it is a terminal: for a
+/// table printed there.
+pub(crate) fn stderr_width() -> Option<usize> {
+    width_of(&console::Term::stderr())
+}
+
 /// `term`'s width; `console` answers `None` for a stream that is not a
 /// terminal, on every OS.
 fn width_of(term: &console::Term) -> Option<usize> {

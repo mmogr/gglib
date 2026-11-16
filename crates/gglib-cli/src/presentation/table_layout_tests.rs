@@ -307,7 +307,12 @@ fn a_path_is_shortened_in_the_middle() {
     assert_eq!(shorten_path("/a/b/model.gguf", 40), "/a/b/model.gguf");
     assert_eq!(shorten_path("/a/b/model.gguf", 14), "/a…/model.gguf");
     assert_eq!(shorten_path("/a/b/model.gguf", 13), "/…/model.gguf");
-    // A file name wider than the room is cut at its end.
-    assert_eq!(shorten_path("/a/b/model.gguf", 6), "model…");
+    // A file name wider than the room is cut in its middle, keeping its
+    // start and its ending.
+    assert_eq!(shorten_path("/a/b/model.gguf", 6), "mo…guf");
+    assert_eq!(
+        shorten_path("/m/DeepSeek-R1-Distill-Qwen-32B-Instruct-Q4_K_M.gguf", 32),
+        "DeepSeek-R1-Dis…ruct-Q4_K_M.gguf"
+    );
     assert!(display_width(&shorten_path(r"D:\模型\通义千问\qwen.gguf", 15)) <= 15);
 }

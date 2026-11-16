@@ -56,13 +56,10 @@ fn the_id_column_is_as_wide_as_the_widest_id() {
     let lines: Vec<&str> = table.lines().collect();
     assert_eq!(lines[0].find("Name"), lines[2].find("small"), "{table}");
     assert_eq!(lines[2].find("small"), lines[3].find("big"), "{table}");
-    // The rule spans the wider id column and the `Model ID` column, eight
-    // wide for rows named by nothing.
-    assert_eq!(
-        lines[1].len(),
-        137 + 4 + 9,
-        "the rule spans the wider column"
-    );
+    // The rule is as wide as the table: out to the end of its widest row,
+    // the one with the longer path.
+    assert_eq!(lines[1].len(), lines[2].len(), "the rule spans the table");
+    assert_eq!(Some(lines[1].len()), lines.iter().map(|l| l.len()).max());
     assert!(lines[2].starts_with("3    "), "{table}");
     assert!(lines[3].starts_with("1000 "), "{table}");
 }
@@ -73,7 +70,10 @@ fn short_ids_get_a_column_three_wide() {
     let table = render_table(&[model(3, "small")], None);
 
     assert!(table.starts_with("ID  Name"), "{table}");
-    assert_eq!(table.lines().nth(1).map(str::len), Some(140 + 9));
+    assert_eq!(
+        table.lines().nth(1).map(str::len),
+        table.lines().nth(2).map(str::len)
+    );
 }
 
 /// The paired machine's line follows the table.
@@ -167,10 +167,9 @@ fn the_draws_column_names_the_family_and_what_it_needs() {
     for row in &lines[2..] {
         assert_eq!(row.find("2026-10-01"), Some(added), "{table}");
     }
-    assert_eq!(
-        lines[1].len(),
-        133 + 3 + "Model ID".len() + "Flux.1, needs VAE, T5-XXL".len()
-    );
+    // The rule is as wide as the table, out to the widest path.
+    assert_eq!(lines[1].len(), lines[3].len(), "{table}");
+    assert!(lines[3].ends_with("/models/qwen-image.gguf"), "{table}");
 }
 
 /// A library of three models, each added a day after the one before:
@@ -214,13 +213,14 @@ async fn printed(ops: &ModelOps, flags: &[&str]) -> String {
     listing(&fetch_models(ops, &args).await.unwrap(), None, None)
 }
 
-/// The listing with no flags, whole: newest first, every column.
+/// The listing with no flags, whole, as a pipe gets it: newest first,
+/// every column, the rule out to the widest path.
 #[tokio::test]
 async fn the_library_is_listed_newest_first() {
     let dir = tempfile::tempdir().unwrap();
     let ctx = three_models(dir.path()).await;
 
-    let rule = "-".repeat(149);
+    let rule = "-".repeat(147);
     assert_eq!(
         printed(&one_shot_model_ops(&ctx), &[]).await,
         format!(

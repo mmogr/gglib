@@ -9,6 +9,8 @@ use gglib_core::domain::runs::{RunInfo, RunStatus};
 use super::text::{delta_text, past_snapshot};
 use crate::daemon_client::DaemonHandle;
 use crate::daemon_client::runs::RunItem;
+use crate::presentation::table_layout::{Column, Shorten, Table};
+use crate::presentation::terminal::stdout_width;
 
 /// A status as a person reads it.
 const fn word(status: RunStatus) -> &'static str {
@@ -40,24 +42,32 @@ pub(super) async fn list(daemon: &DaemonHandle) -> Result<()> {
         eprintln!("  No runs. `gglib run start --model <m> \"…\"` starts one.");
         return Ok(());
     }
-    println!(
-        "{:<18} {:<10} {:<9} {:>6}  MODEL",
-        "ID", "STATUS", "STARTED", "EVENTS"
-    );
+    // In a narrow terminal the id and the status stay; the event count goes
+    // first, then when it started, and the model is shortened before it goes.
+    let mut table = Table::new(vec![
+        Column::new("ID").pad(18),
+        Column::new("STATUS").pad(10),
+        Column::new("STARTED").pad(9).droppable(2),
+        Column::new("EVENTS").right().pad(6).droppable(1),
+        Column::new("MODEL")
+            .shorten(Shorten::End { min: 12 })
+            .droppable(3),
+    ]);
     for run in &runs {
         let model = run.model.as_deref().unwrap_or("-");
         let from = run
             .device
             .as_deref()
             .map_or_else(String::new, |d| format!("  (from {d})"));
-        println!(
-            "{:<18} {:<10} {:<9} {:>6}  {model}{from}",
-            run.id,
-            word(run.status),
+        table.row(vec![
+            run.id.clone(),
+            word(run.status).to_owned(),
             clock(run.created_at_ms),
-            run.last_seq
-        );
+            run.last_seq.to_string(),
+            format!("{model}{from}"),
+        ]);
     }
+    print!("{}", table.lay_out(stdout_width()).text());
     Ok(())
 }
 
