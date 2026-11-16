@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 use super::llama_events::{
     BuildEnding, CLONING, DownloadEnding, render_build_events, render_install_events,
 };
-use crate::utils::input;
+use crate::utils::input::{self, Unasked};
 use gglib_core::domain::RuntimeKind;
 use gglib_core::paths::{gglib_data_dir, llama_cpp_dir, llama_server_path};
 use gglib_runtime::llama::{
@@ -106,7 +106,7 @@ pub(super) async fn build_from_source(agreed: bool, ending: BuildEnding) -> Resu
         for line in preflight_lines(acceleration, &install_dir) {
             println!("{line}");
         }
-        go_ahead(input::prompt_confirmation_default_yes("Continue?")?)?;
+        go_ahead(input::yes_no("Continue?", true, nothing_built())?)?;
     }
 
     // Steps 4-7: delegate to the pure streaming core.
@@ -133,6 +133,15 @@ pub(super) fn go_ahead(agreed: bool) -> Result<()> {
         bail!("Installation cancelled.");
     }
     Ok(())
+}
+
+/// What a source build's "Continue?" comes to with nobody to ask: no build,
+/// and the flag that agrees to one.
+pub(super) fn nothing_built() -> Unasked<bool> {
+    Unasked::Refuse(input::nobody_to_ask(
+        "nothing was built",
+        "--yes to build it",
+    ))
 }
 
 /// What is said of a Vulkan build that cannot start: each of its four

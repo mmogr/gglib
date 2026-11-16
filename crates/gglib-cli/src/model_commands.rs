@@ -46,6 +46,13 @@ pub enum ModelCommand {
         /// part of the upsert at all.
         #[arg(long = "reimport")]
         reimport: bool,
+        /// Parameter count (in billions), so it is not asked
+        ///
+        /// Without it, a terminal is asked, offering the count the file
+        /// gives; with no terminal, that count is taken, and an add of a file
+        /// that gives none is refused.
+        #[arg(long, conflicts_with = "reimport")]
+        param_count: Option<f64>,
         /// An image model's components, linked once the file is added.
         #[command(flatten)]
         components: ComponentArgs,

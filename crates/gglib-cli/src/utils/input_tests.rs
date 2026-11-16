@@ -234,6 +234,24 @@ fn at_a_terminal_the_end_of_input_is_no_or_the_stated_answer() {
     assert_eq!(asked_on, "Count [4.0]: \n");
 }
 
+/// With nothing stated, the end of a terminal's input ends the question
+/// with an error. It was once asked again for ever, the end of input read
+/// as an empty line each time.
+#[test]
+fn at_a_terminal_the_end_of_input_with_nothing_stated_is_an_error() {
+    let (answer, asked_on, _) = number(
+        Input::Terminal,
+        "abc\n",
+        Unasked::Refuse(REFUSED.to_owned()),
+    );
+
+    assert_eq!(
+        answer.expect_err("nothing typed").to_string(),
+        "Nothing was typed in answer to \"Count\"."
+    );
+    assert_eq!(asked_on, "Count: \nCount: \n");
+}
+
 /// The sentence a question nobody can answer is refused with.
 #[test]
 fn the_refusal_says_what_was_not_done_and_the_flag_that_does_it() {

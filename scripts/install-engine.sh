@@ -43,12 +43,14 @@ if [ -z "$GGLIB_BIN" ]; then
     exit 1
 fi
 
-echo "Running: $GGLIB_BIN config $ENGINE install"
 if [ -t 0 ]; then
+    echo "Running: $GGLIB_BIN config $ENGINE install"
     "$GGLIB_BIN" config "$ENGINE" install
 else
     # No terminal to answer the command's "Continue?" (make run from a script
-    # or CI). This script was run to install, so answer yes: end of input
-    # alone would cancel, and the make target would fail.
-    printf 'y\n' | "$GGLIB_BIN" config "$ENGINE" install
+    # or CI), and the command asks only a terminal: with nobody to ask it
+    # refuses the build, and the make target would fail. This script was run
+    # to install, so it answers yes ahead of time.
+    echo "Running: $GGLIB_BIN config $ENGINE install --yes"
+    "$GGLIB_BIN" config "$ENGINE" install --yes
 fi

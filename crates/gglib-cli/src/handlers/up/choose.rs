@@ -184,7 +184,14 @@ fn print_recommendation(rec: &Recommendation) {
 fn confirm() -> Result<bool> {
     require_tty("the download")?;
     println!();
-    input::prompt_confirmation("Download this model now?")
+    input::yes_no(
+        "Download this model now?",
+        false,
+        input::Unasked::Refuse(input::nobody_to_ask(
+            "nothing was downloaded",
+            "--yes to download it",
+        )),
+    )
 }
 
 /// Offer the download accelerator before the first download runs.

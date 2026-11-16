@@ -162,7 +162,10 @@ Binary version: version: 0.8.0-dev (build 11960, commit 8642541b2)
   source build is never replaced by a CPU-only download without `--force`.
 - `--force` installs the pin whatever is there, taking the download over a
   source build unless `--build` is given too.
-- `uninstall` removes the engine. `llama detect` reports the GPU
+- A source build asks before it starts; `-y` / `--yes` answers it, and with
+  no terminal to ask it is needed.
+- `uninstall` removes the engine, asking first; with no terminal to ask it
+  needs `-y` / `--yes`. `llama detect` reports the GPU
   acceleration this machine offers and whether a source build is ready to
   run.
 - Neither engine is installed or removed while the daemon that serves this
@@ -173,7 +176,7 @@ Binary version: version: 0.8.0-dev (build 11960, commit 8642541b2)
   and the pin when what is installed is older. `make setup` installs both
   without asking, the image runtime after llama.cpp and skipped with a line
   if it fails; a source build, where one is needed, still asks before it
-  starts at a terminal.
+  starts at a terminal, and is told yes with `--yes` where there is none.
 
 The image runtime has its own page:
 [Stable Diffusion](../../crates/gglib-runtime/src/sd/README.md).

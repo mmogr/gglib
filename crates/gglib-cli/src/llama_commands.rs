@@ -20,6 +20,9 @@ pub enum LlamaCommand {
         /// Build from source instead of downloading pre-built binaries
         #[arg(long)]
         build: bool,
+        /// Answer yes to a source build's confirmation, so nothing is asked
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 
     /// Show what is installed, and where it stands against the pinned release
@@ -85,7 +88,16 @@ mod tests {
             parsed(&["gglib", "config", "llama", "install", "--force", "--build"]),
             LlamaCommand::Install {
                 force: true,
-                build: true
+                build: true,
+                yes: false
+            }
+        ));
+        assert!(matches!(
+            parsed(&["gglib", "config", "llama", "install", "-y"]),
+            LlamaCommand::Install {
+                force: false,
+                build: false,
+                yes: true
             }
         ));
     }

@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 
 use super::engine;
 use super::llama_events::{render_build_events, render_install_events};
-use super::llama_install::go_ahead;
+use super::llama_install::{go_ahead, nothing_built};
 use crate::sd_commands::SdCommand;
 use crate::utils::input;
 use gglib_core::domain::{EngineState, RuntimeKind};
@@ -35,8 +35,8 @@ const NOW_USABLE: &str = "You can now serve an image model with 'gglib serve <mo
 /// Dispatch an `sd` sub-command to its handler.
 pub(crate) async fn dispatch(command: SdCommand) -> Result<()> {
     match command {
-        SdCommand::Install { force, build } => {
-            engine::install(RuntimeKind::StableDiffusion, force, build).await
+        SdCommand::Install { force, build, yes } => {
+            engine::install(RuntimeKind::StableDiffusion, force, build, yes).await
         }
         SdCommand::Status => {
             for line in status_lines(&sd_status()?) {
@@ -77,7 +77,7 @@ pub(super) async fn build_from_source(agreed: bool) -> Result<()> {
         for line in build_lines(acceleration) {
             println!("{line}");
         }
-        go_ahead(input::prompt_confirmation_default_yes("Continue?")?)?;
+        go_ahead(input::yes_no("Continue?", true, nothing_built())?)?;
     }
 
     let (tx, rx) = mpsc::channel::<BuildEvent>(64);

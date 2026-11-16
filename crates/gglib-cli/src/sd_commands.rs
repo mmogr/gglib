@@ -19,6 +19,9 @@ pub enum SdCommand {
         /// Force building from source instead of downloading pre-built binaries
         #[arg(long)]
         build: bool,
+        /// Answer yes to a source build's confirmation, so nothing is asked
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 
     /// Show what is installed, and where it stands against the pinned release
@@ -62,18 +65,28 @@ mod tests {
             parsed(&argv),
             SdCommand::Install {
                 force: false,
-                build: false
+                build: false,
+                yes: false
             }
         ));
     }
 
     #[test]
-    fn install_takes_force_and_build() {
+    fn install_takes_force_build_and_yes() {
         assert!(matches!(
             parsed(&["gglib", "config", "sd", "install", "--force", "--build"]),
             SdCommand::Install {
                 force: true,
-                build: true
+                build: true,
+                yes: false
+            }
+        ));
+        assert!(matches!(
+            parsed(&["gglib", "config", "sd", "install", "-y"]),
+            SdCommand::Install {
+                force: false,
+                build: false,
+                yes: true
             }
         ));
     }

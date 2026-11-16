@@ -14,7 +14,7 @@ use super::{download, resolver};
 use crate::bootstrap::CliContext;
 use crate::daemon_client;
 use crate::presentation::short_sha;
-use crate::utils::input;
+use crate::utils::input::{self, Unasked};
 
 /// Execute the verify command.
 ///
@@ -216,7 +216,8 @@ pub(crate) async fn execute_repair(
         println!("  • Delete corrupt or missing model files");
         println!("  • Re-download them from HuggingFace");
         println!();
-        if !input::prompt_confirmation("Proceed?")? {
+        let refused = input::nobody_to_ask("nothing was repaired", "--yes to repair it");
+        if !input::yes_no("Proceed?", false, Unasked::Refuse(refused))? {
             println!("Repair cancelled.");
             return Ok(());
         }

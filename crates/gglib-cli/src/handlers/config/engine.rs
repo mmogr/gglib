@@ -39,9 +39,9 @@ enum Telling {
 
 /// `gglib config <engine> install`, which `update` is too: install the
 /// pinned release when what is there is missing or older, and with `force`
-/// whatever is there. `build` asks for a source build; `force` also stands
-/// for the user's yes to one.
-pub(super) async fn install(kind: RuntimeKind, force: bool, build: bool) -> Result<()> {
+/// whatever is there. `build` asks for a source build; `yes` is the user's
+/// yes to one, and so is `force`.
+pub(super) async fn install(kind: RuntimeKind, force: bool, build: bool, yes: bool) -> Result<()> {
     let state = pin_state(kind)?;
     if !force && !state.standing.wants_install() {
         for line in nothing_to_do_lines(&state, build) {
@@ -56,7 +56,7 @@ pub(super) async fn install(kind: RuntimeKind, force: bool, build: bool) -> Resu
     for line in plan_lines(kind, &plan) {
         println!("{line}");
     }
-    run(kind, &plan, force, Telling::Command).await
+    run(kind, &plan, force || yes, Telling::Command).await
 }
 
 /// Make sure `kind` is there before a command needs it: offer the install
@@ -269,10 +269,17 @@ pub(super) async fn uninstall(kind: RuntimeKind, yes: bool) -> Result<()> {
         bail!(removal_refusal(kind, &model));
     }
     if !yes
-        && !input::prompt_confirmation(&format!(
-            "This will remove {product} and {}. Continue?",
-            kind.server_name()
-        ))?
+        && !input::yes_no(
+            &format!(
+                "This will remove {product} and {}. Continue?",
+                kind.server_name()
+            ),
+            false,
+            input::Unasked::Refuse(input::nobody_to_ask(
+                &format!("{product} was not removed"),
+                "--yes to remove it",
+            )),
+        )?
     {
         println!("Uninstall cancelled.");
         return Ok(());

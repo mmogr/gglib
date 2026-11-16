@@ -6,7 +6,7 @@
 //! the same conversation if the user wants to continue it.
 
 use std::env;
-use std::io::{self, IsTerminal};
+use std::io;
 
 use anyhow::{Result, anyhow};
 
@@ -23,6 +23,7 @@ use crate::handlers::agent_chat::resume_settings::require_a_model;
 use crate::handlers::agent_chat::turn::Shown;
 use crate::shared_args::ChatSamplingArgs;
 use crate::target::Target;
+use crate::utils::input::Input;
 
 /// System prompt for a question asked with its tools.
 const SYSTEM_PROMPT: &str = "\
@@ -209,7 +210,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     // are in an interactive terminal.  Skip when:
     //   - quiet mode (--quiet) — script-friendly output
     //   - stdin is not a TTY (piped input) — would read garbage or hang
-    let interactive = !quiet && io::stdin().is_terminal();
+    let interactive = !quiet && Input::stdin() == Input::Terminal;
 
     if !completed {
         return Err(anyhow!("agent did not produce a final answer"));

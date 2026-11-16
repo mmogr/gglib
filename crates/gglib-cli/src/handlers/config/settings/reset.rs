@@ -11,7 +11,7 @@ use anyhow::Result;
 use gglib_core::ports::SettingsReset;
 
 use crate::bootstrap::CliContext;
-use crate::utils::input::prompt_confirmation;
+use crate::utils::input::{Unasked, nobody_to_ask, yes_no};
 
 /// What a reset leaves alone, as the prompt and the result say it.
 const KEPT: &str = "the machine this one joined, the devices it admits, \
@@ -19,9 +19,14 @@ const KEPT: &str = "the machine this one joined, the devices it admits, \
 
 pub(crate) async fn handle_reset(ctx: &CliContext, yes: bool) -> Result<()> {
     if !yes
-        && !prompt_confirmation(&format!(
-            "Reset every preference to its default? Kept: {KEPT}."
-        ))?
+        && !yes_no(
+            &format!("Reset every preference to its default? Kept: {KEPT}."),
+            false,
+            Unasked::Refuse(nobody_to_ask(
+                "nothing was reset",
+                "--yes to reset every preference",
+            )),
+        )?
     {
         println!("Reset cancelled.");
         return Ok(());

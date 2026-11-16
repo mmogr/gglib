@@ -17,7 +17,7 @@ use super::{resolver, update_components, update_projector};
 use crate::bootstrap::CliContext;
 use crate::component_args::request_components;
 use crate::sampling_params::clear_param;
-use crate::utils::input;
+use crate::utils::input::{self, Unasked};
 
 /// Arguments for the update command.
 #[derive(Debug, Clone)]
@@ -89,7 +89,13 @@ pub(crate) async fn execute(ctx: &CliContext, ops: &ModelOps, args: UpdateArgs) 
             file_path = %existing_model.file_path.display(),
             "Model file no longer exists"
         );
-        if !args.dry_run && !input::prompt_confirmation("Continue with metadata update anyway?")? {
+        if !args.dry_run
+            && !input::yes_no(
+                "Continue with metadata update anyway?",
+                false,
+                Unasked::Refuse(not_updated()),
+            )?
+        {
             println!("Update cancelled.");
             return Ok(());
         }
@@ -118,7 +124,11 @@ pub(crate) async fn execute(ctx: &CliContext, ops: &ModelOps, args: UpdateArgs) 
     // Confirm the changes unless --yes answered already
     if !args.yes {
         println!();
-        if !input::prompt_confirmation("Apply these changes?")? {
+        if !input::yes_no(
+            "Apply these changes?",
+            false,
+            Unasked::Refuse(not_updated()),
+        )? {
             println!("Update cancelled.");
             return Ok(());
         }
@@ -129,6 +139,11 @@ pub(crate) async fn execute(ctx: &CliContext, ops: &ModelOps, args: UpdateArgs) 
 
     println!("✓ Model updated successfully!");
     Ok(())
+}
+
+/// What an update says when there is nobody to confirm it.
+fn not_updated() -> String {
+    input::nobody_to_ask("the model was not updated", "--yes to update it")
 }
 
 /// Parse metadata updates from command line arguments.
