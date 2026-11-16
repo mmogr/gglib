@@ -67,8 +67,10 @@ impl Dependency {
 }
 
 /// GPU hardware detection result.
+///
+/// The default is a machine with no GPU gglib can use.
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GpuInfo {
     /// NVIDIA GPU hardware detected (via nvidia-smi, lspci, etc.).
     pub has_nvidia_gpu: bool,

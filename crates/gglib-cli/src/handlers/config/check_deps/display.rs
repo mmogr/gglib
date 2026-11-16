@@ -7,6 +7,11 @@ use crate::presentation::style::{BOLD, DANGER, RESET, SUCCESS, WARNING};
 
 /// Print a single dependency row in the status table.
 pub(super) fn print_dependency(dep: &Dependency) {
+    println!("{}", dependency_row(dep));
+}
+
+/// A single dependency row of the status table.
+fn dependency_row(dep: &Dependency) -> String {
     let status_str = match &dep.status {
         DependencyStatus::Present { version } => {
             if version.is_empty() {
@@ -33,10 +38,10 @@ pub(super) fn print_dependency(dep: &Dependency) {
         " ".to_string()
     };
 
-    println!(
+    format!(
         "{}{:<19} {:<25} {}",
         req_indicator, dep.name, status_str, dep.description
-    );
+    )
 }
 
 /// Print GPU detection status and recommendations.
@@ -115,6 +120,24 @@ mod tests {
             Dependency::required("test", "Test dependency").with_status(DependencyStatus::Missing);
 
         print_dependency(&dep);
+    }
+
+    /// C11: a probe that found something without a version, such as Metal,
+    /// printed as "✓ vavailable".
+    #[test]
+    fn a_word_where_a_version_would_be_takes_no_v() {
+        let available =
+            Dependency::optional("Metal", "Apple GPU").with_status(DependencyStatus::Present {
+                version: "available".to_string(),
+            });
+        let row = dependency_row(&available);
+        assert!(row.contains("✓ available"), "{row}");
+
+        let versioned =
+            Dependency::required("cmake", "Build").with_status(DependencyStatus::Present {
+                version: "3.28.1".to_string(),
+            });
+        assert!(dependency_row(&versioned).contains("✓ v3.28.1"));
     }
 
     #[test]
