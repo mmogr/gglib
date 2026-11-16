@@ -486,7 +486,8 @@ jobs:
       # The installer and the zip carry both programs, and neither may need
       # the Visual C++ Redistributable (#1959, A1). tauri-build links the
       # app's Visual C++ runtime statically by default
-      # (`build > windows > staticVCRuntime`).
+      # (`build > windows > staticVCRuntime`), and .cargo/config.toml links
+      # the CLI's whole C runtime statically.
       - name: Check the app and its CLI need no Visual C++ runtime
         if: runner.os == 'Windows'
         run: python scripts/check_pe_imports.py target/${{ matrix.target }}/release/gglib.exe target/${{ matrix.target }}/release/gglib-gui.exe

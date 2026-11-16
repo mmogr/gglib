@@ -15,6 +15,8 @@ fn main() {
     // Building the command tree takes more than 1 MB in a debug build
     // (mmogr/gglib#1969), so `gglib.exe` asks for the 8 MB the others have.
     // The target is read from cargo: a build script is compiled for the host.
+    // The static C runtime, the other Windows build setting, is a compile
+    // flag for every crate and so lives in .cargo/config.toml.
     let target = |key: &str| env::var(format!("CARGO_CFG_TARGET_{key}")).unwrap_or_default();
     if target("OS") == "windows" && target("ENV") == "msvc" {
         println!("cargo:rustc-link-arg-bins=/STACK:8388608");

@@ -580,9 +580,9 @@ jobs:
         uses: actions/checkout@v7
 
       # Its own shared-key per target, and only main saves; the rust-prelude
-      # action says why. Main runs this job when Cargo.lock or the toolchain
-      # moves, so the key the next pull requests restore is saved there. The
-      # Linux leg builds one crate and needs no disk freed.
+      # action says why. Main runs this job when Cargo.lock, the toolchain or
+      # .cargo/config.toml moves, so the key the next pull requests restore is
+      # saved there. The Linux leg builds one crate and needs no disk freed.
       - name: Rust prelude
         uses: ./.github/actions/rust-prelude
         with:
@@ -843,8 +843,9 @@ jobs:
   # printed no result, which crashed or was stopped by the step's time limit.
   #
   # As `clippy-cross-os`: when `scope` says so, and after ubuntu clippy. Main
-  # runs it when Cargo.lock or the toolchain moves, which is when its cache
-  # is saved, so the 90 minutes are for a pull request's cold build.
+  # runs it when Cargo.lock, the toolchain or .cargo/config.toml moves, which
+  # is when its cache is saved, so the 90 minutes are for a pull request's
+  # cold build.
   test-cross-os:
     name: Test (${{ matrix.target }})
     runs-on: ${{ matrix.os }}

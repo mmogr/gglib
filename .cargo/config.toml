@@ -1,0 +1,21 @@
+# Build settings every cargo invocation in this checkout takes: CI, the
+# release, `make` and a contributor's own `cargo build`.
+
+# Windows: link the C runtime statically, so gglib.exe and gglib-gui.exe start
+# on a machine without the Visual C++ Redistributable (#1959, A1). The `cc`
+# crate reads this flag and builds the C dependencies (SQLite, zstd, ring,
+# aws-lc, BLAKE3) with /MT to match. It is a compile flag for every crate, so
+# it cannot live in a build script; gglib-cli's build.rs keeps the
+# Windows link settings that belong to its binary alone. tauri-build then
+# switches the desktop app back to Windows' own Universal C Runtime
+# (`build > windows > staticVCRuntime`), which is part of Windows 10 and 11.
+#
+# rustdoc does not take `rustflags`, so the doctests, which link the same C
+# objects, are given the flag through `rustdocflags`.
+#
+# RUSTFLAGS in the environment replaces this table rather than adding to it,
+# and RUSTDOCFLAGS its `rustdocflags`. scripts/check_pe_imports.py, in CLI
+# Check and in release.yml, fails a build that lost the flag.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]
+rustdocflags = ["-C", "target-feature=+crt-static"]
