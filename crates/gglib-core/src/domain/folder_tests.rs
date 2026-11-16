@@ -1,13 +1,27 @@
 //! The two rules a chat's folder is made by: where `gglib chat` was
-//! launched, never home or the root, and what a person chose, once it is an
-//! absolute path to a folder.
+//! launched, never home or a system folder, and what a person chose, once
+//! it is an absolute path to a folder. Which folders are system folders is
+//! `places_tests`'.
 
 use std::path::{Path, PathBuf};
 
 use super::*;
+use crate::host::HostOs;
 
 fn canonical(path: &Path) -> PathBuf {
     crate::paths::canonical(path).expect("a path that resolves")
+}
+
+/// The folder of a chat launched in `cwd` on this OS with `home` as its
+/// home folder and no Windows folders named; `None` where none is adopted.
+fn launched_in(cwd: &Path, home: Option<&Path>) -> Option<PathBuf> {
+    let places = Places {
+        os: HostOs::current(),
+        home: home.map(Path::to_path_buf),
+        windows_dir: None,
+        program_files: Vec::new(),
+    };
+    launched_on(cwd, &places.resolved()).ok()
 }
 
 #[test]
@@ -23,12 +37,39 @@ fn a_chat_launched_in_a_folder_inside_home_reads_that_folder() {
 }
 
 #[test]
-fn a_chat_launched_in_home_or_the_root_reads_nothing() {
+fn a_chat_launched_in_home_reads_nothing_and_says_it_is_home() {
     let home = tempfile::tempdir().unwrap();
+    let places = Places {
+        os: HostOs::current(),
+        home: Some(home.path().to_path_buf()),
+        windows_dir: None,
+        program_files: Vec::new(),
+    }
+    .resolved();
 
     assert_eq!(launched_in(home.path(), Some(home.path())), None);
-    assert_eq!(launched_in(Path::new("/"), Some(home.path())), None);
-    assert_eq!(launched_in(Path::new("/"), None), None);
+    assert_eq!(launched_on(home.path(), &places), Err(NotAdopted::Home));
+}
+
+/// A system folder is refused and named canonical: a tempdir stands in for
+/// the Windows directory, which is a value, so this runs on every OS.
+#[test]
+fn a_chat_launched_in_a_system_folder_reads_nothing_and_names_it() {
+    let windows = tempfile::tempdir().unwrap();
+    let system32 = windows.path().join("System32");
+    std::fs::create_dir(&system32).unwrap();
+    let places = Places {
+        os: HostOs::Windows,
+        home: None,
+        windows_dir: Some(windows.path().to_path_buf()),
+        program_files: Vec::new(),
+    }
+    .resolved();
+
+    assert_eq!(
+        launched_on(&system32, &places),
+        Err(NotAdopted::System(canonical(&system32)))
+    );
 }
 
 #[test]

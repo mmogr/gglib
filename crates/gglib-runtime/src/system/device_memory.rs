@@ -169,7 +169,7 @@ const fn read_amd_vram_bytes() -> Option<u64> {
     clippy::cast_sign_loss,
     clippy::cast_possible_truncation
 )]
-pub(super) fn unified_share(total_ram_bytes: u64) -> u64 {
+pub(in crate::system) fn unified_share(total_ram_bytes: u64) -> u64 {
     (total_ram_bytes as f64 * super::super::UNIFIED_MEMORY_GPU_SHARE) as u64
 }
 
@@ -201,7 +201,7 @@ pub(super) fn other_gpu_memory_bytes(total_ram_bytes: u64) -> (Option<u64>, bool
 
 /// The decision, over a plain struct.
 ///
-/// Lifted out of the probe for the same reason `device_budget_of` is: the
+/// Lifted out of the probe for the same reason `fit_memory_of` is: the
 /// interesting part is one branch of policy, and it should be assertable
 /// without the hardware it describes.
 fn budget_for(device: &VulkanDevice, total_ram_bytes: u64) -> Option<u64> {

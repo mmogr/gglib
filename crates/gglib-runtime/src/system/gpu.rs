@@ -16,7 +16,8 @@ use crate::llama::vulkan_status;
 #[path = "device_memory.rs"]
 mod device_memory;
 
-use device_memory::{other_gpu_memory_bytes, unified_share};
+use device_memory::other_gpu_memory_bytes;
+pub(super) use device_memory::unified_share;
 
 /// Detect GPU hardware and acceleration software.
 pub(crate) fn detect_gpu_info() -> GpuInfo {
@@ -178,9 +179,14 @@ pub(crate) fn get_available_ram_bytes() -> u64 {
 
 /// Get system memory information for model fit calculations.
 pub(crate) fn get_system_memory_info() -> SystemMemoryInfo {
+    memory_info_for(&detect_gpu_info())
+}
+
+/// [`get_system_memory_info`] for the GPU `gpu_info` already found, so a
+/// caller that needs both probes the GPU once.
+pub(crate) fn memory_info_for(gpu_info: &GpuInfo) -> SystemMemoryInfo {
     let sys = System::new_all();
     let total_ram_bytes = sys.total_memory();
-    let gpu_info = detect_gpu_info();
 
     let (gpu_memory_bytes, is_unified_memory) = if gpu_info.has_metal {
         // Apple Silicon: unified memory architecture.

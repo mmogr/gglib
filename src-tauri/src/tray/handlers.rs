@@ -101,8 +101,14 @@ fn spawn_service(app: AppHandle) {
         let snapshot = state.snapshot.read().await.clone();
         let start = !items::is_on(ids::SERVICE_SWITCH, &snapshot);
 
-        let result = if start {
-            state.daemon.restart().await
+        if start {
+            // A start that joined a launch in flight reports nothing: that
+            // launch's owner reports its failure, once.
+            let started = state.daemon.restart().await;
+            report(
+                &app,
+                started.failure_to_report(lifecycle::is_shutting_down()),
+            );
         } else {
             if !confirm::stop_service(&app, &snapshot) {
                 return;
@@ -110,31 +116,25 @@ fn spawn_service(app: AppHandle) {
 
             state.daemon.request_shutdown().await;
             state.daemon.wait_for_exit(lifecycle::TEARDOWN_WAIT).await;
-            Ok(())
-        };
-
-        report(&app, result, start, "Could not start gglib");
+        }
 
         state.refresh.now();
     });
 }
 
-/// Log the service switch's outcome, and put a failed *start* on screen.
+/// Log a failed start, and put it on screen.
 ///
 /// Starting is where the interesting failures live — a port already in use, no
 /// `gglib` binary to launch — and the daemon's own message names both the
-/// cause and the fix, so it is shown verbatim. Stopping is left to the log: a
+/// cause and the fix, so it is shown verbatim. Stopping is left alone: a
 /// failure there means the thing the user wanted gone is already gone.
-fn report(app: &AppHandle, result: Result<(), String>, start: bool, title: &str) {
-    let Err(e) = result else {
+fn report(app: &AppHandle, failure: Option<String>) {
+    let Some(e) = failure else {
         return;
     };
 
-    error!(error = %e, start, "Tray service action failed");
-
-    if start {
-        confirm::report_failure(app, title, &e);
-    }
+    error!(error = %e, "Tray service start failed");
+    confirm::report_failure(app, "Could not start gglib", &e);
 }
 
 /// Bring the main window forward and send it to Settings › General.
@@ -158,7 +158,11 @@ fn confirm_quit(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
         let snapshot = state.snapshot.read().await.clone();
-        let ends_with_the_app = state.daemon.ownership.ends_with_the_app();
+        // Whose the daemon is matters only when something is at stake; asked
+        // otherwise (nothing is, during a launch) it would hold the quit, with
+        // the windows on screen, until the launch settles.
+        let ends_with_the_app = confirm::at_stake(&snapshot).is_some()
+            && state.daemon.ownership().await.ends_with_the_app();
 
         if !confirm::quit(&app, &snapshot, ends_with_the_app) {
             return;

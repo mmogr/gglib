@@ -278,7 +278,7 @@ impl ProxySupervisor {
         // Whether a launch with nothing configured reaches the fitted rung or
         // falls through to the floor. Read here because this crate owns the
         // probe and `gglib-proxy` cannot depend on it.
-        let device_memory_readable = crate::system::total_device_memory_bytes().is_some();
+        let device_memory_readable = crate::system::fit_memory().budget_bytes().is_some();
         let cache_enabled = config.cache_enabled;
         let slot_dir = config.slot_dir;
         let disk_budget = config.disk_budget;

@@ -15,8 +15,7 @@ stands in for.
 | 2. Engines | [`ensure_installed`](crate::handlers::config::engine::ensure_installed) for llama.cpp, as `gglib serve` uses, then for stable-diffusion.cpp, which is optional: skipping or failing it never stops `up` |
 | 3. Model | [`gglib_core::domain::recommend`], then `DownloadManagerPort::queue_smart` + the shared interactive monitor; the model becomes the default when none is set, so `gglib q` needs no `-m` after `up` |
 | 4. Proxy | [`start_or_leave`](crate::handlers::inference::proxy::start_or_leave): the unpinned endpoint as the stored settings describe it, as the service's own launch starts it; an endpoint already on otherwise (one model, another port) is left as it is and said so, with `gglib proxy` as the way back, never asked about and never switched by `-y` |
-| 5. Warm-up | the daemon's proof request (`POST /api/proxy/prove`) and client block (`GET /api/proxy/clients`), printed as answered; the same two `gglib proxy test` prints |
-
+| 5. Warm-up | the daemon's proof request (`POST /api/proxy/prove`), the context it was served at in the daemon's fit sentence (`GET /api/models/{id}/explain`), and client block (`GET /api/proxy/clients`), printed as answered; the proof and the client block are the two `gglib proxy test` prints |
 
 ## Why the warm-up is an HTTP request
 

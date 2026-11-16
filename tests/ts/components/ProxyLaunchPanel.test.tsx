@@ -19,6 +19,7 @@ const fit: LaunchFit = {
   source: plan.source,
   fitted: plan.fitted,
   budget_bytes: plan.budgetBytes,
+  system_ram_bytes: plan.systemRamBytes,
   weights_bytes: plan.weightsBytes,
   kv_bytes_per_token: plan.kvBytesPerToken,
   kv_bytes: plan.kvBytes,

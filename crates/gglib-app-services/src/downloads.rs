@@ -38,10 +38,12 @@ pub struct DownloadDeps {
 
 /// The memory a download that names no variant must fit.
 ///
-/// The device's: the figure a launch fits its context against
-/// ([`gglib_runtime::system::total_device_memory_bytes`]). A machine whose
-/// device memory cannot be read, a CPU-only one among them, runs a model from
-/// its RAM, so then the system's RAM ([`crate::settings::system_memory`]).
+/// The GPU's ([`gglib_runtime::system::total_device_memory_bytes`]). A
+/// machine whose GPU memory cannot be read, or that has no GPU, runs a model
+/// from its RAM, so then the system's whole RAM
+/// ([`crate::settings::system_memory`]); a launch on a machine with no GPU
+/// fits its context against a share of that RAM
+/// ([`gglib_runtime::system::fit_memory`]).
 /// `None` when neither can be read, and the download then takes the smallest
 /// variant.
 ///

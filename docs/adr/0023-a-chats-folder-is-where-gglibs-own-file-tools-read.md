@@ -146,6 +146,23 @@ chose for the same chat survives a `--continue` unread. `gglib q` is
 unchanged: it keeps its working directory as the root, its own prompt line and
 no home guard.
 
+> **Amended 2026-11-16.** "Home or `/`" is now home or a system folder, and
+> `gglib q` follows the same rule (#1959, finding C6: a Windows terminal
+> opened from the Start menu or as administrator starts in
+> `C:\Windows\System32`, and a chat there read it). `folder::adopted` is the
+> rule on values: a canonical folder and a `Places` (the OS as a `HostOs`,
+> the home folder, and on Windows `%SystemRoot%` and the Program Files
+> folders, read from the environment), compared through
+> `gglib_core::paths::inside_on`, without case on Windows and macOS. The
+> lists are in `crates/gglib-core/src/domain/folder_places.rs`; they err
+> towards adopting, so on Windows only the root of the drive Windows is on is
+> refused; another drive's root, refused before as every root was, is
+> adopted. The lines are `Files: off in your home folder; …` and `Files: off
+> in <dir>, a system folder; cd into a project to read it, or --no-tools`.
+> `gglib q` says its line only when it reads no folder, and its prompt then
+> names no file tool and no folder. A folder the page chose is still read
+> wherever it is.
+
 ### 3. The page's folder is the person's explicit pick, and the daemon remembers it
 
 A run says `folder` beside `thinking` (`AgentRunRequest.folder`,

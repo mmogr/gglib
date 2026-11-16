@@ -8,7 +8,7 @@
 //! [`usable_share`] of the budget), and this only spells it.
 
 use super::context_fit::FitInputs;
-use super::launch_narration::{LaunchDecision, bytes_as_gib};
+use super::launch_narration::{LaunchDecision, bytes_as_gib, format_gib};
 use super::launch_plan::ContextFit;
 use super::recommendation::usable_share;
 use crate::download::format::format_size;
@@ -30,6 +30,7 @@ impl ContextFit {
             source,
             fitted,
             budget_bytes: inputs.budget_bytes,
+            system_ram_bytes: inputs.system_ram_bytes,
             weights_bytes: inputs.weights_bytes,
             kv_bytes_per_token: inputs.kv.map(|kv| kv.per_token),
             kv_bytes: inputs.kv.map(|kv| kv.at(serves_at)),
@@ -60,6 +61,8 @@ impl ContextFit {
 /// - `Fits this machine with 32K context, of 128K trained.`
 /// - `Serves at 64K context, of 128K trained; 32K fits this machine.`
 /// - `Fits this machine with 64K context, more than the 32K it was trained for.`
+/// - `Fits this machine's 7.9 GiB of RAM (no GPU) with 16K context, of 40K
+///   trained.`: no GPU, so the context was sized to RAM.
 /// - `Serves at 4K context; gglib could not fit one to this machine: …`,
 ///   naming each figure the fit was missing.
 ///
@@ -77,19 +80,30 @@ pub(crate) fn fit_sentence(fit: &ContextFit) -> String {
             format!(", of {} trained", tokens(t))
         }
     });
+    let machine = machine(fit);
     match (fit.fitted, memory(fit)) {
         (None, _) => format!(
-            "Serves at {at} context{trained}; gglib could not fit one to this machine{}.",
+            "Serves at {at} context{trained}; gglib could not fit one to {machine}{}.",
             missing(fit)
         ),
         (Some(_), Some(m)) if m.fits() => {
-            format!("Fits this machine with {at} context{trained}.")
+            format!("Fits {machine} with {at} context{trained}.")
         }
         (Some(fitted), _) => format!(
-            "Serves at {at} context{trained}; {} fits this machine.",
+            "Serves at {at} context{trained}; {} fits {machine}.",
             tokens(fitted)
         ),
     }
+}
+
+/// What the context was sized against, as the sentence names it: `this
+/// machine` for a GPU's memory, and for a machine with no GPU its RAM,
+/// `this machine's 7.9 GiB of RAM (no GPU)`.
+fn machine(fit: &ContextFit) -> String {
+    fit.system_ram_bytes.map_or_else(
+        || "this machine".to_owned(),
+        |ram| format!("this machine's {} of RAM (no GPU)", format_gib(ram)),
+    )
 }
 
 /// What the served context needs (the weights and a KV cache that size)
@@ -118,7 +132,14 @@ fn fit_figures(fit: &ContextFit) -> Vec<LaunchDecision> {
         .map(|note| LaunchDecision::bare("memory", note.clone()))
         .collect();
     rows.extend([
-        LaunchDecision::bare("device budget", gib(fit.budget_bytes)),
+        LaunchDecision::bare(
+            if fit.system_ram_bytes.is_some() {
+                "RAM budget"
+            } else {
+                "device budget"
+            },
+            gib(fit.budget_bytes),
+        ),
         LaunchDecision::bare("weights", gib(fit.weights_bytes)),
         LaunchDecision::bare("kv bytes/token", count(fit.kv_bytes_per_token)),
         LaunchDecision::bare("kv cache", gib(fit.kv_bytes)),

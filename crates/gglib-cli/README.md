@@ -92,8 +92,8 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `chat <id\|name>` | Chat with a model interactively: the daemon runs each turn, through the endpoint, as it runs the chat page's, and the flags named are saved with the chat |
 | `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on; refused while the daemon is still replying to it, for the web page or a paired device |
 | `chat … --thinking on\|off` | Switch the chat's Thinking on or off, as the chat page's switch does: the choice runs the session and the chat remembers it, on a new chat or with `--continue` |
-| `chat <id\|name>`, files | Reads files in the directory it was launched in, read-only, never home or `/`, and says which on one `Files:` stderr line; under `--tools`, name `read_file` to keep the file tools |
-| `q <text>` | Ask a question, with optional piped or file context; filesystem tools are on unless `--no-tools` |
+| `chat <id\|name>`, files | Reads files in the directory it was launched in, read-only, never home or a system folder (`/`, `/usr`, `C:\Windows\System32`, ...), and says which on one `Files:` stderr line; under `--tools`, name `read_file` to keep the file tools |
+| `q <text>` | Ask a question, with optional piped or file context; its file tools read the directory it was asked in by `chat`'s rule, and a question that reads none says why on one `Files:` stderr line; `--no-tools` for none |
 | `q --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
 | `chat history` | List past conversations with message counts, and the chat each branch was made from |
 | `image "<prompt>" [--size WxH] [--count N] [--seed S] [-m MODEL] [-o PATH] [--remote]` | Draw with this machine's image model through the daemon, or with `--remote` with the paired machine's (`-m` then names one of its models, and without it that machine's default draws); one live line (queued, loading, sampling step/total, decoding), each PNG saved to `PATH` or `gglib-<unix>.png`, `-1`, `-2`, … for more than one, and `[image WxH] <path>` printed for each |

@@ -30,4 +30,11 @@ read it asks the operating system: on Linux a GPU device node and a Vulkan
 driver's ICD manifest, on Windows a display adapter with a Vulkan driver
 registered. The Vulkan loader alone is not a GPU.
 
+`fit_memory.rs` decides what a context is sized against, the one answer
+every launch, every plan of one and the endpoint's advertisement read
+(`fit_memory()`): a GPU's memory as read; with no GPU at all, the share of
+total RAM a unified-memory GPU gets, since the model then runs from RAM; and
+no budget, a refusal, for a GPU whose memory cannot be read. A pure function
+of what was detected, so each case is tested on every OS.
+
 <!-- module-docs:end -->
