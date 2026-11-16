@@ -10,5 +10,5 @@
   },
   // eslint.config.js is deliberately absent: without allowJs, tsc would list it
   // and silently skip it, which reads as coverage that does not exist.
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "vitest.browser.config.ts"]
 }

@@ -609,6 +609,13 @@ npm run test:run     # Run Vitest suite
 npm run build        # Production build (required before integration tests)
 ```
 
+`npm run test:run` is the jsdom suite. `tests/ts/browser/` runs in real engines instead, Chromium and WebKit through Playwright; its README says why:
+
+```bash
+npx playwright install chromium webkit   # Once, and again when package-lock.json moves Playwright
+npm run test:browser                     # Run tests/ts/browser/ in both
+```
+
 ### Testing with feature flags
 
 Some crates have conditional compilation gated on feature flags. A plain `cargo test` will use default features. To test a specific feature combination:
@@ -772,6 +779,7 @@ A stable version's fixes ship without the next minor. Say `main` is on `0.30.0-r
 | `bindings` | `make bindings-check` | The committed TypeScript bindings are what the Rust types generate |
 | `rustdoc` | `scripts/doc_workspace.py -- --document-private-items --exclude gglib-app`, with `RUSTDOCFLAGS=-D warnings`, then `scripts/check_doc_links.py target/doc` | No rustdoc warning, and every link on each crate's front page (its README) is a URL or a file in the docs |
 | `test-frontend` | `npm run deadcode`, `npm run test:run` | No TypeScript file that nothing imports, and no unused or undeclared dependency; the frontend tests pass |
+| `test-browser` | `npx playwright install --with-deps chromium webkit`, `npm run test:browser` | The browser-engine tests in `tests/ts/browser/` pass in Chromium and WebKit, the versions the locked Playwright pins. `browser-edge.yml` runs them in Microsoft Edge on Windows weekly, and when run by hand |
 | `clippy` | `npm run build`, then `cargo clippy --all-targets --all-features -- -D warnings` | No Clippy warning on Linux |
 | `cli-cross-os` | `cargo test -p gglib-cli --no-run` on Linux, macOS and Windows; on each, `gglib-runtime`'s ignored tests against the pinned engines, and the llama-server recording, report-only; on macOS, the in-process engine's recording against the `llama-xcframework` action's framework, report-only | `gglib-cli` and its tests compile on each; every flag gglib passes is one the pinned engines take. The recordings' differences from `contracts/upstream/` show in the step summary without failing the job (see [The engine pins](#the-engine-pins)). When `scope`'s `cross_os` is true |
 | `clippy-cross-os` | `npm run build`, then `cargo clippy --all-targets --all-features -- -D warnings` on macOS and Windows | No Clippy warning on either, including in code only that OS compiles. When `scope`'s `cross_os` is true |
@@ -826,7 +834,7 @@ In practice: if your PR closes a fully-labelled issue, you'll rarely touch label
 
 Before requesting review, confirm each item:
 
-- [ ] `make pre-commit` passes locally: the Rust, frontend, architecture, bindings and rustdoc checks. It leaves out six CI jobs: the three cross-OS jobs, which run only in CI; `ios-check`, which `make ios-check` runs on macOS with Xcode; `ffi-apple`, which is `make ffi-xcframework-fast ffi-binding-check ffi-smoke` on macOS with Xcode; and `phone-llama`, which `make phone-llama engine-llama-test engine-llama-clippy` runs on macOS with Xcode and CMake.
+- [ ] `make pre-commit` passes locally: the Rust, frontend, architecture, bindings and rustdoc checks. It leaves out seven CI jobs: `test-browser`, which is `npm run test:browser` after `npx playwright install chromium webkit`; the three cross-OS jobs, which run only in CI; `ios-check`, which `make ios-check` runs on macOS with Xcode; `ffi-apple`, which is `make ffi-xcframework-fast ffi-binding-check ffi-smoke` on macOS with Xcode; and `phone-llama`, which `make phone-llama engine-llama-test engine-llama-clippy` runs on macOS with Xcode and CMake.
 - [ ] A new doc example compiles and passes as a doctest (`cargo test --doc` runs them alone).
 - [ ] Any new public type or enum has `///` doc comments on all items.
 - [ ] Any architectural change is documented with its module: in the README of a directory module, in the `//!` block of a single-file module. ASCII architecture diagrams belong in crate READMEs; prose API documentation does not.
