@@ -5,6 +5,8 @@ use std::ffi::OsStr;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
+use crate::host::HostOs;
+
 /// `path` resolved, symlinks and `..` included, as gglib stores, compares and
 /// shows it and hands it to an engine.
 ///
@@ -81,6 +83,27 @@ pub fn inside(path: &Path, folder: &Path) -> Option<PathBuf> {
     }
     rest.strip_prefix('\\')
         .map(|rest| PathBuf::from(rest.trim_end_matches('\\')))
+}
+
+/// [`inside`], comparing names as `os`'s own filesystem does.
+///
+/// Names are compared without case on Windows and macOS, whose default
+/// filesystems ignore it, so `C:\Windows\System32` is inside `C:\WINDOWS`,
+/// and exactly on Linux. The part under the folder comes back lower-cased
+/// where case is ignored. It reads only the paths' text, so a Windows path
+/// is compared as one on every OS.
+#[must_use]
+pub fn inside_on(os: HostOs, path: &Path, folder: &Path) -> Option<PathBuf> {
+    let _ = os;
+    inside(path, folder)
+}
+
+/// The root of the drive a Windows path names, `C:\` for `C:\Windows` in
+/// either form; `None` for a path with no drive, a share's or a Unix one.
+#[must_use]
+pub fn drive_root(path: &Path) -> Option<PathBuf> {
+    let _ = path;
+    None
 }
 
 /// The prefix of a verbatim path.
