@@ -12,6 +12,7 @@
 //! alone.
 
 use crate::app::AppState;
+use crate::dock;
 use gglib_axum::SHUTDOWN_WATCHDOG;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -68,6 +69,15 @@ pub(crate) fn request_shutdown(app: &AppHandle) {
         return;
     }
 
+    // Off the screen at once, on every OS the same way: what follows can wait
+    // for a launch in flight (its budget at most, to learn whether the daemon
+    // is this app's to stop) and then for the daemon's teardown, and a window
+    // left up meanwhile would look like a quit that did nothing.
+    for window in app.webview_windows().values() {
+        let _ = window.hide();
+    }
+    dock::hide(app);
+
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let state: tauri::State<'_, AppState> = app.state();
@@ -85,7 +95,9 @@ pub(crate) fn request_shutdown(app: &AppHandle) {
 ///
 /// Reach this through [`request_shutdown`] rather than calling it directly.
 async fn perform_shutdown(state: &AppState) {
-    let ownership = state.daemon.ownership;
+    // A quit during the launch waits for it (its budget at most), so a
+    // daemon this app has just spawned is not left behind as unclaimed.
+    let ownership = state.daemon.ownership().await;
 
     if !ownership.ends_with_the_app() {
         info!(

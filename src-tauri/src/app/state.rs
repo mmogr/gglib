@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use crate::daemon::{Daemon, DaemonSnapshot, Refresh};
+use crate::daemon::{Daemon, DaemonSnapshot, Launch, Refresh};
 #[cfg(target_os = "macos")]
 use crate::menu::AppMenu;
 use crate::tray::Tray;
@@ -40,16 +40,42 @@ pub(crate) struct AppState {
 }
 
 impl AppState {
-    /// Create a new application state around a connected daemon.
-    pub(crate) fn new(daemon: Arc<Daemon>) -> Self {
-        Self {
-            daemon,
+    /// The application state, and the launch of its daemon that `setup`
+    /// starts ([`Daemon::connect_or_launch`]).
+    ///
+    /// Takes nothing, because it is managed on the builder, before `build`
+    /// creates the windows: a command a page sends can never find it
+    /// missing ("state not managed"). What is not known yet, the daemon,
+    /// is asked through [`Daemon::service`], which waits for the launch.
+    pub(crate) fn new() -> (Self, Launch) {
+        let (daemon, launch) = Daemon::new();
+        let state = Self {
+            daemon: Arc::new(daemon),
             #[cfg(target_os = "macos")]
             menu: Arc::new(RwLock::new(None)),
             tray: Arc::new(RwLock::new(None)),
             selected_model_id: Arc::new(RwLock::new(None)),
-            snapshot: Arc::new(RwLock::new(DaemonSnapshot::default())),
+            snapshot: Arc::new(RwLock::new(DaemonSnapshot::starting())),
             refresh: Refresh::default(),
-        }
+        };
+        (state, launch)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The state is built with no app, no window and no daemon, so nothing
+    /// stops it being managed before the first window exists, and its
+    /// daemon is unknown until the launch it comes with settles.
+    #[tokio::test]
+    async fn the_state_needs_no_window_and_no_daemon() {
+        let (state, launch) = AppState::new();
+        assert!(state.daemon.service.is_starting());
+        assert!(state.snapshot.read().await.starting);
+
+        launch.settle(Err("no daemon in a unit test".to_owned()));
+        assert!(!state.daemon.service.is_starting());
     }
 }

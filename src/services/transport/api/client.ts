@@ -11,6 +11,7 @@
 import { readData, type ReadOptions } from '../errors';
 import { appLogger } from '../../platform';
 import { isDesktop } from '../../platform/detect';
+import { lookupAnswered, lookupRefused } from './addressLookup';
 import { isDaemonTokenRefusal, serviceRestarted, takeDaemonToken } from './daemonToken';
 import { fetchWithin, limitFor, type TimeLimitOptions } from './timeLimit';
 
@@ -94,7 +95,9 @@ async function discoverEmbeddedApi(): Promise<EmbeddedApiInfo> {
     return info;
   } catch (error) {
     appLogger.error('transport.api', '[ApiClient] Failed to discover embedded API', { error });
-    throw error;
+    // The app refuses with its launch's own sentence, a bare string over the
+    // bridge; callers get an `Error` carrying it, as from any other failure.
+    throw error instanceof Error ? error : new Error(String(error));
   }
 }
 
@@ -214,7 +217,16 @@ export async function getClient(): Promise<HttpClient> {
       const token = takeDaemonToken() ?? apiAuthToken;
 
       if (isDesktop()) {
-        const info = await discoverEmbeddedApi();
+        // Recorded for the window, which says gglib is starting until the
+        // first answer and the launch's words when it is a failure.
+        let info: EmbeddedApiInfo;
+        try {
+          info = await discoverEmbeddedApi();
+        } catch (error) {
+          lookupRefused((error as Error).message);
+          throw error;
+        }
+        lookupAnswered();
         const config = { baseUrl: `http://127.0.0.1:${info.port}`, token: info.token ?? token };
         // Set the module-level session `apiFetch` reads
         setApiSession(config.baseUrl, config.token);

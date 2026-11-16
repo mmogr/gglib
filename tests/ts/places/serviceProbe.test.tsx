@@ -233,6 +233,52 @@ describe("the window while the desktop app's launch of gglib is in flight", () =
     expect(screen.getByRole('button', { name: 'Start gglib' })).toBeInTheDocument();
     expect(screen.queryByText(STARTING)).not.toBeInTheDocument();
   });
+
+  it('keeps the failed launch\'s sentence up, the same node, while every probe asks again', async () => {
+    const settle = launchInFlight();
+    daemon.up = false;
+    await renderGate();
+    // The same module instance the gate reads (both imported after the reset).
+    const lookup = await import('../../../src/services/transport/api/addressLookup');
+    const seen: string[] = [];
+    lookup.onAddressLookup(() => seen.push(lookup.addressLookup().state));
+
+    await settle(false);
+    const sentence = await screen.findByRole('alert');
+    expect(sentence).toHaveTextContent(WHY);
+
+    for (let tick = 0; tick < 4; tick += 1) {
+      await nextProbe();
+      expect(screen.getByRole('alert')).toBe(sentence);
+    }
+    expect(seen).not.toContain('pending');
+    expect(seen.filter((state) => state === 'failed')).toHaveLength(1);
+
+    // A later answer (a daemon heard since) replaces it.
+    daemon.up = true;
+    await settle(true);
+    await nextProbe();
+    expect(await screen.findByText('the window')).toBeInTheDocument();
+    expect(lookup.addressLookup().state).toBe('known');
+    expect(screen.queryByText(WHY)).not.toBeInTheDocument();
+  });
+
+  it('draws the window once the address is known, before the probe has answered', async () => {
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {
+      invoke: vi.fn(async (cmd: string) => (cmd === 'get_embedded_api_info' ? { port: 9887, token: 'desk' } : null)),
+    };
+    daemon.health = () => new Promise<Response>(() => {}) as unknown as Response;
+    await renderGate();
+    expect(await screen.findByText('the window')).toBeInTheDocument();
+    expect(screen.queryByText(STARTING)).not.toBeInTheDocument();
+  });
+
+  it('leaves a browser tab as it was before its first answer: the window, never starting', async () => {
+    daemon.health = () => new Promise<Response>(() => {}) as unknown as Response;
+    await renderGate();
+    expect(await screen.findByText('the window')).toBeInTheDocument();
+    expect(screen.queryByText(STARTING)).not.toBeInTheDocument();
+  });
 });
 
 describe("the window's gate in the desktop app", () => {

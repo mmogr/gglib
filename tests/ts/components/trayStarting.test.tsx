@@ -67,4 +67,30 @@ describe('the tray popover while the launch is in flight', () => {
     expect(await screen.findByText(DOWN)).toBeInTheDocument();
     expect(screen.queryByText(STARTING)).not.toBeInTheDocument();
   });
+
+  /** A daemon whose `/health` has not answered yet. */
+  const noAnswerYet = () => vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+
+  it('says nothing about starting once the address is known, before the probe has answered', async () => {
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {
+      invoke: vi.fn(async (cmd: string) => (cmd === 'get_embedded_api_info' ? { port: 9887, token: 'desk' } : null)),
+    };
+    noAnswerYet();
+    const { TrayPanel } = await import('../../../src/tray/TrayPanel');
+    render(<TrayPanel />);
+    const lookup = await import('../../../src/services/transport/api/addressLookup');
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    expect(lookup.addressLookup().state).toBe('known');
+    expect(screen.queryByText(STARTING)).not.toBeInTheDocument();
+    expect(screen.queryByText(DOWN)).not.toBeInTheDocument();
+  });
+
+  it('leaves a browser tab as it was before its first answer: nothing about starting', async () => {
+    noAnswerYet();
+    const { TrayPanel } = await import('../../../src/tray/TrayPanel');
+    render(<TrayPanel />);
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    expect(screen.queryByText(STARTING)).not.toBeInTheDocument();
+    expect(screen.queryByText(DOWN)).not.toBeInTheDocument();
+  });
 });
