@@ -19,6 +19,7 @@ pub mod huggingface;
 pub(crate) mod image_generation;
 mod jinja_mode;
 pub(crate) mod llm_completion;
+pub(crate) mod load_failure;
 pub(crate) mod loop_guard_trips;
 pub(crate) mod mcp_dto;
 pub(crate) mod mcp_error;
@@ -45,6 +46,10 @@ pub(crate) mod settings_repository;
 pub(crate) mod system_probe;
 pub(crate) mod tool_executor_filter;
 pub(crate) mod usage_sink;
+
+#[cfg(test)]
+#[path = "load_failure_tests.rs"]
+mod load_failure_tests;
 
 use std::sync::Arc;
 use thiserror::Error;
@@ -90,6 +95,7 @@ pub use image_generation::{
     MAX_IMAGES_PER_REQUEST, UnreadableSize,
 };
 pub use jinja_mode::JinjaMode;
+pub use load_failure::{LoadCause, LoadFailure};
 pub use mcp_dto::{ResolutionAttempt, ResolutionStatus};
 pub use mcp_error::McpServiceError;
 pub use mcp_repository::{McpRepositoryError, McpServerRepository};

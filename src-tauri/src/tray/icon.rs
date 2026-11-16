@@ -160,6 +160,9 @@ fn state_of(snap: &DaemonSnapshot) -> TrayState {
 /// The state words are `gglib_core`'s, the ones every surface says, in lower
 /// case mid-sentence.
 fn status_of(snap: &DaemonSnapshot) -> String {
+    if snap.starting {
+        return "gglib · starting".to_owned();
+    }
     if !snap.reachable {
         return "gglib · not running".to_owned();
     }
@@ -287,6 +290,16 @@ mod tests {
 
         assert_eq!(derive(&stale).state, TrayState::Outline);
         assert_eq!(derive(&stale).status, "gglib · not running");
+    }
+
+    /// A daemon on its way is not called missing: the tray is drawn before
+    /// the app's launch has an answer.
+    #[test]
+    fn a_daemon_still_starting_is_not_called_missing() {
+        let visual = derive(&DaemonSnapshot::starting());
+
+        assert_eq!(visual.state, TrayState::Outline);
+        assert_eq!(visual.status, "gglib · starting");
     }
 
     /// The outline icon is derived at runtime, so it has to actually come out

@@ -15,6 +15,13 @@ one is running, and the desktop app, each with its version. Another copy
 is asked only `--version`, by `copy_version`, with a two-second wait; the
 app is never launched.
 
+`path_entry` is `config path-entry add|remove`, hidden from `--help`: the
+desktop app's Windows installer runs it to put the folder this `gglib.exe`
+is in on the user's own `PATH`, and its uninstaller to take it off if the
+install put it there (`gglib_core::paths::user_path`). It runs before
+logging is set up (`dispatch::leaves_nothing_behind`), so it makes no data
+folder and no log file, and it prints one line, or one line of error.
+
 The two engines, llama.cpp and stable-diffusion.cpp, are installed the
 same way, by `engine`: `install`, which `update` is too, installs the pinned
 release when what is there is missing or older, and is refused while the
@@ -25,6 +32,12 @@ what is there is older. Only a terminal is asked: with no terminal and no
 `--yes`, stdin is not read, an update is kept back and a missing engine
 refused. Whether there is anything to install, and whether it
 is a download or a source build, are `gglib_runtime::engine`'s to say.
+
+`repair` is the question `install`, `ensure_installed` and `gglib up` ask
+when an engine does not work for want of Microsoft's Visual C++ runtime,
+which gglib can install: asked in a terminal, answered ahead of time by
+`gglib up --yes` (`--force` is never a yes to it), and with nobody to ask
+nothing is installed and the line names what to run.
 
 What is each engine's own: `llama` routes llama.cpp's subcommands, and
 `llama_install` runs its download and its source build, with the build's

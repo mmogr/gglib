@@ -1,6 +1,7 @@
 # ADR 0007 — Ask the server for template capabilities
 
-- **Status:** Accepted; decision 3 superseded (amended 2026-11-12, 2026-11-14)
+- **Status:** Accepted; decision 3 superseded (amended 2026-11-12, 2026-11-14,
+  2026-11-16)
 - **Date:** 2026-08-17
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0002](0002-defer-tool-call-constraint-to-llama-cpp.md),
@@ -305,6 +306,43 @@ that fails to arrive must not masquerade as one that arrived negative.
 medium thinking on gpt-oss and nothing at all on most other templates, and
 the predicate that would make it honest is unobservable. "Stop thinking" is
 `reasoning_budget_tokens: 0` — sampler-enforced, universal, verifiable.
+
+> **Amended 2026-11-16 — thinking off tells the template too.** This decision
+> chose the budget over `"none"` and did not rule on `enable_thinking`. At
+> `b12110`, Qwen3-4B Q4_K_M launched as gglib launches it (`--jinja
+> --reasoning-format deepseek`, recorded on a Windows 11 x64 CPU), the budget
+> alone leaves the prompt rendered with thinking on (it ends
+> `<|im_start|>assistant\n`). The sampler closes the thinking block at once,
+> and the model then reasons on in plain text, writes its own `</think>` and
+> answers. llama-server's parser reads only the first, empty block, so the
+> reasoning and the stray tag arrive as `content`: the reply is the
+> reasoning, and a chat's title, asked for with the same budget and 20 tokens,
+> is the start of it. With `chat_template_kwargs.enable_thinking: false`
+> beside the budget the template renders the empty block itself (the prompt
+> ends `<think>\n\n</think>\n\n`, as `llama/bodies/apply-template.Qwen*.no-thinking.txt`
+> record for the two Qwen templates at the pin) and the reply is the answer
+> alone ([log-0007](log-0007.md)).
+>
+> So a request whose budget resolves to `0` is also sent
+> `enable_thinking: false` (stage 4b of the request pipeline,
+> `request_pipeline::thinking_off`), merged into the client's own
+> `chat_template_kwargs`. A client's own `enable_thinking: true` beside a
+> budget of `0` gives way, as the in-process engine already rendered that
+> request; both engines read the budget through one function. The budget
+> stays the control and this decision stands: the templates that never read
+> the flag (finding 4) ignore it, and the budget still ends their thinking;
+> `"none"` is still refused. Thinking on, or a budget left unset, sends no
+> `enable_thinking`, so a template's own default stands. The flag is not
+> gated on caps or tags (decision 3's 2026-11-12 amendment): a template that
+> reads it otherwise, as Apertus's system turn does, is sent it as the
+> in-process engine renders it. The proxy adds it on the request path, from
+> any client's budget of `0`, because gglib's own turns reach it as a
+> client's request; [ADR 0022](0022-the-proxy-does-less.md)'s 2026-11-13
+> amendments are about the reply, which is still forwarded as it came, and no
+> strip or parser comes back. The engine pins' tier-3 recording gains
+> `thinking_off_by_budget_alone` and `thinking_off_as_gglib_sends_it`; a pin
+> at which the first reads true on a model that thinks by default reopens
+> whether the kwarg is needed.
 
 **5. Both fields become modelled, on opposite sides of the trust gate.**
 `reasoning_effort` is **taste**: it joins the sampling hierarchy and is

@@ -41,20 +41,7 @@ pub fn run_bounded(command: &mut Command, wait: Duration) -> std::io::Result<Out
     let stdout = read_on_a_thread(child.stdout.take());
     let stderr = read_on_a_thread(child.stderr.take());
 
-    let status = loop {
-        if let Some(status) = child.try_wait()? {
-            break status;
-        }
-        if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                format!("did not answer within {} s", wait.as_secs_f32()),
-            ));
-        }
-        thread::sleep(POLL);
-    };
+    let status = exit_by(&mut child, deadline, wait)?;
 
     // A moment past the deadline at least: a program that exits just in time
     // has its output read.
@@ -66,6 +53,55 @@ pub fn run_bounded(command: &mut Command, wait: Duration) -> std::io::Result<Out
         stdout: stdout.recv_timeout(left).unwrap_or_default(),
         stderr: stderr.recv_timeout(left).unwrap_or_default(),
     })
+}
+
+/// Run `command` with nothing on stdin, stdout or stderr, and give it
+/// `wait` to exit: for a program whose output is never read, so nothing it
+/// leaves running can hold a pipe of gglib's open.
+///
+/// A program still running when `wait` is up is killed, and the answer is
+/// an error of kind [`std::io::ErrorKind::TimedOut`]. Only the program
+/// started is killed: one it started itself, such as an elevated copy of an
+/// installer, may carry on.
+///
+/// # Errors
+///
+/// The program could not be started, or it did not exit within `wait`.
+pub fn run_bounded_silent(
+    command: &mut Command,
+    wait: Duration,
+) -> std::io::Result<std::process::ExitStatus> {
+    let deadline = Instant::now() + wait;
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+    exit_by(&mut child, deadline, wait)
+}
+
+/// Wait for `child` to exit until `deadline`, `wait` after it was started;
+/// kill it then, and say so as an error of kind
+/// [`std::io::ErrorKind::TimedOut`].
+fn exit_by(
+    child: &mut std::process::Child,
+    deadline: Instant,
+    wait: Duration,
+) -> std::io::Result<std::process::ExitStatus> {
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(status);
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                format!("did not answer within {} s", wait.as_secs_f32()),
+            ));
+        }
+        thread::sleep(POLL);
+    }
 }
 
 /// How a run of a program ended, as [`failure_kind`] reads it.
@@ -225,14 +261,22 @@ fn line_after<'t>(text: &'t str, marker: &str) -> Option<&'t str> {
         .find_map(|line| line.split_once(marker).map(|(_, rest)| rest))
 }
 
+/// Microsoft's permalink to its current Visual C++ Redistributable for x64.
+///
+/// A program built with Visual C++ needs it. It follows Microsoft's newest
+/// release. The sentence for a missing library on Windows names it, and
+/// gglib's repair of an engine downloads it from here.
+pub const VISUAL_CPP_RUNTIME_X64_URL: &str = "https://aka.ms/vc14/vc_redist.x64.exe";
+
 fn missing_words(name: Option<&str>) -> String {
     name.map_or_else(
         || {
-            "a library it needs is missing. Windows does not say which; for a program \
-             built with Visual C++ it is most likely the Microsoft Visual C++ \
-             Redistributable (x64), from Microsoft at \
-             https://aka.ms/vc14/vc_redist.x64.exe (not the x86 one)"
-                .to_owned()
+            format!(
+                "a library it needs is missing. Windows does not say which; for a program \
+                 built with Visual C++ it is most likely the Microsoft Visual C++ \
+                 Redistributable (x64), from Microsoft at \
+                 {VISUAL_CPP_RUNTIME_X64_URL} (not the x86 one)"
+            )
         },
         |name| format!("the library {name} it needs is missing"),
     )

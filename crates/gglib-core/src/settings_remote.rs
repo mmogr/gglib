@@ -96,10 +96,11 @@ pub struct RemotePairing {
 /// Its companion is [`Settings::remote_enabled`], the switch `gglib remote
 /// enable` and `disable` set and the one thing the daemon reads at startup
 /// to decide whether to bring the tunnel back up. That field mirrors
-/// `proxy_autostart` deliberately — same shape, same tri-state, same reason:
-/// a machine you reach from elsewhere is not a feature you want to remember
-/// to switch on after every reboot. Neither is ever typed; there is no flag
-/// for either, because the flag *is* the command.
+/// `proxy_autostart` deliberately — same shape, same reason: a machine you
+/// reach from elsewhere is not a feature you want to remember to switch on
+/// after every reboot. Unlike it, an absent `remote_enabled` is off: being
+/// reachable from elsewhere is something a person asks for. It is never
+/// typed; there is no flag for it, because the flag *is* the command.
 ///
 /// This record is the other half — the flags that `enable` was given, so a
 /// resumed tunnel is armed the way it was enabled. Without it a restart

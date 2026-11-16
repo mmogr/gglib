@@ -16,4 +16,11 @@ name, and loads the model once through the pinned proxy. `chat` and
 chat and send each turn to the daemon, which runs it (`agent_chat::turn`);
 they resolve no sampling and run no loop here.
 
+`switch` is what `proxy`, `serve` and `up` do when the daemon says the
+endpoint is on otherwise than they ask (`endpoint_differs`): ask, in a
+terminal, in the daemon's words for what runs and what switching does; take
+`-y` as a yes; refuse with one sentence naming `-y` when nobody is there to
+ask; and on a yes send the same start with `replace`, which the daemon
+carries out as one operation.
+
 <!-- module-docs:end -->

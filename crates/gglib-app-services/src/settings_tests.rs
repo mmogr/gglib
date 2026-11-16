@@ -170,7 +170,7 @@ fn profiles_use_camel_case_on_the_wire() {
         loop_guard: None,
         tool_call_repair: None,
         mcp_drawing: None,
-        proxy_autostart: None,
+        proxy_autostart: Some(true),
         close_to_tray: None,
         start_at_login: None,
     };

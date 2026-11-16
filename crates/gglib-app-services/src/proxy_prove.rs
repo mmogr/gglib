@@ -44,11 +44,74 @@ pub struct ProofOutcome {
     pub elapsed_ms: u64,
 }
 
+/// The daemon's error for a proof of model `gglib_id` that `refusal`
+/// refused, the proof having been `asked` at that moment.
+///
+/// A model that did not load is refused as every failed load is (#1959 C5),
+/// in the whole sentence: the endpoint tells its clients, the daemon's proof
+/// among them, only the short form, so the sentence is read from `runtime`,
+/// the one the endpoint loaded with, in this process. Only a failure of this
+/// model, recorded since the proof was asked, is read: an earlier failure,
+/// or another model's, is not why this proof failed, and the endpoint's own
+/// short form stands. The whole sentence goes out only on the daemon's
+/// `POST /api/proxy/prove`, which only the owner reaches.
+pub(crate) fn refused(
+    refusal: ProofRefusal,
+    runtime: &dyn gglib_core::ports::ModelRuntimePort,
+    gglib_id: i64,
+    asked: Instant,
+) -> crate::GuiError {
+    if !refusal.load_failed {
+        return crate::GuiError::ValidationFailed(refusal.reason);
+    }
+    let whole = u32::try_from(gglib_id)
+        .ok()
+        .and_then(|id| runtime.last_load_failure(id))
+        .filter(|(at, _)| *at >= asked)
+        .map(|(_, failure)| failure.sentence());
+    crate::GuiError::LoadFailed(whole.unwrap_or(refusal.reason))
+}
+
 /// Why a proof did not get an answer, as a sentence every surface prints.
 /// The route answers it as the daemon's error envelope, not as this shape.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProofRefusal {
     pub reason: String,
+    /// The model did not load (the endpoint's `model_load_failed`), and
+    /// `reason` is its sentence as the endpoint gave it.
+    pub load_failed: bool,
+}
+
+impl ProofRefusal {
+    fn because(reason: String) -> Self {
+        Self {
+            reason,
+            load_failed: false,
+        }
+    }
+
+    /// The endpoint's refusal with `status` and `body`: a model that did not
+    /// load is its sentence alone (#1959 C5), anything else the status and
+    /// the body as they came.
+    fn answered(status: reqwest::StatusCode, body: &str) -> Self {
+        let error = serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|v| v.get("error").cloned());
+        let load_failed = error
+            .as_ref()
+            .filter(|e| {
+                e.get("code").and_then(serde_json::Value::as_str)
+                    == Some(gglib_core::ports::LoadFailure::CODE)
+            })
+            .and_then(|e| e.get("message").and_then(serde_json::Value::as_str));
+        load_failed.map_or_else(
+            || Self::because(format!("{status}: {}", body.trim())),
+            |sentence| Self {
+                reason: sentence.to_owned(),
+                load_failed: true,
+            },
+        )
+    }
 }
 
 /// Wait for the endpoint at `base_url` to answer `/health`, then send one
@@ -69,12 +132,10 @@ pub async fn prove(
 ) -> Result<ProofOutcome, ProofRefusal> {
     let root = base_url.strip_suffix("/v1").unwrap_or(base_url);
     if !wait_for_bind(client, root, bind_timeout).await {
-        return Err(ProofRefusal {
-            reason: format!(
-                "the endpoint at {base_url} did not answer /health within {}s",
-                bind_timeout.as_secs()
-            ),
-        });
+        return Err(ProofRefusal::because(format!(
+            "the endpoint at {base_url} did not answer /health within {}s",
+            bind_timeout.as_secs()
+        )));
     }
     let begun = Instant::now();
     let mut request = client
@@ -94,15 +155,11 @@ pub async fn prove(
         }))
         .send()
         .await
-        .map_err(|e| ProofRefusal {
-            reason: e.to_string(),
-        })?;
+        .map_err(|e| ProofRefusal::because(e.to_string()))?;
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
     if !status.is_success() {
-        return Err(ProofRefusal {
-            reason: format!("{status}: {}", body.trim()),
-        });
+        return Err(ProofRefusal::answered(status, &body));
     }
     let answered_by = serde_json::from_str::<serde_json::Value>(&body)
         .ok()

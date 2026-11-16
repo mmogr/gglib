@@ -12,10 +12,7 @@ mod proxy_actions;
 mod second_launch;
 mod tray;
 
-use std::sync::Arc;
-
 use app::AppState;
-use daemon::Daemon;
 use tauri::Manager;
 #[cfg(not(target_os = "macos"))]
 use tauri::Wry;
@@ -31,8 +28,13 @@ fn main() {
 
     info!("Tauri application starting");
 
+    let (app_state, first_launch) = AppState::new();
+
     // First, as the plugin requires: a second launch exits here.
     let builder = second_launch::guarded(tauri::Builder::default())
+        // Before `build`, which creates the windows, so no command a page
+        // sends can run before the state it reads exists.
+        .manage(app_state)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -43,35 +45,9 @@ fn main() {
             Some(vec![autostart::LOGIN_ITEM_FLAG]),
         ))
         .setup(move |app| {
-            // The daemon owns the backend: connect to a running one, launch
-            // `gglib daemon run` detached, or — bundle-only fallback — host
-            // the daemon composition in this process behind the same lock.
-            // A daemon that will not start is a state, not a crash: a panic
-            // here would kill the process before `setup_app` has built a tray
-            // or shown a window, so gglib would never appear and the reason
-            // would be only in a log file.
-            let (daemon, startup_failure) =
-                match tauri::async_runtime::block_on(Daemon::connect_or_launch()) {
-                    Ok(daemon) => (daemon, None),
-                    Err(e) => {
-                        error!(error = %e, "Could not reach or start the gglib daemon");
-                        (Daemon::disconnected(), Some(e))
-                    }
-                };
-
-            let ownership = daemon.ownership;
-            let app_state = AppState::new(Arc::new(daemon));
-            app.manage(app_state);
-            info!(?ownership, "daemon connection established");
-
-            // Continue with rest of setup
-            setup_app(app);
-
-            // After the tray exists, so the report arrives alongside the
-            // Start gglib entry that acts on it.
-            if let Some(e) = startup_failure {
-                tray::report_failure(app.handle(), "gglib is not running", &e);
-            }
+            // Never waits for the daemon: the window and the tray come up at
+            // once, and the launch runs beside them (`setup_app`).
+            setup_app(app, first_launch);
 
             // Register/unregister the login item to match settings once the
             // window exists. (Proxy autostart is the daemon's job.)
@@ -187,6 +163,9 @@ fn main() {
 /// belong to the backend, and the backend is the daemon.
 async fn close_to_tray_enabled(app: &tauri::AppHandle) -> bool {
     let state: tauri::State<AppState> = app.state();
+    // A window closed while the launch is in flight asks the daemon it brings,
+    // not the nothing that is listening yet.
+    let _ = state.daemon.service.settled().await;
     match state.daemon.settings().await {
         Ok(settings) => settings.close_to_tray == Some(true),
         Err(e) => {
@@ -199,7 +178,7 @@ async fn close_to_tray_enabled(app: &tauri::AppHandle) -> bool {
 }
 
 /// Application setup hook.
-fn setup_app(app: &tauri::App) {
+fn setup_app(app: &tauri::App, first_launch: daemon::Launch) {
     let handle = app.handle().clone();
 
     // Build the tray before the menu: on Linux and Windows it is the only
@@ -224,6 +203,14 @@ fn setup_app(app: &tauri::App) {
             false
         }
     };
+
+    // The daemon owns the backend: connect to a running one, launch `gglib
+    // daemon run` detached, or (bundle-only fallback) host the daemon
+    // composition in this process behind the same lock. After the tray, so a
+    // failure is reported beside its Start gglib; it runs while the window
+    // draws, and the page's first question of where the daemon is waits for
+    // it (`get_embedded_api_info`).
+    daemon::start(&handle, first_launch);
 
     // Before the panel is ever shown, and on the main thread: layer-shell can
     // only claim a GTK window that has not been realized yet, and the panel is

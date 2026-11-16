@@ -7,7 +7,9 @@ use std::path::Path;
 use super::release::{PINNED_SD_RELEASE, SD_RELEASE};
 use crate::binary_install::{InstallRecord, recorded_install};
 use crate::binary_install::{ReleaseSelector, resolve_selector};
-use crate::engine::{PinState, first_line, pin_state_at, update_downloads, validate_engine_at};
+use crate::engine::{
+    Fix, PinState, first_line, pin_state_at, update_downloads, validate_engine_at,
+};
 use gglib_core::domain::RuntimeKind;
 
 /// Everything a status report says about the installed `sd-server`.
@@ -25,6 +27,9 @@ pub struct SdStatus {
     /// when it answers `--version` or is not there. The check is
     /// llama.cpp's too.
     pub health_error: Option<String>,
+    /// What gglib can do about it, when it does not work for a reason gglib
+    /// can repair.
+    pub fix: Option<Fix>,
     pub binary_path: String,
     pub config_path: String,
     /// The release gglib installs by default.
@@ -73,6 +78,7 @@ pub(crate) fn sd_status_at(
     let mut status = SdStatus {
         installed: binary_path.is_file(),
         health_error: None,
+        fix: None,
         binary_path: binary_path.display().to_string(),
         config_path: config_path.display().to_string(),
         pinned_release: PINNED_SD_RELEASE.to_owned(),
@@ -118,7 +124,10 @@ pub(crate) fn sd_status_at(
                 status.version_line = first_line(&output.stdout);
                 status.commit = status.version_line.as_deref().and_then(commit_of);
             }
-            Err(not_working) => status.health_error = Some(not_working.to_string()),
+            Err(not_working) => {
+                status.fix = not_working.fix();
+                status.health_error = Some(not_working.to_string());
+            }
         }
     }
     status

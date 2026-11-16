@@ -100,6 +100,12 @@ pub struct ContextFit {
     /// Device memory the fit was allowed to spend against.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub budget_bytes: Option<u64>,
+    /// The machine's system RAM, when it has no GPU and the budget above is
+    /// a share of that RAM; `None` when the budget is a GPU's memory or none
+    /// was read. A hub older than the field leaves it out.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    #[serde(default)]
+    pub system_ram_bytes: Option<u64>,
     /// The weights, summed across shards, plus the projector when linked.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub weights_bytes: Option<u64>,

@@ -19,13 +19,14 @@ use gglib_core::domain::{
 };
 use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
-    AdmissionLease, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ProcessHandle,
-    ResidencyObserver, RunningTarget,
+    AdmissionLease, LoadCause, LoadFailure, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
+    ProcessHandle, ResidencyObserver, RunningTarget,
 };
 use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
+use self::launch_failure::{not_healthy, not_started, stopped};
 use super::spawned_child::{LIVENESS_TICK, SpawnedChild};
 use super::vram;
 use crate::launch_narration::NarrationInputs;
@@ -39,6 +40,9 @@ use crate::server_config::{ResolvedCapabilities, build_server_config_narrated};
 
 #[path = "launch_files.rs"]
 pub(super) mod launch_files;
+
+#[path = "launch_failure.rs"]
+pub(super) mod launch_failure;
 
 /// Everything one launch needs, resolved before it is spawned.
 ///
@@ -296,12 +300,33 @@ async fn launch(
     // mean a second lock acquisition with an `await` between it and the spawn
     // — a suspension point at which the child exists and nothing owns it,
     // which is the leak this whole commit is about.
-    let (port, pid, mut child) = {
+    // A launch that fails because gglib chose the context has to say so.
+    // Everything else about a startup failure is the model server's business;
+    // this one is ours, the remedy is not guessable from the symptom, and the
+    // failure repeats identically forever — the budget is a per-machine
+    // constant, so a fit too large to load produces the same number on every
+    // retry. An image model has no context, so this never speaks for one.
+    let fitted_context = (runtime == RuntimeKind::Llama
+        && *ctx_source == ContextSizeSource::FittedToHardware)
+        .then_some(*resolved_ctx);
+    // What the user reads is the failure's, made in one place.
+    let failed = |cause: LoadCause| {
+        ModelRuntimeError::LoadFailed(Box::new(LoadFailure {
+            model: spec.name.clone(),
+            runtime,
+            cause,
+            fitted_context,
+        }))
+    };
+
+    let (port, pid, mut child, output) = {
         let mut core_w = core.write().await;
+        let binary = core_w.binary(runtime).to_path_buf();
         let (port, pid) = core_w
             .spawn(config)
-            .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?;
-        (port, pid, SpawnedChild::arm(core, spec.id, pid))
+            .map_err(|e| failed(not_started(&e, runtime, &binary)))?;
+        let output = core_w.output_of(spec.id).unwrap_or_default();
+        (port, pid, SpawnedChild::arm(core, spec.id, pid), output)
     };
 
     // From here until `queue.install` the child exists and nothing else owns
@@ -321,25 +346,6 @@ async fn launch(
     let deadline_secs = *health_deadline_secs;
     let started = tokio::time::Instant::now();
 
-    // A launch that fails because gglib chose the context has to say so.
-    // Everything else about a startup failure is the model server's business;
-    // this one is ours, the remedy is not guessable from the symptom, and the
-    // failure repeats identically forever — the budget is a per-machine
-    // constant, so a fit too large to load produces the same number on every
-    // retry. An image model has no context, so this never speaks for one.
-    let blame_the_fit = || {
-        if runtime == RuntimeKind::Llama && *ctx_source == ContextSizeSource::FittedToHardware {
-            format!(
-                " — context {resolved_ctx} was fitted to this machine; set a \
-                 global default to override it, or GGLIB_DISABLE_CONTEXT_FIT=1 \
-                 to fall back to {}",
-                gglib_core::settings::DEFAULT_CONTEXT_SIZE
-            )
-        } else {
-            String::new()
-        }
-    };
-
     // Raced against the child's own exit, not just run to the deadline. A
     // server that dies on startup — bad arguments, OOM, a missing GPU library
     // — never answers its health probe, and polling a dead port until a
@@ -350,9 +356,13 @@ async fn launch(
     loop {
         tokio::select! {
             result = &mut health => {
-                result.map_err(|e| {
-                    ModelRuntimeError::HealthCheckFailed(format!("{e}{}", blame_the_fit()))
-                })?;
+                if let Err(e) = result {
+                    return Err(not_healthy(&e, &output).map_or_else(
+                        // The wait could not be made at all.
+                        || ModelRuntimeError::HealthCheckFailed(e.to_string()),
+                        failed,
+                    ));
+                }
                 break;
             }
             () = tokio::time::sleep(LIVENESS_TICK) => {
@@ -360,13 +370,9 @@ async fn launch(
                 // blocking on the lock would stop polling the health future it
                 // is supervising while that future's deadline keeps running.
                 // A missed tick simply defers to the next one.
-                if core.try_write().is_ok_and(|mut c| c.has_exited(spec.id)) {
-                    return Err(ModelRuntimeError::HealthCheckFailed(format!(
-                        "{} for {} exited during startup{}",
-                        runtime.server_name(),
-                        spec.name,
-                        blame_the_fit()
-                    )));
+                let exited = core.try_write().ok().and_then(|mut c| c.exited(spec.id));
+                if let Some(exit) = exited {
+                    return Err(failed(stopped(exit, &output).await));
                 }
             }
         }

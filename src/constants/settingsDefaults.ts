@@ -99,17 +99,18 @@ export const MAX_DOWNLOAD_QUEUE_SIZE: NumericSettingSpec = {
  *
  * "Size", not "fit", and the hint is hedged for the same reason: the fit is
  * not always reachable. `fit_context` returns `None` unless it can read the
- * device budget, the weight size and the KV geometry, and ADR 0009 records
- * that AMD, Intel, Vulkan and CPU-only hosts get no fit at all and fall
- * through to the 4096 floor. An unhedged "the context is fitted to this
- * machine" promised those users something they never receive, on the control
- * that governs the rung.
+ * budget, the weight size and the KV geometry, and ADR 0009 records that a
+ * host with a GPU whose memory cannot be read gets no fit at all and falls
+ * through to the 4096 floor. A machine with no GPU is fitted to its RAM (the
+ * ADR's log, 2026-11-16). An unhedged "the context is fitted to this machine"
+ * promised the unreadable-GPU users something they never receive, on the
+ * control that governs the rung.
  */
 export const CONTEXT_SIZE: NumericSettingSpec = {
   default: null,
   unset: {
     placeholder: 'auto',
-    hint: 'Left empty, the server sizes each launch — fitted to this machine where gglib can read the device, and the built-in floor where it cannot.',
+    hint: "Left empty, the server sizes each launch — fitted to this machine's GPU, or to its RAM when it has no GPU, and the built-in floor where a GPU's memory cannot be read.",
   },
   min: '512',
   max: '1000000',

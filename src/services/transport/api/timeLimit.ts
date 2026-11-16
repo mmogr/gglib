@@ -22,7 +22,11 @@
  * still aborts as an abort.
  *
  * The clock starts at `fetch`: the desktop app's wait for the daemon's
- * address (`get_embedded_api_info`) comes before it and is not counted.
+ * address (`get_embedded_api_info`) comes before it and is not counted. That
+ * wait lasts while the app's launch of the daemon is in flight, and the
+ * launch's own budget bounds it (`LAUNCH_WAIT` in `src-tauri/src/daemon`,
+ * plus the launch's first probe and last poll: a little over 15 s): the
+ * answer then is the daemon's address, or why it did not start.
  */
 
 import { TransportError } from '../errors';

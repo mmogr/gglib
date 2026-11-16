@@ -160,7 +160,7 @@ pub(crate) const KEYS: &[SettingKey] = &[
     key(
         "proxy-autostart",
         Takes::Switch,
-        "Start the endpoint as soon as the desktop app launches",
+        "Start the endpoint when gglib starts (on when unset)",
     ),
     key(
         "proxy-cache-disk-gb",

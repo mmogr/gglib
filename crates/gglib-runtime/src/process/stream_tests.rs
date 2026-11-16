@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use super::*;
 use crate::process::ServerLogEntry;
+use crate::process::output_tail::OutputTail;
 
 /// The lines the log manager holds for `port`, once there are `n` of them or
 /// ten seconds have passed.
@@ -28,16 +29,21 @@ fn text(entries: &[ServerLogEntry]) -> Vec<&str> {
 #[tokio::test]
 async fn each_line_of_a_stream_reaches_the_log_manager_under_the_readers_port() {
     const PORT: u16 = 61_001;
+    let tail = OutputTail::default();
     spawn_stream_reader(
         std::io::Cursor::new(b"first\nsecond\r\nlast, unterminated".to_vec()),
         PORT,
         "stdout",
+        tail.clone(),
     );
 
     let held = lines(PORT, 3).await;
+    tail.settled(Duration::from_secs(10)).await;
 
     assert_eq!(text(&held), ["first", "second", "last, unterminated"]);
     assert!(held.iter().all(|e| e.port == PORT), "{held:?}");
+    // The server's own tail, which a failed launch reads, has them too.
+    assert_eq!(tail.lines(), ["first", "second", "last, unterminated"]);
 }
 
 /// llama-server writes bytes that are not UTF-8; the line they are on is
@@ -49,6 +55,7 @@ async fn bytes_that_are_not_utf8_do_not_end_the_reader() {
         std::io::Cursor::new(b"bad \xff byte\nstill reading\n".to_vec()),
         PORT,
         "stderr",
+        OutputTail::default(),
     );
 
     let held = lines(PORT, 2).await;

@@ -71,7 +71,11 @@ gglib q --remote -m <id> "Why is this test flaky?"   # on the paired machine
   (`Continue chatting?`); `--quiet`, or input from a pipe, skips the offer.
 - The question is a saved chat from the start, made before it is asked:
   a question that fails keeps what arrived of its reply, marked as stopped.
-- Its file tools read the directory it was asked in.
+- Its file tools read the directory it was asked in, by [`chat`'s
+  rule](#the-folder-it-reads): never your home folder or a system folder.
+  Asked in one, it reads no files, says why on one `Files: off …` line on
+  stderr (unless `--quiet`), and the model is not told of file tools. A
+  `--tools` list keeps them only when it names one, as `chat`'s does.
 
 ## `chat`
 
@@ -130,10 +134,31 @@ outside it. The session says so once, on stderr: `Files: <dir> (read-only)`.
   the one the chat page chose included, wherever it is run, and the line
   names it. A chat that remembers none, or one since deleted, takes the
   directory it is continued in, as a new chat does.
-- A new chat launched in your home folder or in `/` reads no files, and says
-  `Files: off in your home folder or /; cd into a project to read it, or
-  --no-tools`; launched in a directory deleted since, it reads none and says
-  it cannot read it.
+- A new chat launched in your home folder reads no files, and says `Files:
+  off in your home folder; cd into a project to read it, or --no-tools`.
+- Nor does one launched in a system folder, which a terminal opened from the
+  Start menu or as administrator on Windows starts in. It says `Files: off in
+  C:\Windows\System32, a system folder; cd into a project to read it, or
+  --no-tools`. The system folders:
+  - Windows: the Windows directory (`%SystemRoot%`) and everything in it,
+    the Program Files folders and everything in them, and the root of the
+    drive Windows is on. Another drive's root (`D:\`, a mapped drive) is
+    read.
+  - macOS: `/System` and `/dev` and everything in them; `/`, `/usr`, `/bin`,
+    `/sbin`, `/etc`, `/var`, `/private` (with `/private/etc` and
+    `/private/var`, where `/etc` and `/var` lead), `/opt`, `/Applications`,
+    `/Library`, `/Users`, `/Volumes` and `/usr`'s `bin`, `sbin`, `lib`,
+    `libexec`, `local` and `share` themselves, not the folders in them.
+  - Linux: `/proc`, `/sys` and `/boot` and everything in them; `/`, `/dev`,
+    `/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/etc`, `/var`, `/opt`, `/srv`,
+    `/home`, `/mnt`, `/media`, `/run` and `/usr`'s `bin`, `sbin`, `lib`,
+    `lib64`, `libexec`, `include`, `local` and `share` themselves, not the
+    folders in them: `/usr/local/src/app` is read.
+- Launched in a directory deleted since, it reads none and says it cannot
+  read it.
+- A folder chosen on the chat page is read wherever it is, home or a system
+  folder: only the folder a session is launched in is refused. To read one
+  from the terminal, choose it on the chat page and `--continue` that chat.
 - Under `--tools` the file tools are kept only when the list names one, bare
   (`read_file`) or as `builtin:read_file`; a list that names none gets none,
   no `Files:` line, and its directory is not read.

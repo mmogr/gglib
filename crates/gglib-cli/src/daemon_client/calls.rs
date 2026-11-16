@@ -10,12 +10,44 @@ use std::time::Duration;
 use anyhow::{Context as _, Result, anyhow};
 use gglib_app_services::types::{McpServerInfo, QueueDownloadResponse, ServerInfo};
 use gglib_core::download::{DownloadId, QueueSnapshot};
+use gglib_core::ports::LoadFailure;
 
 use super::wire::{
     ClientRecipesDto, ProofOutcomeDto, ProxyStatusDto, QueueDownloadBody, StartPinnedBody,
     StartProxyBody, StartServerBody, StartServerDto, StopServerBody,
 };
 use super::{DaemonHandle, auth, base_url, paths};
+
+/// What a start answered: the endpoint as asked, or how the one that is on
+/// differs.
+#[derive(Debug)]
+pub(crate) enum StartedOrDiffers {
+    Started(ProxyStatusDto),
+    Differs(gglib_app_services::EndpointChange),
+}
+
+/// The change an `endpoint_differs` refusal names, or `None` for any other
+/// body.
+fn differs(body: &str) -> Option<gglib_app_services::EndpointChange> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    if value.get("type")?.as_str()? != paths::ENDPOINT_DIFFERS_TYPE {
+        return None;
+    }
+    serde_json::from_value(value.get("metadata")?.clone()).ok()
+}
+
+/// The daemon's answer that a model did not load: its sentence, which is
+/// the whole of what is printed.
+#[derive(Debug)]
+pub(crate) struct LoadFailed(pub(crate) String);
+
+impl std::fmt::Display for LoadFailed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for LoadFailed {}
 
 impl DaemonHandle {
     /// One absolute URL on the daemon.
@@ -66,8 +98,23 @@ impl DaemonHandle {
                 auth::unauthorized(&body)
             ));
         }
+        Err(Self::refusal(status, body))
+    }
+
+    /// The error a non-2xx answer is read as. A model that did not load
+    /// (`model_load_failed`) is the daemon's sentence alone, as a
+    /// [`LoadFailed`], since the sentence says all the user needs; any other
+    /// is `daemon answered <status>: <its message>`.
+    pub(super) fn refusal(status: reqwest::StatusCode, body: String) -> anyhow::Error {
+        let typed = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .filter(|v| v.get("type").and_then(|t| t.as_str()) == Some(LoadFailure::CODE))
+            .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_owned));
+        if let Some(sentence) = typed {
+            return LoadFailed(sentence).into();
+        }
         let message = Self::error_message(body);
-        Err(anyhow!("daemon answered {status}: {message}"))
+        anyhow!("daemon answered {status}: {message}")
     }
 
     /// The message of the daemon's error envelope, `{"error": "..."}`, when
@@ -88,6 +135,52 @@ impl DaemonHandle {
             .send()
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// Start the proxy as `body` asks, or hear how the endpoint that is on
+    /// differs from it: the daemon's `endpoint_differs` refusal, read into
+    /// the change it names, so the caller can ask before it sends `replace`.
+    pub(crate) async fn start_proxy_or_differs(
+        &self,
+        body: &StartProxyBody,
+    ) -> Result<StartedOrDiffers> {
+        self.start_or_differs(paths::PROXY_START_PATH, body).await
+    }
+
+    /// [`Self::start_proxy_or_differs`] for a pinned start.
+    pub(crate) async fn start_pinned_proxy_or_differs(
+        &self,
+        body: &StartPinnedBody,
+    ) -> Result<StartedOrDiffers> {
+        self.start_or_differs(paths::PROXY_START_PINNED_PATH, body)
+            .await
+    }
+
+    async fn start_or_differs(
+        &self,
+        path: &str,
+        body: &(impl serde::Serialize + Sync),
+    ) -> Result<StartedOrDiffers> {
+        let response = self
+            .post(path)
+            .json(body)
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await?;
+        if response.status() == reqwest::StatusCode::CONFLICT {
+            let text = response.text().await.unwrap_or_default();
+            if let Some(change) = differs(&text) {
+                return Ok(StartedOrDiffers::Differs(change));
+            }
+            let message = Self::error_message(text);
+            return Err(anyhow!(
+                "daemon answered {}: {message}",
+                reqwest::StatusCode::CONFLICT
+            ));
+        }
+        Ok(StartedOrDiffers::Started(
+            Self::expect_ok(response).await?.json().await?,
+        ))
     }
 
     /// Stop the proxy (idempotent on the daemon side).
@@ -380,5 +473,70 @@ mod tests {
         assert_eq!(request.url().path(), paths::benchmark_tune_apply_path(7));
         let auth = request.headers().get(reqwest::header::AUTHORIZATION);
         assert_eq!(auth.and_then(|v| v.to_str().ok()), Some("Bearer the-token"));
+    }
+
+    /// A model that did not load is the daemon's sentence alone, typed, with
+    /// no status before it (#1959 C5); any other refusal keeps its status.
+    #[test]
+    fn a_failed_load_is_its_sentence_and_another_refusal_its_status() {
+        let sentence = "llama-server stopped while loading qwen: it exited with status 1. \
+                        It printed: gguf_init_from_reader: invalid magic characters";
+        let load = DaemonHandle::refusal(
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+            serde_json::json!({ "error": sentence, "status": 500, "type": "model_load_failed" })
+                .to_string(),
+        );
+        let other = DaemonHandle::refusal(
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+            r#"{"error":"Storage: disk full","status":500}"#.to_owned(),
+        );
+
+        assert_eq!(load.to_string(), sentence);
+        assert!(load.is::<super::LoadFailed>());
+        assert_eq!(
+            other.to_string(),
+            "daemon answered 500 Internal Server Error: Storage: disk full"
+        );
+        assert!(!other.is::<super::LoadFailed>());
+    }
+
+    /// `gglib up`'s warm step, its proof refused because the model did not
+    /// load, prints the sentence after its own lead: not the status, and not
+    /// the JSON body it came in (#1959 C5).
+    #[tokio::test]
+    async fn a_proof_whose_model_did_not_load_prints_the_sentence() {
+        let sentence = "llama-server stopped while loading qwen: it exited with status 1. \
+                        It printed: gguf_init_from_reader: invalid magic characters";
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+        let port = listener.local_addr().expect("its address").port();
+        let reply =
+            serde_json::json!({ "error": sentence, "status": 500, "type": "model_load_failed" })
+                .to_string();
+        let daemon = std::thread::spawn(move || {
+            let (_request, mut stream) = blocking::accept(&listener).expect("the request");
+            let _ = write!(
+                stream,
+                "HTTP/1.1 500 Internal Server Error\r\ncontent-type: application/json\r\n\
+                 content-length: {}\r\nconnection: close\r\n\r\n{reply}",
+                reply.len()
+            );
+        });
+        let handle = DaemonHandle {
+            client: gglib_proxy::loopback::client(),
+            api_key: None,
+        };
+
+        let refused = STAND_IN_PORT
+            .scope(port, handle.proxy_prove(Some(3)))
+            .await
+            .expect_err("the model did not load");
+        daemon.join().expect("the stand-in ran");
+
+        assert_eq!(
+            crate::handlers::up::client_block::render_proof(Err(&refused.to_string()), false),
+            [format!(
+                "  ! the first request did not complete: {sentence}"
+            )]
+        );
     }
 }

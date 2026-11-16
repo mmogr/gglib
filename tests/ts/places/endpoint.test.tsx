@@ -4,7 +4,7 @@
  * the daemon's message as it said it, Copy); the loaded rows from the
  * dashboard (flag line, Reading %, the queue, the room for one more) and
  * each row's actions (Unload asks the daemon whatever this window
- * believes, pin and unpin restart the endpoint); Connect a client's
+ * believes, pin and unpin switch the endpoint in one call); Connect a client's
  * recipes for the model picked; Test it either way; Using it, Recent and
  * Activity; and the inspector beside the place, with a loaded model's rate
  * and time loaded. The words of a proof and of a recipe are pinned to the
@@ -184,6 +184,14 @@ describe('the endpoint place', () => {
       expect(transport.startProxy).toHaveBeenCalledWith({});
     });
 
+    it('off because its port was refused: says why, in the daemon\'s words', () => {
+      const why =
+        'The endpoint is off: port 8080 is in use by another program. Stop it, or choose another port (Settings › Endpoint, or `gglib config set proxy-port`), then turn the endpoint on.';
+      renderEndpoint({ ...DOWN, refused: why });
+      expect(screen.getByRole('status')).toHaveTextContent(why);
+      expect(screen.getByRole('button', { name: 'Turn on' })).toBeInTheDocument();
+    });
+
     it('off: Start when gglib launches is the stored setting', async () => {
       const { user } = renderEndpoint(DOWN);
       const box = await screen.findByRole('checkbox', { name: 'Start when gglib launches' });
@@ -238,15 +246,15 @@ describe('the endpoint place', () => {
       expect(screen.queryByRole('button', { name: /^Turn (on|off)$/ })).not.toBeInTheDocument();
     });
 
-    it('pinned: says Pinned and the one model it serves; Unpin stops, then starts every model', async () => {
+    it('pinned: says Pinned and the one model it serves; Unpin switches it to every model in one call', async () => {
       const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_to: 'Pinned to Qwen3-4B', pinned_model_id: 1 });
       expect(screen.getByText(ENDPOINT_WORDS.pinned)).toBeInTheDocument();
       expect(screen.getByText('only Qwen3-4B, other names are refused')).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Unpin' }));
 
-      await waitFor(() => expect(transport.startProxy).toHaveBeenCalledWith({}));
-      expect(transport.stopProxy.mock.invocationCallOrder[0]).toBeLessThan(transport.startProxy.mock.invocationCallOrder[0]);
+      await waitFor(() => expect(transport.startProxy).toHaveBeenCalledWith({ replace: true }));
+      expect(transport.stopProxy).not.toHaveBeenCalled();
       expect(transport.startPinnedProxy).not.toHaveBeenCalled();
     });
 
@@ -361,14 +369,14 @@ describe('the endpoint place', () => {
       expect(transport.stopServer).toHaveBeenCalledTimes(2);
     });
 
-    it('Pin the endpoint to it stops the endpoint, then starts it pinned to that model', async () => {
+    it('Pin the endpoint to it switches the endpoint to that model in one call', async () => {
       const { user } = renderEndpoint();
       await frame(admitted([residentSlot(1, 'Qwen3-4B')]));
       await user.click(within(loadedRow('Qwen3-4B')).getByRole('button', { name: 'More for Qwen3-4B' }));
       await user.click(screen.getByRole('menuitem', { name: 'Pin the endpoint to it' }));
 
-      await waitFor(() => expect(transport.startPinnedProxy).toHaveBeenCalledWith({ model_id: 1 }));
-      expect(transport.stopProxy.mock.invocationCallOrder[0]).toBeLessThan(transport.startPinnedProxy.mock.invocationCallOrder[0]);
+      await waitFor(() => expect(transport.startPinnedProxy).toHaveBeenCalledWith({ model_id: 1, proxy: { replace: true } }));
+      expect(transport.stopProxy).not.toHaveBeenCalled();
     });
 
     it('Chat with it, Show log and Change launch options… go where they say', async () => {
@@ -415,7 +423,7 @@ describe('the endpoint place', () => {
 
     it('Pin waits while a pin change is on its way', async () => {
       let stopped = () => {};
-      transport.stopProxy.mockImplementationOnce(() => new Promise<void>((resolve) => (stopped = resolve)));
+      transport.startPinnedProxy.mockImplementationOnce(() => new Promise((resolve) => (stopped = () => resolve({}))));
       const { user } = renderEndpoint();
       await frame(admitted([residentSlot(1, 'Qwen3-4B')]));
       const more = () => within(loadedRow('Qwen3-4B')).getByRole('button', { name: 'More for Qwen3-4B' });
@@ -428,15 +436,15 @@ describe('the endpoint place', () => {
   });
 
   describe('Serves', () => {
-    it('choosing one model restarts the endpoint pinned to it; Every model restarts it plain', async () => {
+    it('choosing one model switches the endpoint to it in one call', async () => {
       const { user } = renderEndpoint();
       await frame(admitted([residentSlot(2, 'Gemma-3-4B-It')]));
       const serves = screen.getByRole('combobox', { name: 'Serves' });
       expect(within(serves).getByRole('option', { name: 'Only Gemma-3-4B-It' })).toBeInTheDocument();
 
       await user.selectOptions(serves, 'Only Qwen3-4B');
-      await waitFor(() => expect(transport.startPinnedProxy).toHaveBeenCalledWith({ model_id: 1 }));
-      expect(transport.stopProxy).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(transport.startPinnedProxy).toHaveBeenCalledWith({ model_id: 1, proxy: { replace: true } }));
+      expect(transport.stopProxy).not.toHaveBeenCalled();
     });
 
     it('a pinned endpoint shows its model chosen, and Every model unpins it', async () => {
@@ -446,8 +454,8 @@ describe('the endpoint place', () => {
       await waitFor(() => expect(serves).toHaveValue('1'));
 
       await user.selectOptions(serves, 'Every model');
-      await waitFor(() => expect(transport.startProxy).toHaveBeenCalledWith({}));
-      expect(transport.stopProxy.mock.invocationCallOrder[0]).toBeLessThan(transport.startProxy.mock.invocationCallOrder[0]);
+      await waitFor(() => expect(transport.startProxy).toHaveBeenCalledWith({ replace: true }));
+      expect(transport.stopProxy).not.toHaveBeenCalled();
     });
 
     it('a pinned endpoint is matched to its model by id, never to another of the same name', async () => {
@@ -463,21 +471,8 @@ describe('the endpoint place', () => {
     });
   });
 
-  describe('pin and unpin restart the endpoint', () => {
-    it('starts pinned only once the stop has landed', async () => {
-      let stopped = () => {};
-      transport.stopProxy.mockImplementationOnce(() => new Promise<void>((resolve) => (stopped = resolve)));
-      const { user } = renderEndpoint();
-      await frame();
-      await user.selectOptions(screen.getByRole('combobox', { name: 'Serves' }), 'Only Qwen3-4B');
-      expect(transport.stopProxy).toHaveBeenCalledTimes(1);
-      expect(transport.startPinnedProxy).not.toHaveBeenCalled();
-
-      await act(async () => stopped());
-      await waitFor(() => expect(transport.startPinnedProxy).toHaveBeenCalledWith({ model_id: 1 }));
-    });
-
-    it('a pinned start that fails after the stop says the daemon\'s message as it said it', async () => {
+  describe('pin and unpin switch the endpoint in one call', () => {
+    it('a pinned switch that fails says the daemon\'s message as it said it', async () => {
       transport.startPinnedProxy.mockRejectedValueOnce(new Error('Qwen3-4B is not a chat model'));
       const { user } = renderEndpoint();
       await frame();
@@ -485,12 +480,13 @@ describe('the endpoint place', () => {
       await waitFor(() => expect(alert()).toHaveTextContent(/^Qwen3-4B is not a chat model$/));
     });
 
-    it('an unpin whose start fails after the stop says the daemon\'s message as it said it', async () => {
+    it('an unpin whose switch fails says the daemon\'s message as it said it', async () => {
       transport.startProxy.mockRejectedValueOnce(new Error('port 8080 is in use'));
       const { user } = renderEndpoint({ ...UP, state: 'pinned', pinned_model: 'Qwen3-4B', pinned_to: 'Pinned to Qwen3-4B', pinned_model_id: 1 });
       await user.click(screen.getByRole('button', { name: 'Unpin' }));
       await waitFor(() => expect(alert()).toHaveTextContent(/^port 8080 is in use$/));
-      expect(transport.stopProxy).toHaveBeenCalledTimes(1);
+      expect(transport.startProxy).toHaveBeenCalledWith({ replace: true });
+      expect(transport.stopProxy).not.toHaveBeenCalled();
     });
   });
 

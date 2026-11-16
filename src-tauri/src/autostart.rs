@@ -61,8 +61,20 @@ pub(crate) const fn should_start_hidden(
 /// immediately before calling this hook, both inside `build()`, and GTK only
 /// completes a queued map once `run()` pumps the event loop. So the window is
 /// still unmapped at this point and hiding it cancels the map outright.
+///
+/// Only a login-item launch with a tray can start hidden, so only that one
+/// asks the daemon for `close_to_tray`, and waits for the launch to settle
+/// first (nobody is waiting on a window at login). Every other launch shows
+/// its window at once, without asking.
 pub(crate) async fn apply_initial_visibility(app: &AppHandle, tray_available: bool) {
+    let launched_by_login_item = launched_by_login_item();
+    if !should_start_hidden(launched_by_login_item, Some(true), tray_available) {
+        return;
+    }
+
     let state = app.state::<AppState>();
+    // A failed launch leaves the settings unread, below.
+    let _ = state.daemon.service.settled().await;
 
     let close_to_tray = match state.daemon.settings().await {
         Ok(settings) => settings.close_to_tray,
@@ -76,7 +88,7 @@ pub(crate) async fn apply_initial_visibility(app: &AppHandle, tray_available: bo
         }
     };
 
-    if !should_start_hidden(launched_by_login_item(), close_to_tray, tray_available) {
+    if !should_start_hidden(launched_by_login_item, close_to_tray, tray_available) {
         return;
     }
 
@@ -102,6 +114,9 @@ pub(crate) async fn apply_initial_visibility(app: &AppHandle, tray_available: bo
 /// honours `proxy_autostart` itself when it starts.
 pub(crate) async fn apply(app: &AppHandle) {
     let state = app.state::<AppState>();
+    // The settings are the daemon's: wait for the launch, whose failure
+    // leaves them unread below.
+    let _ = state.daemon.service.settled().await;
 
     let settings = match state.daemon.settings().await {
         Ok(settings) => settings,

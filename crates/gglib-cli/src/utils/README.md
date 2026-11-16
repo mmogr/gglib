@@ -13,10 +13,14 @@ when an answer is waiting in it, since one that nobody writes to and nobody
 closes would be waited on for ever. The question comes to its
 [`input::Unasked`] instead: `Take` an answer the command can state, printing
 the line that says what was taken and why, or `Refuse` with one sentence
-naming the flag that answers it ([`input::nobody_to_ask`]). Three offers
-still ask stdin themselves, by the same rule, and are to be moved onto this
-one: the engine install offer (`config::engine`) and `gglib up`'s two
-(`up::require_tty`, `up::probe`).
+naming the flag that answers it ([`input::nobody_to_ask`]). A question
+asked on stderr, because stdout is the command's result (the endpoint switch
+`gglib serve`, `gglib proxy` and `model load --pin` ask, `daemon stop
+--remote`), asks [`input::Input::stdin_asking_on_stderr`], which needs stderr
+to be a terminal too. The engine install offer (`config::engine`), the
+runtime repair offer (`config::repair`) and `gglib up`'s two (`up::require_tty`,
+`up::probe`) take `Input::stdin` as a value and decide with it by the same
+rule.
 
 | Function | Asks for |
 |----------|----------|

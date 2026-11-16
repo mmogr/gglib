@@ -8,7 +8,9 @@ pub(crate) mod llama;
 pub(crate) mod llama_detect;
 mod llama_events;
 pub(crate) mod llama_install;
+pub(crate) mod path_entry;
 pub(crate) mod paths;
+pub(crate) mod repair;
 pub(crate) mod sd;
 pub(crate) mod settings;
 
@@ -34,5 +36,6 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: ConfigCommand) -> Result
         }
         ConfigCommand::FastDownloads { command } => fast_downloads::dispatch(command).await,
         ConfigCommand::Paths => paths::execute(),
+        ConfigCommand::PathEntry { command } => path_entry::execute(command),
     }
 }

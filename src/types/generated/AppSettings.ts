@@ -5,9 +5,10 @@ import type { InferenceProfile } from "./InferenceProfile";
 /**
  * Application settings for the settings UI.
  *
- * `Default` is "nothing configured" — every field is optional, so it stands
- * for a fresh install with no saved values, which is what callers resolving
- * their own fallbacks need to test against.
+ * `Default` is "nothing configured": a fresh install with no saved values,
+ * which is what callers resolving their own fallbacks need to test against.
+ * Nearly every field is the stored value, `null` when none is stored; the
+ * endpoint's switch at launch is the value the service acts on.
  */
 export type AppSettings = { defaultContextSize: number | null, proxyPort: number | null, llamaBasePort: number | null, maxDownloadQueueSize: number | null, maxToolIterations: number | null, maxStagnationSteps: number | null, 
 /**
@@ -51,4 +52,13 @@ toolCallRepair: boolean | null,
 /**
  * Whether `/mcp` offers MCP clients the drawing tool. Absent means off.
  */
-mcpDrawing: boolean | null, proxyAutostart: boolean | null, closeToTray: boolean | null, startAtLogin: boolean | null, };
+mcpDrawing: boolean | null, 
+/**
+ * Whether the service turns the endpoint on when it starts: what it
+ * does (`gglib_core::Settings::effective_proxy_autostart`), so the page
+ * does not supply the default itself. Never `null` from this build;
+ * an older service sends `null` for a switch it treats as off, and still
+ * parses. Writing `null` clears the stored choice, which reads back as
+ * on.
+ */
+proxyAutostart: boolean | null, closeToTray: boolean | null, startAtLogin: boolean | null, };

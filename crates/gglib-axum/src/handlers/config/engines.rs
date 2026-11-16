@@ -18,7 +18,7 @@ use futures_util::stream::Stream;
 
 use gglib_app_services::EngineStatus;
 use gglib_core::domain::RuntimeKind;
-use gglib_runtime::engine::UninstallOutcome;
+use gglib_runtime::engine::{RepairReport, UninstallOutcome};
 
 use super::install_slot::{holding_install_slot, install_stream};
 use crate::error::HttpError;
@@ -81,6 +81,19 @@ pub(crate) async fn uninstall(
     Ok(Json(
         holding_install_slot(slot(kind), kind.label(), removal).await?,
     ))
+}
+
+/// Make the repair the engine's status offers that changes the machine:
+/// install Microsoft's Visual C++ runtime, then check the engine again. The
+/// app calls it when the person presses Repair, which is their yes; Windows
+/// then asks for administrator rights itself. 409 when the status offers no
+/// such repair. The answer says what happened, also when nothing was
+/// installed.
+pub(crate) async fn repair(
+    State(state): State<AppState>,
+    Path(kind): Path<RuntimeKind>,
+) -> Result<Json<RepairReport>, HttpError> {
+    Ok(Json(state.setup.repair(kind).await?))
 }
 
 #[cfg(test)]

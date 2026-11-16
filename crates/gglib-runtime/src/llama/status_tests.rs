@@ -28,6 +28,7 @@ fn status_serialises_as_camel_case() {
         config_path: "/tmp/llama-config.json".into(),
         healthy: false,
         health_error: Some("not executable".into()),
+        fix: None,
         build: None,
         build_error: None,
         prebuilt: None,

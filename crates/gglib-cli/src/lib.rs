@@ -42,7 +42,7 @@ pub(crate) mod utils;
 pub use bootstrap::{CliContext, bootstrap};
 pub use commands::Commands;
 pub use config_commands::ConfigCommand;
-pub use dispatch::{dispatch, dispatch_without_library};
+pub use dispatch::{dispatch, dispatch_without_library, leaves_nothing_behind};
 pub use llama_commands::LlamaCommand;
 pub use model_commands::ModelCommand;
 pub use parser::Cli;

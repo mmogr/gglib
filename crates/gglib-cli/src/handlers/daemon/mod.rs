@@ -11,9 +11,14 @@ use crate::utils::input::{self, Input, Unasked};
 use gglib_axum::{DaemonLock, DaemonOptions, SHUTDOWN_WATCHDOG, run_daemon};
 use gglib_core::daemon_port;
 
-/// Execute `gglib daemon run`: host the daemon in the foreground.
-pub(crate) async fn run(allowed_hosts: Vec<String>) -> Result<()> {
-    run_daemon(DaemonOptions { allowed_hosts }).await
+/// Execute `gglib daemon run`: host the daemon in the foreground, with the
+/// endpoint left off at its start when `leave_endpoint_off`.
+pub(crate) async fn run(allowed_hosts: Vec<String>, leave_endpoint_off: bool) -> Result<()> {
+    run_daemon(DaemonOptions {
+        allowed_hosts,
+        leave_endpoint_off,
+    })
+    .await
 }
 
 /// The report's lines for the proxy: its state (a pinned one with its model,
@@ -31,7 +36,22 @@ fn proxy_lines(proxy: &ProxyStatusDto) -> Vec<String> {
     if let Some(key) = proxy.key {
         lines.push(format!("  API key: {key}"));
     }
+    if let Some(why) = &proxy.refused {
+        lines.push(format!("  Why:     {why}"));
+    }
     lines
+}
+
+/// The line under a pinned proxy's report naming the command that serves
+/// every model again; nothing for an unpinned or stopped one.
+///
+/// This CLI's own words, about one of its commands, and so kept apart from
+/// [`proxy_lines`], whose every word is the daemon's.
+fn way_back_line(proxy: &ProxyStatusDto) -> Option<String> {
+    proxy
+        .pinned_to
+        .is_some()
+        .then(|| "  Unpin:   gglib proxy  (serve every model again)".to_owned())
 }
 
 /// Execute `gglib daemon status`.
@@ -48,6 +68,9 @@ pub(crate) async fn status() -> Result<()> {
             match handle.proxy_status().await {
                 Ok(proxy) => {
                     for line in proxy_lines(&proxy) {
+                        eprintln!("{line}");
+                    }
+                    if let Some(line) = way_back_line(&proxy) {
                         eprintln!("{line}");
                     }
                 }
@@ -149,7 +172,7 @@ async fn stop_far(yes: bool) -> Result<()> {
             "--yes to stop it",
         );
         let agreed = input::asked(
-            Input::stdin(),
+            Input::stdin_asking_on_stderr(),
             &mut std::io::stderr(),
             Unasked::Refuse(refused),
             |_| confirm(machine),

@@ -40,6 +40,17 @@ pub(crate) fn write_settings(root: &Path, change: impl Fn(&mut Settings) + Send 
     });
 }
 
+/// Keep the endpoint off when a service starts over `root`.
+///
+/// A service turns its endpoint on as it starts unless `proxy-autostart` is
+/// stored as `false`, and a fresh data folder's endpoint port is 8080: a
+/// test's service would bind it beside every other test's, and beside the
+/// owner's own gglib. Every test that starts a real service over a data
+/// folder of its own stores this first.
+pub(crate) fn keep_the_endpoint_off(root: &Path) {
+    write_settings(root, |settings| settings.proxy_autostart = Some(false));
+}
+
 /// The settings stored in `root`'s database.
 pub(crate) fn read_settings(root: &Path) -> Settings {
     runtime().block_on(async {

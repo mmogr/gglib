@@ -22,6 +22,8 @@ use crate::bootstrap::CliContext;
 use crate::daemon_client;
 use crate::handlers::model::resolver;
 use crate::presentation::style;
+use crate::presentation::table_layout::{Column, Shorten, Table};
+use crate::presentation::terminal::stdout_width;
 
 #[path = "benchmark_verdicts.rs"]
 mod benchmark_verdicts;
@@ -1186,28 +1188,36 @@ async fn cmd_list(ctx: &CliContext, limit: i64) -> Result<()> {
         return Ok(());
     }
 
-    println!(
-        "{BOLD}{:>6}  {:<8}  {:<19}  {:<9}  Outcome{RESET}",
-        "ID",
-        "Type",
-        "Started",
-        "Status",
-        BOLD = style::BOLD,
-        RESET = style::RESET,
-    );
-    println!("{}", "─".repeat(68));
+    // In a narrow terminal the id stays; the type goes first, then when it
+    // started, then its status, and the outcome wraps before it goes.
+    let mut table = Table::new(vec![
+        Column::new("ID").right().pad(6),
+        Column::new("Type").pad(8).droppable(1),
+        Column::new("Started").pad(19).droppable(2),
+        Column::new("Status").pad(9).droppable(3),
+        Column::new("Outcome")
+            .shorten(Shorten::Wrap { min: 20 })
+            .droppable(4),
+    ])
+    .gap(2)
+    .ruler('─');
     for run in &runs {
-        let run_type = format!("{:?}", run.run_type).to_lowercase();
-        let started = run.created_at.format("%Y-%m-%d %H:%M:%S").to_string();
-        let status = format!("{:?}", run.status).to_lowercase();
-        println!(
-            "{:>6}  {:<8}  {:<19}  {:<9}  {}",
-            run.id,
-            run_type,
-            started,
-            status,
+        table.row(vec![
+            run.id.to_string(),
+            format!("{:?}", run.run_type).to_lowercase(),
+            run.created_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+            format!("{:?}", run.status).to_lowercase(),
             run_outcome(run),
-        );
+        ]);
+    }
+    let laid = table.lay_out(stdout_width());
+    let mut lines = laid.lines().into_iter();
+    if laid.header.is_some() {
+        let header = lines.next().unwrap_or_default();
+        println!("{}{header}{}", style::BOLD, style::RESET);
+    }
+    for line in lines {
+        println!("{line}");
     }
     Ok(())
 }

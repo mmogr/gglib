@@ -278,7 +278,7 @@ impl ProxySupervisor {
         // Whether a launch with nothing configured reaches the fitted rung or
         // falls through to the floor. Read here because this crate owns the
         // probe and `gglib-proxy` cannot depend on it.
-        let device_memory_readable = crate::system::total_device_memory_bytes().is_some();
+        let device_memory_readable = crate::system::fit_memory().budget_bytes().is_some();
         let cache_enabled = config.cache_enabled;
         let slot_dir = config.slot_dir;
         let disk_budget = config.disk_budget;
@@ -390,6 +390,9 @@ impl ProxySupervisor {
                 // Timed out - abort the task (we still own it)
                 warn!("Proxy stop timed out; aborting task");
                 join.abort();
+                // Wait for the abort to land, so the task's listener is
+                // dropped and its port can be bound again at once.
+                let _ = join.await;
                 Err(SupervisorError::Internal(
                     "Proxy stop timed out; task aborted".into(),
                 ))

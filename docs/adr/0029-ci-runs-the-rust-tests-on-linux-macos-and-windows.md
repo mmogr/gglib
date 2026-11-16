@@ -111,3 +111,9 @@ the run's `test-run-<target>` artifacts for 30 days, and not after.
   fewer tests than macOS in the first run.
 - The frontend's tests, which run on Linux in one browser engine.
 - Running the built installer or a release's binaries.
+
+> **Amended 2026-11-16.** A release's binaries are now run, outside this
+> decision: `release.yml`'s `smoke` job installs each OS's build as a user
+> does, the Windows installer included, and asks it one question before
+> `publish` (`scripts/release_smoke.py`). It runs on a release and a test run
+> of `release.yml`, not on a pull request, and gates no merge.

@@ -107,6 +107,24 @@ comment).
 > and requires its two tied children gone within 2 s where the call says
 > `Tied::ByJob`.
 
+> **Amendment, 2026-11-16 ([#1959](https://github.com/mmogr/gglib/issues/1959), B4).**
+> Decision 4 now holds the registry too. The desktop app's Windows installer
+> runs the `gglib.exe` it installs, `gglib config path-entry add`, to put
+> its folder on the user's own `Path` (`HKEY_CURRENT_USER\Environment`), and
+> the uninstaller runs `remove`, which takes off only a folder `add` put on,
+> by a record in `HKEY_CURRENT_USER\Software\gglib` (`PathEntriesAdded`).
+> `host::Registry`, the `paths::user_path::Store` that gglib-core alone can
+> reach, reads and writes those values with `RegGetValueW` (`RRF_NOEXPAND`,
+> so `%VAR%` stays unexpanded), `RegSetKeyValueW` and `RegDeleteKeyValueW`,
+> and announces a `Path` change with `SendMessageTimeoutW(HWND_BROADCAST,
+> WM_SETTINGCHANGE, "Environment")`; off Windows the variable is
+> `UserPath::NotKept` and nothing is written. The calls are in `host.rs`
+> beside the others, not in the
+> installer, because an NSIS string holds 1024 characters in the build Tauri
+> uses, and a longer `Path` read into one and written back would be cut
+> short. What the edit does to the text is `gglib_core::paths::user_path`,
+> tested on every OS.
+
 ## Consequences
 
 - `crates/gglib-core/tests/detached_spawn.rs` holds the A5 fault on every

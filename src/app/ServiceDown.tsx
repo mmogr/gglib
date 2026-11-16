@@ -10,12 +10,17 @@
  * reads every store again, the settings, the library and the built-in
  * tools among them (`keptCurrent`). Before the first answer the
  * window is drawn, never this screen: a healthy daemon is not called gone
- * for a moment.
+ * for a moment. In the desktop app, until then and while the app's lookup of
+ * the daemon's address is out (the app answers it once its launch of the
+ * daemon has settled), the window says gglib is starting instead
+ * (`useAddressLookup`): no timer, it is what is drawn while the answer is out.
  *
  * The screen is one centred sentence beside the sidebar, dimmed and out of
  * reach. On the desktop, Start gglib starts the daemon the way the tray
  * menu's Start gglib does (`start_gglib`), and a refusal is said in the
- * app's words, the port held by another program among them. A browser tab
+ * app's words, the port held by another program among them. A launch that
+ * failed before anyone pressed it is said the same way, in the launch's own
+ * words (the lookup's failure). A browser tab
  * has nothing to start a daemon with, so it says it lost gglib and asks
  * again until it is back (the poll is the retry).
  *
@@ -25,14 +30,18 @@
 import { useEffect, useState, type FC, type ReactNode } from 'react';
 import { Button } from '../components/ui/Button';
 import { StatusMark } from '../components/status/StatusMark';
+import { STARTING_WORDS, useAddressLookup } from '../hooks/useAddressLookup';
 import { useDaemonRecovery } from '../hooks/useDaemonRecovery';
 import { isDesktop, startGglib } from '../services/platform';
 import { getTransport } from '../services/transport';
 import { Sidebar } from '../sidebar/Sidebar';
 import { formatError } from '../utils/errors';
 
-/** Start gglib, and what came of it. */
-const StartGglib: FC = () => {
+/**
+ * Start gglib, and what came of it: its refusal, or else `reason`, why the
+ * launch before it failed (one sentence, never both: a refusal is the newer).
+ */
+const StartGglib: FC<{ reason: string | null }> = ({ reason }) => {
   const [starting, setStarting] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
 
@@ -48,14 +57,15 @@ const StartGglib: FC = () => {
     }
   };
 
+  const said = refusal ?? (starting ? null : reason);
   return (
     <>
       <Button variant="primary" disabled={starting} onClick={() => void start()}>
         {starting ? 'Starting gglib…' : 'Start gglib'}
       </Button>
-      {refusal && (
+      {said && (
         <p role="alert" className="m-0 max-w-[480px] text-sm text-text-secondary">
-          {refusal}
+          {said}
         </p>
       )}
     </>
@@ -76,12 +86,13 @@ const Frame: FC<{ children: ReactNode }> = ({ children }) => (
   </div>
 );
 
-export const ServiceDown: FC = () => (
+/** `reason`: why the app's launch of the daemon failed, in its own words. */
+export const ServiceDown: FC<{ reason?: string | null }> = ({ reason = null }) => (
   <Frame>
     {isDesktop() ? (
       <>
         <p className="m-0 text-lg text-text">gglib isn't running, so nothing can be served.</p>
-        <StartGglib />
+        <StartGglib reason={reason} />
       </>
     ) : (
       <p role="status" className="m-0">
@@ -100,6 +111,7 @@ export const ServiceDown: FC = () => (
  */
 export const ServiceGate: FC<{ children: ReactNode }> = ({ children }) => {
   const reachable = useDaemonRecovery();
+  const lookup = useAddressLookup();
   const [refused, setRefused] = useState<string | null>(null);
 
   useEffect(() => {
@@ -115,7 +127,16 @@ export const ServiceGate: FC<{ children: ReactNode }> = ({ children }) => {
     };
   }, [reachable]);
 
-  if (reachable === false) return <ServiceDown />;
+  if (reachable === null && isDesktop() && lookup.state !== 'known') {
+    return (
+      <Frame>
+        <p role="status" className="m-0">
+          <StatusMark kind="changing" word={STARTING_WORDS} className="gap-sm text-lg text-text" />
+        </p>
+      </Frame>
+    );
+  }
+  if (reachable === false) return <ServiceDown reason={lookup.state === 'failed' ? lookup.reason : null} />;
   if (refused !== null) {
     return (
       <Frame>

@@ -63,7 +63,12 @@ functions keep that exact. `child` gives an entry's canonical path in a
 canonical folder, and `join` joins a relative path onto a folder, each in the
 verbatim form when a name needs it, since a plain `C:\proj\notes.` would open
 `C:\proj\notes`. `inside` says whether a canonical path lies in a canonical
-folder, and what part of it is under the folder, for either form of each.
+folder, and what part of it is under the folder, for either form of each;
+`inside_on` is the same, compared as an OS (a `HostOs` value) compares
+names, without case on Windows and macOS, and `drive_root` reads the root of
+the drive a Windows path names (`C:\` for `C:\Windows`), both from the text
+alone, so a chat's system folders (`domain::folder::Places`) are compared
+alike on every OS.
 `is_verbatim` says whether a string has the prefix, for the one check that
 refuses a library an older build wrote on Windows.
 
@@ -84,6 +89,37 @@ goes, unless the daemon's own environment names one.
 to it, or, while it is not there, to the nearest folder above it that is:
 the settings page's, the setup status's and `gglib config show`'s
 state for the folder.
+
+# The user's own PATH
+
+`user_path` puts a folder on the user's own `PATH`, and takes it off, for
+the desktop app's Windows installer, which runs `gglib config path-entry
+add` after it installs and `remove` before it uninstalls, so `gglib` runs in
+a terminal opened afterwards. The folder is the one the running `gglib.exe`
+is in.
+
+`remove` takes off only what `add` put on. A folder already on `PATH`,
+because the user installed into a folder of their own tools or added it by
+hand, is left there by both. `add` records each folder it adds in
+`HKEY_CURRENT_USER\Software\gglib`, value `PathEntriesAdded`, a list
+separated by `;`, writing the record before `PATH`; `remove` acts only on a
+folder the record names, writing `PATH` before the record, and drops the
+folder from the record whether or not the entry was still there. A crash
+between two writes so leaves at worst a record naming a folder not on
+`PATH`, which the next install completes and the next uninstall clears.
+
+`with_folder` adds the folder once, as the last entry, or as the first when
+the value ends inside an unclosed quote; `without_folder` takes out every
+entry that names it. Entries are split at each `;` outside double quotes,
+and an unclosed quote runs to the end. An entry names the folder when the
+two are the same text once surrounding quotes and trailing separators are
+dropped, `/` is read as `\` and case is ignored, so `C:\a\gglib-gui-old` is
+another folder. Every other entry is kept as it is written, `%VAR%`
+references and quotes included, and removing what was added gives back the
+value as it was; a value left with nothing in it is stored empty. The value
+is read and written whole, keeping its `REG_EXPAND_SZ` or `REG_SZ` type, by
+`utils::process::host`, the one file that calls Windows; macOS and Linux
+keep no such variable, and both edits change nothing there.
 
 # Design
 

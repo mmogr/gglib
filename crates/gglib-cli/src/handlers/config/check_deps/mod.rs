@@ -13,6 +13,7 @@ use display::{print_gpu_status, render_report};
 use instructions::print_installation_instructions;
 
 use crate::presentation::style::{BOLD, INFO, RESET};
+use crate::presentation::terminal::stdout_width;
 
 /// Execute the check-deps command.
 ///
@@ -24,7 +25,7 @@ pub(crate) fn execute(probe: &dyn SystemProbePort) -> Result<()> {
     println!("{BOLD}{INFO}Checking system dependencies...{RESET}\n");
 
     let report = probe.dependency_report();
-    print!("{}", render_report(&report));
+    print!("{}", render_report(&report, stdout_width()));
 
     let missing = report.missing();
     if !missing.is_empty() {

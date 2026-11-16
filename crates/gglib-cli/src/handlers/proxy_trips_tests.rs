@@ -18,7 +18,7 @@ fn now_secs() -> u64 {
 
 fn printed(days: &[LoopGuardTripDay], since_days: u32) -> String {
     let mut out = Vec::new();
-    render(&mut out, days, since_days).unwrap();
+    render(&mut out, days, since_days, None).unwrap();
     String::from_utf8(out).unwrap()
 }
 

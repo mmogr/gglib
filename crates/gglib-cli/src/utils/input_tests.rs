@@ -252,6 +252,23 @@ fn at_a_terminal_the_end_of_input_with_nothing_stated_is_an_error() {
     assert_eq!(asked_on, "Count: \nCount: \n");
 }
 
+/// Somebody is asked only when they both read the question and type the
+/// answer: a question sent to a log file waits on nobody.
+#[test]
+fn somebody_is_asked_only_at_a_terminal_both_ways() {
+    assert_eq!(Input::from_streams(true, true), Input::Terminal);
+    assert_eq!(
+        Input::from_streams(true, false),
+        Input::NotTerminal,
+        "question to a file"
+    );
+    assert_eq!(
+        Input::from_streams(false, true),
+        Input::NotTerminal,
+        "answer from a pipe"
+    );
+}
+
 /// The sentence a question nobody can answer is refused with.
 #[test]
 fn the_refusal_says_what_was_not_done_and_the_flag_that_does_it() {

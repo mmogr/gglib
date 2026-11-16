@@ -137,7 +137,7 @@ const SIZE_NOTE: &str = "at Q4_K_M; the download takes the largest quant that fi
 const SERVED_CONTEXT: &str = "sized at launch";
 
 /// And where that size comes from, so "sized at launch" is not merely a shrug.
-const SERVED_CONTEXT_NOTE: &str = "from this machine's free memory";
+const SERVED_CONTEXT_NOTE: &str = "to this machine's memory, said once it loads";
 
 /// The note beside `needs`, naming what `context` was used *for*.
 ///

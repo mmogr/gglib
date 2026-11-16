@@ -317,7 +317,7 @@ fn a_plan_shows_the_fit_its_narration_carries() {
 #[test]
 fn a_launch_with_the_fit_switched_off_narrates_no_fit() {
     let request = super::super::prepare_with(
-        false,
+        None,
         sized_spec(),
         &ServerConfigOptions::default(),
         CacheRamSetting::Auto,

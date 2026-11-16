@@ -14,10 +14,13 @@ fn meta(pairs: &[(&str, &str)]) -> HashMap<String, String> {
 /// must cost nothing on the models that do not.
 #[test]
 fn a_model_publishing_nothing_gets_no_section() {
-    let lines = published_sampling_lines(&meta(&[
-        ("general.architecture", "qwen3"),
-        ("general.quantization_version", "2"),
-    ]));
+    let lines = published_sampling_lines(
+        &meta(&[
+            ("general.architecture", "qwen3"),
+            ("general.quantization_version", "2"),
+        ]),
+        None,
+    );
     assert!(lines.is_empty(), "{lines:#?}");
 }
 
@@ -26,7 +29,8 @@ fn a_model_publishing_nothing_gets_no_section() {
 /// spellings and nothing else on screen connects them.
 #[test]
 fn a_published_key_names_the_gglib_parameter_it_moves() {
-    let lines = published_sampling_lines(&meta(&[("general.sampling.penalty_repeat", "1.07")]));
+    let lines =
+        published_sampling_lines(&meta(&[("general.sampling.penalty_repeat", "1.07")]), None);
 
     let row = lines
         .iter()
@@ -41,10 +45,13 @@ fn a_published_key_names_the_gglib_parameter_it_moves() {
 /// silently reshaping output impossible to find from this command.
 #[test]
 fn an_unmodelled_key_is_listed_and_marked_as_unmodelled() {
-    let lines = published_sampling_lines(&meta(&[
-        ("general.sampling.xtc_probability", "0.5"),
-        ("general.sampling.mirostat", "2"),
-    ]));
+    let lines = published_sampling_lines(
+        &meta(&[
+            ("general.sampling.xtc_probability", "0.5"),
+            ("general.sampling.mirostat", "2"),
+        ]),
+        None,
+    );
 
     for key in ["xtc_probability", "mirostat"] {
         let row = lines
@@ -59,12 +66,15 @@ fn an_unmodelled_key_is_listed_and_marked_as_unmodelled() {
 /// not be promoted into a section about what the server will do.
 #[test]
 fn only_the_general_sampling_prefix_is_collected() {
-    let lines = published_sampling_lines(&meta(&[
-        ("general.sampling.temp", "0.33"),
-        ("qwen3.sampling.temp", "0.44"),
-        ("sampling.temp", "0.55"),
-        ("general.sample_count", "10"),
-    ]));
+    let lines = published_sampling_lines(
+        &meta(&[
+            ("general.sampling.temp", "0.33"),
+            ("qwen3.sampling.temp", "0.44"),
+            ("sampling.temp", "0.55"),
+            ("general.sample_count", "10"),
+        ]),
+        None,
+    );
 
     assert_eq!(
         lines.iter().filter(|l| l.contains("= 0.33")).count(),
@@ -83,7 +93,7 @@ fn only_the_general_sampling_prefix_is_collected() {
 /// `explain`, rather than answering it here with a second implementation.
 #[test]
 fn the_section_points_at_explain_for_the_override_comparison() {
-    let lines = published_sampling_lines(&meta(&[("general.sampling.temp", "0.33")]));
+    let lines = published_sampling_lines(&meta(&[("general.sampling.temp", "0.33")]), None);
     let text = lines.join("\n");
 
     assert!(text.contains("every field gglib does not send"), "{text}");
@@ -93,10 +103,13 @@ fn the_section_points_at_explain_for_the_override_comparison() {
 /// Keys are aligned and sorted, matching the raw-metadata dump below them.
 #[test]
 fn keys_are_sorted_and_aligned() {
-    let lines = published_sampling_lines(&meta(&[
-        ("general.sampling.top_k", "17"),
-        ("general.sampling.temp", "0.33"),
-    ]));
+    let lines = published_sampling_lines(
+        &meta(&[
+            ("general.sampling.top_k", "17"),
+            ("general.sampling.temp", "0.33"),
+        ]),
+        None,
+    );
 
     let rows: Vec<&String> = lines
         .iter()
@@ -242,7 +255,7 @@ fn every_stored_default_is_listed_whichever_field_it_is() {
     };
 
     assert_eq!(
-        inference_default_lines(&stored),
+        inference_default_lines(&stored, None),
         [
             "",
             "  Inference Defaults (user-set)",
@@ -257,13 +270,13 @@ fn every_stored_default_is_listed_whichever_field_it_is() {
 /// gets no section at all.
 #[test]
 fn a_model_that_stores_no_defaults_gets_no_section() {
-    assert!(inference_default_lines(&detail(None)).is_empty());
+    assert!(inference_default_lines(&detail(None), None).is_empty());
 
     let empty = ModelDetailDto {
         inference_defaults: Some(gglib_core::domain::InferenceConfig::default()),
         ..detail(None)
     };
-    assert!(inference_default_lines(&empty).is_empty());
+    assert!(inference_default_lines(&empty, None).is_empty());
 }
 
 // ── Revision ──────────────────────────────────────────────────────────────────

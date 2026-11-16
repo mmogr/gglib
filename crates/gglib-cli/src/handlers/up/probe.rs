@@ -1,6 +1,5 @@
 //! Steps 1-2: what this machine is, and the engines on it.
 
-use std::io::IsTerminal;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -13,8 +12,10 @@ use gglib_runtime::DefaultSystemProbe;
 use super::{require_tty, row, sgr, step};
 use crate::bootstrap::CliContext;
 use crate::handlers::config::engine::ensure_installed;
+use crate::handlers::config::repair::{Asker, ending, needs_runtime, offer_runtime};
 use crate::presentation::style::{RESET, SUCCESS};
 use gglib_core::domain::{EngineState, RuntimeKind};
+use gglib_runtime::engine::NotWorking;
 use gglib_runtime::engine::{self, PinStanding, pin_state};
 
 /// Run steps 1 and 2, returning the memory figures the model choice needs.
@@ -57,11 +58,11 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
         // installed already runs.
         PinStanding::Older => {
             ensure_installed(RuntimeKind::Llama, yes).await?;
-            require_working_chat()?;
+            require_working_chat(yes).await?;
             row("chat", "llama.cpp installed", None);
         }
         PinStanding::AtPin | PinStanding::Newer | PinStanding::Unknown => {
-            require_working_chat()?;
+            require_working_chat(yes).await?;
             row("chat", "llama.cpp already installed", None);
         }
     }
@@ -83,7 +84,11 @@ async fn ensure_images(yes: bool) {
             return;
         }
     };
-    match images_action(standing, yes, std::io::stdin().is_terminal()) {
+    match images_action(
+        standing,
+        yes,
+        crate::utils::input::Input::stdin() == crate::utils::input::Input::Terminal,
+    ) {
         ImagesAction::SkipNobodyToAsk => {
             images_skipped("there is no terminal to ask, and --yes was not given");
         }
@@ -98,14 +103,14 @@ async fn ensure_images(yes: bool) {
         },
         // As for llama.cpp, a declined or failed update keeps what is there.
         ImagesAction::OfferUpdate => match ensure_installed(kind, yes).await {
-            Ok(()) if images_work() => {
+            Ok(()) if images_work(yes).await => {
                 row("images", &format!("{} installed", kind.label()), None);
             }
             Ok(()) => {}
             Err(e) => images_skipped(&format!("{e:#}")),
         },
         ImagesAction::AlreadyThere => {
-            if images_work() {
+            if images_work(yes).await {
                 row(
                     "images",
                     &format!("{} already installed", kind.label()),
@@ -117,20 +122,40 @@ async fn ensure_images(yes: bool) {
 }
 
 /// Stop `up` when the installed llama.cpp does not work, saying why: chat
-/// needs it. A fresh install has been checked by the install itself.
-fn require_working_chat() -> Result<()> {
-    engine::validate_engine(RuntimeKind::Llama).inspect_err(|_| {
-        row("chat", &not_working(RuntimeKind::Llama), None);
-    })
+/// needs it. A fresh install has been checked by the install itself. One
+/// that lacks the Visual C++ runtime is offered it first (`yes` answers).
+async fn require_working_chat(yes: bool) -> Result<()> {
+    let kind = RuntimeKind::Llama;
+    let Err(e) = engine::validate_engine(kind) else {
+        return Ok(());
+    };
+    row("chat", &not_working(kind), None);
+    let offered = offer_runtime(kind, &e, Asker::Up { yes }).await?;
+    ending(e, offered)
 }
 
 /// Whether the installed stable-diffusion.cpp works; when it does not, say
-/// why, and that chat goes on without it.
-fn images_work() -> bool {
-    let Err(e) = engine::validate_engine(RuntimeKind::StableDiffusion) else {
+/// why, and that chat goes on without it. One that lacks the Visual C++
+/// runtime is offered it first (`yes` answers), having said why.
+async fn images_work(yes: bool) -> bool {
+    let kind = RuntimeKind::StableDiffusion;
+    let Err(e) = engine::validate_engine(kind) else {
         return true;
     };
-    row("images", &not_working(RuntimeKind::StableDiffusion), None);
+    row("images", &not_working(kind), None);
+    if needs_runtime(&e).is_some() {
+        let offered = offer_runtime(kind, &e, Asker::Up { yes }).await;
+        if let Ok(offered) = offered {
+            match ending(e, offered) {
+                Ok(()) => return true,
+                // The install's own words; the reason was said before it.
+                Err(said) if !said.is::<NotWorking>() => println!("  {said:#}"),
+                Err(_) => {}
+            }
+        }
+        println!("     Chat works without it.");
+        return false;
+    }
     for line in images_not_working_lines(&format!("{e:#}")) {
         println!("{line}");
     }

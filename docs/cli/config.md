@@ -26,7 +26,7 @@ Current application settings:
   models-dir               /Users/mmogr/.local/share/gglib-demo/models (environment, Writable)
   proxy-allowed-hosts      None
   proxy-api-key            None
-  proxy-autostart          None
+  proxy-autostart          None (on)
   proxy-cache-disk-gb      None
   proxy-cache-on-disk      None
   proxy-host               None
@@ -83,13 +83,19 @@ gglib config reveal proxy-api-key  # a stored secret, alone on stdout
   LAN clients and makes it demand the API key), the host names it answers
   to beyond its own, and whether its prompt cache lives on disk and within
   how many GiB. `proxy --host`, `--allowed-host`, `--cache` and
-  `--cache-disk-gb` override them for one run; the desktop app and the
-  tray follow them, and `up` binds loopback by name. A stored budget
+  `--cache-disk-gb` override them for one run, and an endpoint already on
+  without them is restarted with them once you say yes
+  ([Switching](proxy.md#switching)); the desktop app and the tray follow
+  them, and so does `up`. A stored budget
   outranks `GGLIB_CACHE_DISK_GB`, as the flag does.
 - `max-parallel-tools` and `tool-timeout-ms` are how many tool calls an
   agent run makes at once and how long one may take, for every daemon turn
   whose chat saved none of its own; the desktop app sets them under
   Settings › Tools › Agent limits.
+- `proxy-autostart` is whether the endpoint comes on when gglib starts,
+  whichever command or app starts it. Unset it is on, and `show` says
+  `None (on)`; `false` keeps it off until it is turned on, and `reset`
+  turns it back on.
 - `proxy-autostart`, `close-to-tray` and `start-at-login` are the switches
   the desktop app offers under Settings › General.
 - `inference-profiles` is edited with `profile`, below, and

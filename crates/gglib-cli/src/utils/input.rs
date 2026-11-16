@@ -8,10 +8,12 @@
 //! [`Unasked`]: the answer the command can state, taken and said, or a
 //! refusal naming the flag that answers it. Nothing waits.
 //!
-//! Three offers still ask stdin themselves, by the same rule, and are to be
-//! moved onto this one: `config::engine`'s install offer (`offer_action`),
-//! and `gglib up`'s `require_tty` and its image-runtime offer
-//! (`images_action`).
+//! A question asked on stderr, because stdout is a command's result, asks
+//! [`Input::stdin_asking_on_stderr`] instead, which needs stderr to be a
+//! terminal too. Four offers take the answer as a value and decide with it
+//! on their own (`config::engine`'s install offer, `config::repair`'s
+//! runtime offer, and `gglib up`'s `require_tty` and image-runtime offer),
+//! still by this rule: only a terminal is asked.
 
 use anyhow::{Context, Result, anyhow, bail};
 use std::io::{self, BufRead, Write};
@@ -31,11 +33,21 @@ pub(crate) enum Input {
 }
 
 impl Input {
-    /// Whether stdin is a terminal: the one place a question asks it.
+    /// Whether stdin is a terminal, for a question asked on stdout: the one
+    /// place a question asks it.
     #[cfg(not(test))]
     pub(crate) fn stdin() -> Self {
         use std::io::IsTerminal as _;
-        Self::from_terminal(io::stdin().is_terminal())
+        Self::from_streams(io::stdin().is_terminal(), true)
+    }
+
+    /// Whether stdin and stderr are both a terminal, for a question asked on
+    /// stderr because stdout is a command's result: a question written to a
+    /// log file would wait on a keyboard with nothing on the screen.
+    #[cfg(not(test))]
+    pub(crate) fn stdin_asking_on_stderr() -> Self {
+        use std::io::IsTerminal as _;
+        Self::from_streams(io::stdin().is_terminal(), io::stderr().is_terminal())
     }
 
     /// In a test, the terminal is a task that set [`TYPED`], and nothing
@@ -43,11 +55,20 @@ impl Input {
     /// command a test runs.
     #[cfg(test)]
     pub(crate) fn stdin() -> Self {
-        Self::from_terminal(TYPED.try_with(|_| ()).is_ok())
+        let typed = TYPED.try_with(|_| ()).is_ok();
+        Self::from_streams(typed, typed)
     }
 
-    const fn from_terminal(terminal: bool) -> Self {
-        if terminal {
+    /// [`Input::stdin`], in a test.
+    #[cfg(test)]
+    pub(crate) fn stdin_asking_on_stderr() -> Self {
+        Self::stdin()
+    }
+
+    /// Somebody can be asked only when the answer's stream and the
+    /// question's are both a terminal.
+    pub(crate) const fn from_streams(answer_from: bool, asked_on: bool) -> Self {
+        if answer_from && asked_on {
             Self::Terminal
         } else {
             Self::NotTerminal

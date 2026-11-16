@@ -92,6 +92,9 @@ gglib config llama install
 gglib config llama status
 gglib config llama uninstall
   --yes -y
+gglib config path-entry (hidden)
+gglib config path-entry add (hidden)
+gglib config path-entry remove (hidden)
 gglib config paths
 gglib config profile
 gglib config profile install-templates
@@ -195,6 +198,7 @@ gglib config unset
 gglib daemon
 gglib daemon run
   --allowed-host
+  --without-endpoint (hidden)
 gglib daemon status
 gglib daemon stop
   --remote
@@ -284,6 +288,7 @@ gglib model list
 gglib model load
   --context-size -c
   --pin
+  --yes -y
 gglib model remove
   --yes -y
 gglib model repair
@@ -373,6 +378,7 @@ gglib proxy
   --top-k
   --top-n-sigma
   --top-p
+  --yes -y
 gglib proxy cache-clear
   --api-key
   --host
@@ -462,6 +468,7 @@ gglib serve
   --top-k
   --top-n-sigma
   --top-p
+  --yes -y
 gglib up
   --model
   --port -p

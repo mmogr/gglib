@@ -19,6 +19,10 @@ use serde_json::Value;
 /// nothing has changed.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct DaemonSnapshot {
+    /// Whether the app's launch of the daemon (or a Start gglib) is still in
+    /// flight, so nothing has been asked yet. Never true with `reachable`:
+    /// a daemon starting is not one missing, and the tray says which.
+    pub starting: bool,
     /// Whether the daemon answered at all. Everything below is meaningless
     /// when this is false.
     pub reachable: bool,
@@ -48,6 +52,16 @@ pub(crate) struct Resident {
 }
 
 impl DaemonSnapshot {
+    /// The picture while a launch is in flight: nothing asked, nothing
+    /// claimed, and not "not running" either.
+    #[must_use]
+    pub(crate) fn starting() -> Self {
+        Self {
+            starting: true,
+            ..Self::default()
+        }
+    }
+
     /// Read a snapshot from `/api/proxy/status` and `/api/servers` bodies.
     ///
     /// Missing or malformed fields read as "not running" rather than failing.
@@ -80,6 +94,7 @@ impl DaemonSnapshot {
         resident.dedup_by_key(|r| r.id);
 
         Self {
+            starting: false,
             reachable: true,
             proxy_running,
             proxy_port: if proxy_running { port_of(proxy) } else { None },

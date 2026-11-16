@@ -14,6 +14,7 @@ pub mod profile_route;
 pub mod resolve;
 pub(crate) mod sampling;
 pub(crate) mod sampling_log;
+pub(crate) mod thinking_off;
 pub(crate) mod tools;
 pub(crate) mod truncation;
 pub(crate) mod truncation_parts;
@@ -43,6 +44,7 @@ pub use resolve::{resolve, resolve_summary};
 pub use sampling::{
     CLIENT_AUTHORITATIVE_KEYS, LADDER_RUNGS, SamplingDecision, SamplingLayers, resolve_sampling,
 };
+pub use thinking_off::{budget_turns_thinking_off, tell_template_thinking_is_off};
 pub use tools::strip_unsupported_tools;
 pub use truncation::{CHARS_PER_TOKEN_APPROX, TruncationError, TruncationReport, truncate_history};
 pub use validate::{Verdict, Violation, ViolationKind, validate_tool_calls};

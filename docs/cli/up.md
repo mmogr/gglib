@@ -42,6 +42,7 @@ $ gglib up
     model     Qwen3.8-27B  (already installed; --model picks another)
 
 [4/5] Endpoint
+  The endpoint is already on at port 8080, serving every model, as asked.
 
   ✓ answered in 2.6s by Qwen3.8-27B
 
@@ -93,7 +94,12 @@ $ gglib up
 - The model `up` serves becomes the default when there is none, so
   `gglib q "…"` needs no `-m` afterwards. A default you set is kept.
 - `up` is deliberately unconfigurable beyond `--yes`, `--model` and
-  `--port`: it binds loopback with gglib's defaults. Reach for
+  `--port`: it starts the endpoint as the stored settings describe it, as
+  gglib's own start does, so with `proxy-host` stored as `0.0.0.0` it
+  listens on every address and demands a key, which it generates when none
+  is stored. It never changes an endpoint that is already on: serving one
+  model or on another port, it is left as it is and said so, with the
+  command that would change it ([Switching](proxy.md#switching)). Reach for
   [`gglib proxy`](proxy.md) to choose the host, the upstream port, sampling
   or cache behaviour.
 - The image runtime is optional: skipping or failing its install never

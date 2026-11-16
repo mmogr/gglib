@@ -123,6 +123,39 @@ fn a_budget_of_zero_turns_thinking_off_over_an_explicit_kwarg() {
     assert!(kwargs(&some).enable_thinking());
 }
 
+/// The two engines agree: what the request pipeline sends llama-server for
+/// thinking off renders here exactly as the request did before it was sent,
+/// so the kwarg it adds tells this engine nothing it did not already do, and
+/// it is added wherever this engine turns thinking off by the budget.
+#[test]
+fn the_kwarg_llama_server_is_sent_for_thinking_off_is_what_this_engine_renders() {
+    use gglib_core::request_pipeline::{budget_turns_thinking_off, tell_template_thinking_is_off};
+    for body in [
+        json!({}),
+        json!({"reasoning_budget_tokens": 0}),
+        json!({"thinking_budget_tokens": 0}),
+        json!({"reasoning_budget_tokens": 512}),
+        json!({"reasoning_budget_tokens": 0, "chat_template_kwargs": null}),
+        json!({"reasoning_budget_tokens": 0, "chat_template_kwargs": {"enable_thinking": true, "x": 1}}),
+        json!({"reasoning_budget_tokens": 512, "chat_template_kwargs": {"enable_thinking": true}}),
+        json!({"chat_template_kwargs": {"enable_thinking": false}}),
+    ] {
+        let mut sent = body.clone();
+        let told = tell_template_thinking_is_off(&mut sent);
+        assert_eq!(kwargs(&sent), kwargs(&body), "{body}");
+        assert_eq!(told, budget_turns_thinking_off(&body), "{body}");
+        if told {
+            assert!(!kwargs(&body).enable_thinking(), "{body}");
+            assert_eq!(
+                sent["chat_template_kwargs"]["enable_thinking"],
+                json!(false)
+            );
+        } else {
+            assert_eq!(sent, body);
+        }
+    }
+}
+
 #[test]
 fn reasoning_effort_reaches_the_template_under_both_names() {
     let t = "{{ reasoning_effort }}/{{ reasoning_strength }}";

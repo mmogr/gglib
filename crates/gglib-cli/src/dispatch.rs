@@ -17,14 +17,37 @@ use crate::commands::Commands;
 use crate::config_commands::ConfigCommand;
 use crate::handlers;
 
-/// Run a command that reads nothing from the library, before the library is
-/// opened: help (no command), `completions` and `config paths`. Each other
-/// command is handed back for [`dispatch`].
+/// Whether `command` must leave nothing behind but what it is for, so it
+/// runs before logging is set up, which makes gglib's data folder and opens
+/// a log file there.
+///
+/// These are the commands the Windows installer and uninstaller run,
+/// `config path-entry add|remove`: they touch the user's `PATH` and gglib's
+/// record of it, and nothing else, so an uninstall does not make again a
+/// data folder the user deleted. `main` runs such a command through
+/// [`dispatch_without_library`] and returns.
+#[must_use]
+pub fn leaves_nothing_behind(command: Option<&Commands>) -> bool {
+    matches!(
+        command,
+        Some(Commands::Config {
+            command: ConfigCommand::PathEntry { .. },
+        })
+    )
+}
+
+/// Run a command that reads nothing from the library, before it is opened.
+///
+/// These are help (no command), `completions`, `config paths` and the
+/// hidden `config path-entry`. Each other command is handed back for
+/// [`dispatch`].
 ///
 /// Opening the library creates it on a fresh data folder, upgrades an older
-/// one and refuses a newer one, and none of these three reads it, so they
-/// answer with no library and with one this build refuses. `config paths`
-/// is what `docs/compatibility.md` tells the owner of such a library to run.
+/// one and refuses a newer one, and none of these reads it, so they answer
+/// with no library and with one this build refuses. `config paths` is what
+/// `docs/compatibility.md` tells the owner of such a library to run, and
+/// `config path-entry` is run by the Windows installer, which must leave
+/// nothing behind (see [`leaves_nothing_behind`]).
 ///
 /// # Errors
 ///
@@ -39,6 +62,9 @@ pub fn dispatch_without_library(command: Option<Commands>) -> Result<Option<Comm
         Some(Commands::Config {
             command: ConfigCommand::Paths,
         }) => handlers::config::paths::execute()?,
+        Some(Commands::Config {
+            command: ConfigCommand::PathEntry { command },
+        }) => handlers::config::path_entry::execute(command)?,
         Some(other) => return Ok(Some(other)),
     }
     Ok(None)
@@ -199,8 +225,11 @@ pub async fn dispatch(
             handlers::web::execute(no_open).await?;
         }
         Commands::Daemon { command } => match command {
-            crate::commands::DaemonCommand::Run { allowed_host } => {
-                handlers::daemon::run(allowed_host).await?;
+            crate::commands::DaemonCommand::Run {
+                allowed_host,
+                without_endpoint,
+            } => {
+                handlers::daemon::run(allowed_host, without_endpoint).await?;
             }
             crate::commands::DaemonCommand::Status => {
                 handlers::daemon::status().await?;
@@ -273,6 +302,7 @@ pub async fn dispatch(
                 sampling,
                 cache,
                 access,
+                bind.yes,
             )
             .await?;
         }
