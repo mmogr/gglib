@@ -106,7 +106,7 @@ async fn a_file_whose_header_says_projector_is_linked() {
         .await
         .unwrap();
 
-    let canonical = std::fs::canonicalize(&path).unwrap();
+    let canonical = crate::paths::canonical(&path).unwrap();
     assert_eq!(model.projector_path.as_deref(), Some(canonical.as_path()));
     assert!(model.image_input());
     assert_eq!(stored(&repo), Some(canonical));
@@ -125,7 +125,7 @@ async fn a_weights_file_is_refused_by_name_and_nothing_is_stored() {
         .await
         .unwrap_err();
 
-    let canonical = std::fs::canonicalize(&path).unwrap();
+    let canonical = crate::paths::canonical(&path).unwrap();
     assert!(
         matches!(&refused, LinkError::Weights(named) if *named == canonical),
         "{refused:?}"
@@ -166,7 +166,7 @@ async fn the_path_is_stored_in_its_canonical_form() {
         .await
         .unwrap();
 
-    let canonical = std::fs::canonicalize(&path).unwrap();
+    let canonical = crate::paths::canonical(&path).unwrap();
     assert_ne!(spelled, canonical);
     assert_eq!(stored(&repo), Some(canonical));
 }
@@ -257,7 +257,7 @@ async fn the_projector_refusals_keep_their_words() {
 
     let dir = tempfile::tempdir().unwrap();
     let path = file(&dir, "mmproj-F16.gguf", "<html>");
-    let canonical = std::fs::canonicalize(&path).unwrap();
+    let canonical = crate::paths::canonical(&path).unwrap();
     let refused = service
         .set_projector(1, Some(&path), &FirstBytesParser)
         .await

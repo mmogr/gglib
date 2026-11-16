@@ -158,7 +158,7 @@ pub fn store_default_models_dir() -> Result<(), PathError> {
 /// which this genuinely cannot fail have already established that the file
 /// exists; they should say so by propagating rather than by swallowing.
 pub fn canonical_model_path(path: &Path) -> std::io::Result<PathBuf> {
-    std::fs::canonicalize(path)
+    super::canonical(path)
 }
 
 /// The canonical path as the string the `file_path` column stores.

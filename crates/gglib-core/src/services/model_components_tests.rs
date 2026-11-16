@@ -142,7 +142,7 @@ async fn a_retag_of_a_component_or_a_chat_file_finds_no_family() {
 // ── set_component ───────────────────────────────────────────────────────────
 
 fn canonical(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap()
+    crate::paths::canonical(path).unwrap()
 }
 
 fn links(repo: &OneModelRepo) -> Vec<ModelComponent> {

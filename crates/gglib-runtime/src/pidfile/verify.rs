@@ -1,6 +1,7 @@
 //! Process verification: whether a pid is one of the servers gglib manages.
 
 use gglib_core::domain::RuntimeKind;
+use gglib_core::paths::canonical;
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
 use gglib_core::paths::{llama_server_path, sd_server_path};
 use std::path::PathBuf;
@@ -55,14 +56,10 @@ fn managed_binaries() -> Vec<(RuntimeKind, PathBuf)> {
 /// The runtime of the first of `binaries` that `pid` is running, comparing
 /// canonical paths. A binary that is not there matches nothing.
 fn runtime_running(pid: u32, binaries: &[(RuntimeKind, PathBuf)]) -> Option<RuntimeKind> {
-    let actual = executable_of(pid)?.canonicalize().ok()?;
+    let actual = canonical(executable_of(pid)?).ok()?;
     binaries
         .iter()
-        .find(|(_, binary)| {
-            binary
-                .canonicalize()
-                .is_ok_and(|expected| expected == actual)
-        })
+        .find(|(_, binary)| canonical(binary).is_ok_and(|expected| expected == actual))
         .map(|(runtime, _)| *runtime)
 }
 

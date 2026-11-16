@@ -76,7 +76,7 @@ impl Drop for StandIn {
 fn takes_sleep_for_llama_server(root: &Path) {
     let bin = resource_root(root).join(".llama").join("bin");
     std::fs::create_dir_all(&bin).expect("the bin directory");
-    let sleep = std::fs::canonicalize(SLEEP).expect("sleep is installed");
+    let sleep = gglib_core::paths::canonical(SLEEP).expect("sleep is installed");
     std::os::unix::fs::symlink(sleep, bin.join("llama-server")).expect("the link");
 }
 

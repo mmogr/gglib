@@ -70,7 +70,7 @@ fn ops_over(core: Arc<AppCore>) -> ModelOps {
 fn file(dir: &TempDir, name: &str, bytes: &[u8]) -> PathBuf {
     let path = dir.path().join(name);
     std::fs::write(&path, bytes).unwrap();
-    path.canonicalize().unwrap()
+    gglib_core::paths::canonical(&path).unwrap()
 }
 
 async fn add(ops: &ModelOps, dir: &TempDir, name: &str) -> GuiModel {

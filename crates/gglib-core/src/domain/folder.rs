@@ -12,6 +12,8 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::paths::canonical;
+
 /// Why a path cannot be a chosen folder.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum FolderError {
@@ -39,8 +41,8 @@ pub fn launched(cwd: &Path) -> Option<PathBuf> {
 
 /// [`launched`] with `home` as this machine's home folder.
 fn launched_in(cwd: &Path, home: Option<&Path>) -> Option<PathBuf> {
-    let cwd = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
-    let home = home.map(|home| home.canonicalize().unwrap_or_else(|_| home.to_path_buf()));
+    let cwd = canonical(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let home = home.map(|home| canonical(home).unwrap_or_else(|_| home.to_path_buf()));
     let is_root = cwd.parent().is_none();
     (!is_root && home.as_deref() != Some(cwd.as_path())).then_some(cwd)
 }
@@ -55,13 +57,11 @@ pub fn chosen(path: &Path) -> Result<PathBuf, FolderError> {
     if !path.is_absolute() {
         return Err(FolderError::NotAbsolute(path.to_path_buf()));
     }
-    let canonical = path
-        .canonicalize()
-        .map_err(|_| FolderError::Missing(path.to_path_buf()))?;
-    if !canonical.is_dir() {
+    let resolved = canonical(path).map_err(|_| FolderError::Missing(path.to_path_buf()))?;
+    if !resolved.is_dir() {
         return Err(FolderError::NotAFolder(path.to_path_buf()));
     }
-    Ok(canonical)
+    Ok(resolved)
 }
 
 #[cfg(test)]

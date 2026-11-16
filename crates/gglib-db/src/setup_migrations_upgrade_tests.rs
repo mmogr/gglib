@@ -62,7 +62,7 @@ async fn plant(
 #[tokio::test]
 async fn a_library_never_stamped_comes_out_canonical_and_linked() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let root = std::fs::canonicalize(dir.path()).expect("resolved");
+    let root = gglib_core::paths::canonical(dir.path()).expect("resolved");
     let (store, link) = (root.join("store"), dir.path().join("link"));
     file(&store, "a-1.gguf", "weights");
     file(&store, "a-2.gguf", "weights");

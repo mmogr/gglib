@@ -346,7 +346,7 @@ mod through_a_symlink {
             .await
             .unwrap();
 
-        let resolved = std::fs::canonicalize(real.join("ae.safetensors")).unwrap();
+        let resolved = gglib_core::paths::canonical(real.join("ae.safetensors")).unwrap();
         assert_eq!(inserted.components[0].path, resolved);
     }
 
@@ -363,7 +363,7 @@ mod through_a_symlink {
         )];
         repo.update(&model).await.unwrap();
 
-        let resolved = std::fs::canonicalize(real.join("ae.safetensors")).unwrap();
+        let resolved = gglib_core::paths::canonical(real.join("ae.safetensors")).unwrap();
         assert_eq!(
             repo.get_by_id(model.id).await.unwrap().components[0].path,
             resolved
