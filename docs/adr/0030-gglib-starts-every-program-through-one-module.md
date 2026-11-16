@@ -125,6 +125,28 @@ comment).
 > short. What the edit does to the text is `gglib_core::paths::user_path`,
 > tested on every OS.
 
+> **Amendment, 2026-11-16 ([#2050](https://github.com/mmogr/gglib/issues/2050)).**
+> Decision 4 holds one more registry read. The desktop app's tray icon was
+> one colour on any taskbar, and its faded outline was 1.45:1 on Windows
+> 11's light taskbar. `host::taskbar_is_light`, a function with no `cfg` in
+> its signature that answers `None` off Windows, reads the `REG_DWORD`
+> `SystemUsesLightTheme` of
+> `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`
+> (1 for light), so the tray can draw its glyph black on a light taskbar and
+> white on a dark one. That value is the system's mode, which the taskbar,
+> the notification area and its overflow flyout follow. The app mode beside
+> it, `AppsUseLightTheme`, is what a window's theme follows, and what Tauri's
+> `ThemeChanged` reports (tao reads that value), and the two can differ, so
+> the app's own theme cannot answer the question. The read is a second
+> `RegGetValueW` call beside the one that reads the `Path`, sharing its
+> name and error helpers. It does not reuse that reader because the `Path`
+> reader accepts only the two string types and sizes a buffer in two
+> calls; a 32-bit value is one call into four bytes with
+> `RRF_RT_REG_DWORD`. A value that is missing, of another type, or will not
+> read is `None`, and the tray draws the app icon's blue, as before. The kill
+> criteria's counts do not move: no `disallowed_methods` is added, and the
+> call is in `host.rs`.
+
 ## Consequences
 
 - `crates/gglib-core/tests/detached_spawn.rs` holds the A5 fault on every

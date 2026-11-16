@@ -2,9 +2,11 @@
 //!
 //! Pure functions with no `AppHandle` and no I/O, so the mapping from "what
 //! gglib is doing" to "what the icon looks like" is directly testable without
-//! a running Tauri application.
+//! a running Tauri application. The one read is [`for_state`]'s, of the
+//! taskbar's colour, kept out of the decision it feeds.
 
 use gglib_core::domain::ResidencyState;
+use gglib_core::utils::process::host;
 use tauri::image::Image;
 
 use crate::daemon::DaemonSnapshot;
@@ -22,8 +24,8 @@ const OUTLINE_OPACITY_PERCENT: u16 = 35;
 /// macOS recolours a template image for its menu bar. Windows and Linux show
 /// the icon's own pixels, and the black glyph all but disappears on a dark
 /// taskbar or panel, GNOME's top bar among them. The blue keeps a solid glyph
-/// at 3:1 or better on a light bar and a dark one, but its faded outline does
-/// not reach 1.7:1 on either, so where the bar's colour is known the glyph
+/// at 3:1 or better on a light bar and a dark one (3.17:1 to 4.63:1), but its
+/// faded outline does not reach 1.7:1 on either, so where the bar's colour is known the glyph
 /// takes [`ON_LIGHT`] or [`ON_DARK`] instead.
 const TINT: [u8; 3] = [0x3d, 0x8b, 0xe0];
 
@@ -35,11 +37,13 @@ const ON_DARK: [u8; 3] = [0xff, 0xff, 0xff];
 
 /// How much opacity the outline keeps on a taskbar of known colour.
 ///
-/// The least that keeps the outline at 3:1 (WCAG's minimum for a graphic)
-/// on Windows 11's light taskbar and its overflow flyout in [`ON_LIGHT`]:
-/// 3.3:1, where 35% gives 2.4:1. [`ON_DARK`] at this opacity is 4.1:1 to
-/// 4.4:1 on the dark ones. The solid glyph is 15:1 or more on all four, so
-/// the outline still reads as the fainter.
+/// [`fade`] makes the glyph's full alpha 114 of 255 at 45%, which puts the
+/// outline in [`ON_LIGHT`] at 3.27:1 on Windows 11's light taskbar
+/// (`#F3F3F3`) and 3.29:1 on its overflow flyout (`#F9F9F9`): a little
+/// over 3:1, WCAG's minimum for a graphic, where 35% gives 2.4:1 and 43% is
+/// the least that reaches it. [`ON_DARK`] at 45% is 4.34:1 on the dark
+/// taskbar (`#202020`) and 4.06:1 on its flyout (`#2C2C2C`). The solid glyph
+/// is 14:1 or more on all four, so the outline still reads as the fainter.
 const OUTLINE_ON_KNOWN_BAR_PERCENT: u16 = 45;
 
 /// The colour of the bar the tray icon is drawn on, where the system says.
@@ -71,15 +75,33 @@ struct Paint {
 ///
 /// Pure, so every combination is tested on any OS.
 const fn paint(system_recolours: bool, bar: Option<Bar>) -> Paint {
-    let _ = bar;
+    let (colour, outline_percent) = match (system_recolours, bar) {
+        (true, _) => (Colour::Template, OUTLINE_OPACITY_PERCENT),
+        (false, None) => (Colour::Rgb(TINT), OUTLINE_OPACITY_PERCENT),
+        (false, Some(Bar::Light)) => (Colour::Rgb(ON_LIGHT), OUTLINE_ON_KNOWN_BAR_PERCENT),
+        (false, Some(Bar::Dark)) => (Colour::Rgb(ON_DARK), OUTLINE_ON_KNOWN_BAR_PERCENT),
+    };
     Paint {
-        colour: if system_recolours {
-            Colour::Template
-        } else {
-            Colour::Rgb(TINT)
-        },
-        outline_percent: OUTLINE_OPACITY_PERCENT,
+        colour,
+        outline_percent,
     }
+}
+
+/// Whether this system recolours its tray icons itself: macOS does, for a
+/// template image.
+const SYSTEM_RECOLOURS: bool = cfg!(target_os = "macos");
+
+/// The colour of the taskbar, where the system says: only Windows does.
+fn bar() -> Option<Bar> {
+    host::taskbar_is_light().map(|light| if light { Bar::Light } else { Bar::Dark })
+}
+
+/// Whether the icon's paint follows the bar's colour at all, read now:
+/// only where the system does not recolour the icon and says what colour
+/// its bar is, which is Windows. Elsewhere a change of theme leaves the
+/// icon as it is, and repainting it for one would be work for nothing.
+pub(super) fn follows_the_bar() -> bool {
+    !SYSTEM_RECOLOURS && bar().is_some()
 }
 
 /// What the tray icon is saying: the endpoint, and whether anything is
@@ -147,10 +169,11 @@ const fn fade(alpha: u8, percent: u16) -> u8 {
 /// the bar it is drawn on, read now.
 ///
 /// macOS recolours the template image itself. Windows reports whether its
-/// taskbar is light, which is the system's mode and not the app's; macOS and
-/// Linux report nothing, and the glyph keeps the blue it had.
+/// taskbar is light, which follows the system's mode and not the app's;
+/// Linux reports nothing, and the glyph keeps the blue it had. Read at each
+/// repaint, so a taskbar that changes colour is followed at the next one.
 pub(super) fn for_state(state: TrayState) -> tauri::Result<Image<'static>> {
-    image(state, paint(cfg!(target_os = "macos"), None))
+    image(state, paint(SYSTEM_RECOLOURS, bar()))
 }
 
 /// The icon for a state in a given paint.
@@ -416,7 +439,9 @@ mod tests {
     }
 
     /// macOS gets the black template it recolours itself; everywhere else the
-    /// glyph comes tinted, or it vanishes on a dark bar.
+    /// glyph comes tinted, or it vanishes on a dark bar: in the blue where
+    /// the bar's colour is unknown (Linux, here off Windows), in the bar's
+    /// colour where Windows says it.
     #[test]
     fn the_glyph_is_tinted_only_where_the_system_does_not_recolour_it() {
         let shown = for_state(TrayState::Solid).expect("icon");
@@ -429,7 +454,11 @@ mod tests {
         let expected = if cfg!(target_os = "macos") {
             [0, 0, 0]
         } else {
-            TINT
+            match bar() {
+                None => TINT,
+                Some(Bar::Light) => ON_LIGHT,
+                Some(Bar::Dark) => ON_DARK,
+            }
         };
         assert_eq!(visible[..3], expected);
     }
@@ -564,15 +593,24 @@ mod tests {
                 ((c + 0.055) / 1.055).powf(2.4)
             }
         };
-        0.2126 * linear(rgb[0]) + 0.7152 * linear(rgb[1]) + 0.0722 * linear(rgb[2])
+        0.0722f64.mul_add(
+            linear(rgb[2]),
+            0.7152f64.mul_add(linear(rgb[1]), 0.2126 * linear(rgb[0])),
+        )
     }
 
-    /// WCAG 2's contrast ratio of `colour` drawn at `percent` opacity over
-    /// `background`.
-    fn contrast(colour: [u8; 3], percent: u16, background: [u8; 3]) -> f64 {
-        let a = f64::from(percent) / 100.0;
+    /// WCAG 2's contrast ratio of the icon's most opaque pixel, composited
+    /// over `background` as the system draws it.
+    fn contrast(icon: &Image<'_>, background: [u8; 3]) -> f64 {
+        let px = icon
+            .rgba()
+            .chunks_exact(4)
+            .max_by_key(|px| px[3])
+            .expect("the icon has pixels");
+        let colour = [px[0], px[1], px[2]];
+        let a = f64::from(px[3]) / 255.0;
         let bg = background.map(f64::from);
-        let seen = std::array::from_fn(|i| a * f64::from(colour[i]) + (1.0 - a) * bg[i]);
+        let seen = std::array::from_fn(|i| (1.0 - a).mul_add(bg[i], a * f64::from(colour[i])));
         let (x, y) = (luminance(seen), luminance(bg));
         (x.max(y) + 0.05) / (x.min(y) + 0.05)
     }
@@ -583,30 +621,35 @@ mod tests {
     const DARK_BARS: [[u8; 3]; 2] = [[0x20; 3], [0x2c; 3]];
 
     /// Every state, the faded outline included, reaches 3:1 (WCAG's minimum
-    /// for a graphic) on the bar it is painted for, and the outline stays
-    /// the fainter.
+    /// for a graphic) on the bar it is painted for, and each solid state is
+    /// well clear of the outline. Read from the pixels `image` returns, so
+    /// a glyph that peaks below full alpha, or a change to `fade`, counts.
     #[test]
     fn every_state_reaches_three_to_one_on_its_bar() {
         for (bar, backgrounds) in [(Bar::Light, LIGHT_BARS), (Bar::Dark, DARK_BARS)] {
-            let Paint {
-                colour: Colour::Rgb(colour),
-                outline_percent,
-            } = paint(false, Some(bar))
-            else {
-                panic!("{bar:?} is not a template");
-            };
+            let shown = |state| image(state, paint(false, Some(bar))).expect("icon");
             for background in backgrounds {
-                let outline = contrast(colour, outline_percent, background);
-                let solid = contrast(colour, 100, background);
+                let outline = contrast(&shown(TrayState::Outline), background);
                 assert!(
                     outline >= 3.0,
                     "{bar:?} on {background:?}: outline {outline:.2}"
                 );
-                assert!(
-                    solid > 2.0 * outline,
-                    "{bar:?} on {background:?}: solid {solid:.2}"
-                );
+                for state in [TrayState::Solid, TrayState::SolidDot] {
+                    let solid = contrast(&shown(state), background);
+                    assert!(
+                        solid > 2.0 * outline,
+                        "{bar:?} on {background:?}: {state:?} {solid:.2}"
+                    );
+                }
             }
         }
+    }
+
+    /// The paint follows the bar only where Windows says what colour it
+    /// is: off Windows a change of theme repaints nothing.
+    #[test]
+    fn the_paint_follows_no_bar_off_windows() {
+        let expected = cfg!(windows) && host::taskbar_is_light().is_some();
+        assert_eq!(follows_the_bar(), expected);
     }
 }

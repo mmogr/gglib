@@ -94,6 +94,27 @@ fn main() {
             tauri::WindowEvent::Focused(false) if window.label() == tray::window::PANEL_LABEL => {
                 let _ = window.hide();
             }
+            // Switching Windows between Light and Dark changes the taskbar's
+            // mode with the app's, so the tray repaints, reading the
+            // taskbar's mode again. The event follows the app's mode only: a
+            // taskbar changed on its own is followed at the tray's next
+            // repaint. Heard from the main window alone, so it repaints once,
+            // and only where the tray's colour follows the taskbar (Windows):
+            // elsewhere a repaint would change nothing.
+            //
+            // Unverified: that this repaint sees the new taskbar mode. If
+            // Windows writes the app's mode, and the event is sent, before
+            // it writes the taskbar's, the repaint reads the old value and
+            // the icon keeps the old colour until the next repaint.
+            tauri::WindowEvent::ThemeChanged(_)
+                if window.label() == tray::window::MAIN_LABEL && tray::follows_the_theme() =>
+            {
+                let app_handle = window.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = app_handle.state::<AppState>();
+                    menu::state_sync::sync_all_state_logged(&app_handle, &state).await;
+                });
+            }
             _ => {}
         });
 
