@@ -51,7 +51,7 @@ fn test_truncate_string_needs_truncation() {
 /// row's name in line with the rest.
 #[test]
 fn the_id_column_is_as_wide_as_the_widest_id() {
-    let table = render_table(&[model(3, "small"), model(1000, "big")]);
+    let table = render_table(&[model(3, "small"), model(1000, "big")], None);
 
     let lines: Vec<&str> = table.lines().collect();
     assert_eq!(lines[0].find("Name"), lines[2].find("small"), "{table}");
@@ -70,7 +70,7 @@ fn the_id_column_is_as_wide_as_the_widest_id() {
 /// Short ids get a column three wide.
 #[test]
 fn short_ids_get_a_column_three_wide() {
-    let table = render_table(&[model(3, "small")]);
+    let table = render_table(&[model(3, "small")], None);
 
     assert!(table.starts_with("ID  Name"), "{table}");
     assert_eq!(table.lines().nth(1).map(str::len), Some(140 + 9));
@@ -79,7 +79,7 @@ fn short_ids_get_a_column_three_wide() {
 /// The paired machine's line follows the table.
 #[test]
 fn the_paired_line_follows_the_table() {
-    let out = listing(&[model(3, "small")], Some("desk: not connected"));
+    let out = listing(&[model(3, "small")], Some("desk: not connected"), None);
 
     assert!(out.starts_with("Found 1 model(s):"), "{out}");
     assert!(out.ends_with("\ndesk: not connected\n"), "{out}");
@@ -91,12 +91,12 @@ fn the_paired_line_follows_the_table() {
 fn an_empty_library_still_names_the_paired_machine() {
     let paired = "Paired with desk (direct). Its models: gglib model list --remote";
 
-    let out = listing(&[], Some(paired));
+    let out = listing(&[], Some(paired), None);
 
     assert!(out.starts_with("No models found."), "{out}");
     assert!(out.ends_with(&format!("\n{paired}\n")), "{out}");
     assert_eq!(
-        listing(&[], None),
+        listing(&[], None, None),
         "No models found.\nUse 'gglib model add <file_path>' to add your first model.\n"
     );
 }
@@ -107,7 +107,7 @@ fn an_empty_library_still_names_the_paired_machine() {
 fn the_images_column_marks_the_models_that_read_images() {
     let mut sees = model(1, "sees");
     sees.image_input = true;
-    let table = render_table(&[sees, model(2, "blind")]);
+    let table = render_table(&[sees, model(2, "blind")], None);
 
     let lines: Vec<&str> = table.lines().collect();
     let column = lines[0].find("Images").expect("an Images header");
@@ -121,7 +121,7 @@ fn the_images_column_marks_the_models_that_read_images() {
 fn the_size_column_says_what_the_files_take() {
     let mut big = model(1, "big");
     big.size_bytes = 5 * 1024 * 1024 * 1024 / 2;
-    let table = render_table(&[big, model(2, "unread")]);
+    let table = render_table(&[big, model(2, "unread")], None);
 
     let lines: Vec<&str> = table.lines().collect();
     let column = lines[0].find("Size").expect("a Size header");
@@ -143,11 +143,14 @@ fn drawing(id: i64, name: &str, family: &str, missing: &[&str]) -> GuiModel {
 /// columns after it stay in line.
 #[test]
 fn the_draws_column_names_the_family_and_what_it_needs() {
-    let table = render_table(&[
-        drawing(1, "flux", "flux1", &["vae", "t5xxl"]),
-        drawing(2, "qwen-image", "qwen-image-2.1", &[]),
-        model(3, "chat"),
-    ]);
+    let table = render_table(
+        &[
+            drawing(1, "flux", "flux1", &["vae", "t5xxl"]),
+            drawing(2, "qwen-image", "qwen-image-2.1", &[]),
+            model(3, "chat"),
+        ],
+        None,
+    );
 
     let lines: Vec<&str> = table.lines().collect();
     let column = lines[0].find("Draws").expect("a Draws header");
@@ -208,7 +211,7 @@ async fn printed(ops: &ModelOps, flags: &[&str]) -> String {
     else {
         panic!("{flags:?} is not a list");
     };
-    listing(&fetch_models(ops, &args).await.unwrap(), None)
+    listing(&fetch_models(ops, &args).await.unwrap(), None, None)
 }
 
 /// The listing with no flags, whole: newest first, every column.
@@ -273,7 +276,7 @@ async fn each_sort_and_filter_flag_leaves_the_rows_it_did_before() {
     for (flags, names) in table {
         let text = printed(&ops, flags).await;
         if names.is_empty() {
-            assert_eq!(text, listing(&[], None), "{flags:?}");
+            assert_eq!(text, listing(&[], None, None), "{flags:?}");
             continue;
         }
         let lines: Vec<&str> = text.lines().collect();
@@ -344,7 +347,7 @@ async fn an_imported_image_model_is_listed_with_what_it_still_needs() {
 fn the_model_id_column_prints_the_id_a_client_sends() {
     let mut twin = model(4, "qwen");
     twin.openai_id = Some("qwen@Q4_K_M".to_owned());
-    let table = render_table(&[twin, model(5, "plain")]);
+    let table = render_table(&[twin, model(5, "plain")], None);
 
     let lines: Vec<&str> = table.lines().collect();
     assert_eq!(
@@ -380,12 +383,53 @@ fn the_speed_column_shows_only_when_a_row_has_a_speed() {
     };
     let mut compared = model(1, "compared");
     compared.benchmark_summary = Some(summary(None));
-    let table = render_table(std::slice::from_ref(&compared));
+    let table = render_table(std::slice::from_ref(&compared), None);
     assert!(!table.contains("t/s"), "{table}");
 
     let mut timed = model(2, "timed");
     timed.benchmark_summary = Some(summary(Some(41.3)));
-    let table = render_table(&[compared, timed]);
+    let table = render_table(&[compared, timed], None);
     assert!(table.lines().next().unwrap().contains("⚡ t/s"), "{table}");
     assert!(table.contains("41.3"), "{table}");
+}
+
+const WINDOWS_PATH: &str =
+    r"C:\Users\mathi\AppData\Local\llama_models\unsloth_Qwen3-4B-GGUF\Qwen3-4B-Q4_K_M.gguf";
+
+/// A library as the Windows VM showed it: a model under a long Windows
+/// path, one with a long name, and one named in CJK.
+fn windows_library() -> Vec<GuiModel> {
+    let mut qwen = model(1, "Qwen3-4B");
+    qwen.file_path = WINDOWS_PATH.to_owned();
+    qwen.size_bytes = 2_500_000_000;
+    let long = model(2, "DeepSeek-R1-Distill-Qwen-32B-Instruct-Abliterated");
+    let cjk = model(13, "通义千问-Qwen3-推理版");
+    vec![qwen, long, cjk]
+}
+
+/// In an 80-column terminal no line of the listing is wider than 80, and
+/// the row still names the model and its file.
+#[test]
+fn at_80_columns_no_line_of_the_listing_is_wider_than_the_terminal() {
+    let out = listing(&windows_library(), None, Some(80));
+
+    for line in out.lines() {
+        let width = crate::presentation::table_layout::display_width(line);
+        assert!(width <= 80, "a line {width} wide:\n{line}\n\n{out}");
+    }
+    let qwen = out.lines().find(|l| l.starts_with("1 ")).expect("row 1");
+    assert!(qwen.contains("Qwen3-4B"), "{out}");
+    assert!(qwen.ends_with("Qwen3-4B-Q4_K_M.gguf"), "{out}");
+}
+
+/// Piped, the listing keeps every column and every path whole: a script
+/// reading it loses nothing.
+#[test]
+fn a_pipe_keeps_the_file_path_column_whole() {
+    let out = listing(&windows_library(), None, None);
+
+    let header = out.lines().nth(2).expect("a header");
+    assert!(header.ends_with("File Path"), "{out}");
+    assert!(header.contains("Added"), "{out}");
+    assert!(out.contains(WINDOWS_PATH), "{out}");
 }

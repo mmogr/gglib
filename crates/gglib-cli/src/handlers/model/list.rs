@@ -22,6 +22,7 @@ use gglib_core::download::format_size;
 
 use crate::bootstrap::CliContext;
 use crate::model_list_args::ListArgs;
+use crate::presentation::terminal::stdout_width;
 use crate::presentation::{format_params, truncate_string};
 use crate::target::Target;
 
@@ -53,22 +54,23 @@ pub(crate) async fn execute(
 async fn list_here(ctx: &CliContext, ops: &ModelOps, args: ListArgs) -> Result<()> {
     let models = fetch_models(ops, &args).await?;
     let paired = list_far::summary(ctx).await;
-    print!("{}", listing(&models, paired.as_deref()));
+    print!("{}", listing(&models, paired.as_deref(), stdout_width()));
     Ok(())
 }
 
 /// What `gglib model list` prints: the table, or the line that stands in
 /// for an empty one, and then `paired`. An empty library still gets
 /// `paired`: a laptop with no models of its own, paired with a desktop that
-/// has them, is the case the line is for.
-fn listing(models: &[GuiModel], paired: Option<&str>) -> String {
+/// has them, is the case the line is for. The table fits `width`, the
+/// terminal's, or is whole when there is none.
+fn listing(models: &[GuiModel], paired: Option<&str>, width: Option<usize>) -> String {
     let mut out = if models.is_empty() {
         "No models found.\nUse 'gglib model add <file_path>' to add your first model.\n".to_owned()
     } else {
         format!(
             "Found {} model(s):\n\n{}",
             models.len(),
-            render_table(models)
+            render_table(models, width)
         )
     };
     if let Some(line) = paired {
@@ -137,7 +139,7 @@ fn latest_speed(model: &GuiModel) -> Option<f64> {
     clippy::too_many_lines,
     reason = "one table in two layouts, with and without the speed column; the rows read whole"
 )]
-fn render_table(models: &[GuiModel]) -> String {
+fn render_table(models: &[GuiModel], _width: Option<usize>) -> String {
     // The column shows when a row has a speed to print, not merely a summary:
     // a library benchmarked only by compare runs has summaries without one.
     let show_speed = models.iter().any(|m| latest_speed(m).is_some());

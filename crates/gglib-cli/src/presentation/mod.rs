@@ -8,7 +8,9 @@ pub(crate) mod model_display;
 pub(crate) mod sampling_values;
 pub(crate) mod state_words;
 pub(crate) mod style;
+pub(crate) mod table_layout;
 pub(crate) mod tables;
+pub(crate) mod terminal;
 
 // Re-export commonly used items
 pub(crate) use model_display::{ModelSummaryOpts, display_model_summary};
