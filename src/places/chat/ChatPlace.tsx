@@ -239,7 +239,9 @@ export default function ChatPlace(props: ChatPlaceProps) {
   const sendNote = line === null ? null : { line, crashed: absence === 'crashed' };
 
   // An error belongs to the conversation it happened in.
-  useEffect(() => setChatError(null), [activeConversationId]);
+  useEffect(() => {
+    setChatError(null);
+  }, [activeConversationId]);
 
   // What changes a conversation: this machine's only, never a far chat.
   const actions = useConversationActions({

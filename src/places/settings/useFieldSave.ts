@@ -61,7 +61,9 @@ export function useUndoableWrite<V>(stored: V, write: (value: V) => Promise<unkn
     if (timer.current !== null) clearTimeout(timer.current);
     timer.current = null;
   };
-  useEffect(() => stopTimer, []);
+  useEffect(() => {
+    return stopTimer;
+  }, []);
 
   const run = useCallback(
     async (value: V): Promise<boolean> => {

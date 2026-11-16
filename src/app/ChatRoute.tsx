@@ -85,7 +85,9 @@ function useHandoff(location: Location): ChatHandoff | null {
     current = read();
     setHeld(current);
   }
-  useEffect(() => clearChatHandoff(current.handoff), [current.handoff]);
+  useEffect(() => {
+    clearChatHandoff(current.handoff);
+  }, [current.handoff]);
   return current.handoff;
 }
 

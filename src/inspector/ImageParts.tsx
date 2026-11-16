@@ -34,7 +34,9 @@ export const ImageParts: FC<ImagePartsProps> = ({ model, components, onReady }) 
   const sd = useEngine('stable_diffusion');
   const installed = sd.status?.installed === true;
   const ready = installed && model.missingComponents.length === 0;
-  useEffect(() => onReady(ready), [ready, onReady]);
+  useEffect(() => {
+    onReady(ready);
+  }, [ready, onReady]);
 
   const parts = [
     model.imageFamily ? imageFamilyLabel(model.imageFamily) : null,

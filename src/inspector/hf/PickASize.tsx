@@ -58,8 +58,11 @@ interface PickASizeProps {
 
 export const PickASize: FC<PickASizeProps> = ({ quantizations, selected, onSelect, onDownload, queueFull }) => {
   const selectedRow = useRef<HTMLDivElement>(null);
-  // jsdom has no scrollIntoView.
-  useEffect(() => selectedRow.current?.scrollIntoView?.({ block: 'nearest' }), [selected?.label]);
+  // Chromium and Edge return a Promise from scrollIntoView, which is not a
+  // cleanup, so nothing is returned. jsdom has no scrollIntoView.
+  useEffect(() => {
+    selectedRow.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [selected?.label]);
   return (
     <section aria-label="Pick a size" className="flex flex-col gap-xs">
       <h3 className="m-0 text-xs font-semibold text-text">Pick a size</h3>

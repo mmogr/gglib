@@ -61,7 +61,9 @@ export function AppContent() {
 
   // The native menu (desktop only), navigating and acting through the router
   // and the registries; its proxy messages are toasted here.
-  useEffect(() => startMenuBridge({ notify: showToast }), [showToast]);
+  useEffect(() => {
+    return startMenuBridge({ notify: showToast });
+  }, [showToast]);
 
   return (
     <SettingsProvider showToast={showToast}>
