@@ -9,6 +9,7 @@ mod dock;
 mod lifecycle;
 mod menu;
 mod proxy_actions;
+mod second_launch;
 mod tray;
 
 use std::sync::Arc;

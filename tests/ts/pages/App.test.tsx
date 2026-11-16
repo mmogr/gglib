@@ -1,6 +1,7 @@
 /**
  * The app shell, past setup: that it refuses a file dropped where nothing
- * takes it, so the desktop window never opens the file in place of the app.
+ * takes it, so the desktop window never opens the file in place of the app,
+ * and that it listens for a second launch of the desktop app.
  * `useFileDropGuard` is tested on its own; this pins that the shell mounts
  * it. The pages, the services and the menu are stubbed: only the shell's own
  * wiring is under test.
@@ -14,7 +15,12 @@ vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <mai
 vi.mock('../../../src/places/endpoint/EndpointPlace', () => ({ default: () => <main aria-label="Endpoint" /> }));
 vi.mock('../../../src/places/diagnostics/DiagnosticsPlace', () => ({ default: () => <main aria-label="Diagnostics" /> }));
 vi.mock('../../../src/sidebar/Sidebar', () => ({ Sidebar: () => <nav aria-label="gglib" /> }));
+const secondLaunch = vi.hoisted(() => {
+  const stop = vi.fn();
+  return { stop, listen: vi.fn(() => stop) };
+});
 vi.mock('../../../src/services/platform', () => ({
+  listenToSecondLaunch: secondLaunch.listen,
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
   isDesktop: () => false,
   syncMenuStateSilent: vi.fn(),
@@ -74,5 +80,18 @@ describe('App', () => {
     expect(fireEvent.dragOver(document.body, { dataTransfer: { ...files, dropEffect: 'copy' } })).toBe(false);
     expect(fireEvent.drop(document.body, { dataTransfer: files })).toBe(false);
     expect(fireEvent.drop(document.body, { dataTransfer: { types: ['text/plain'], files: [] } })).toBe(true);
+  });
+
+  it('listens for a second launch of the desktop app while it is open', async () => {
+    secondLaunch.listen.mockClear();
+    secondLaunch.stop.mockClear();
+    const { unmount } = render(<App />);
+    await screen.findByRole('main', { name: 'Library' });
+
+    expect(secondLaunch.listen).toHaveBeenCalledTimes(1);
+    expect(secondLaunch.stop).not.toHaveBeenCalled();
+
+    unmount();
+    expect(secondLaunch.stop).toHaveBeenCalledTimes(1);
   });
 });
