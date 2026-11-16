@@ -12,17 +12,75 @@ use crate::daemon::DaemonSnapshot;
 /// Identifier the tray registers under.
 pub(super) const TRAY_ID: &str = "gglib";
 
-/// How much of the bubble's opacity the outline icon keeps.
+/// How much of the bubble's opacity the outline icon keeps, where nothing
+/// is known about the bar it is drawn on.
 const OUTLINE_OPACITY_PERCENT: u16 = 35;
 
-/// The colour the glyph is drawn in where the system does not recolour it:
-/// the app icon's blue.
+/// The colour the glyph is drawn in where the system does not recolour it
+/// and does not say what colour its bar is: the app icon's blue.
 ///
 /// macOS recolours a template image for its menu bar. Windows and Linux show
 /// the icon's own pixels, and the black glyph all but disappears on a dark
-/// taskbar or panel, Windows 11's default and GNOME's top bar among them. The
-/// blue reads on a light bar and a dark one.
+/// taskbar or panel, GNOME's top bar among them. The blue keeps a solid glyph
+/// at 3:1 or better on a light bar and a dark one, but its faded outline does
+/// not reach 1.7:1 on either, so where the bar's colour is known the glyph
+/// takes [`ON_LIGHT`] or [`ON_DARK`] instead.
 const TINT: [u8; 3] = [0x3d, 0x8b, 0xe0];
+
+/// The glyph on a light taskbar: black, as Windows draws its own.
+const ON_LIGHT: [u8; 3] = [0x00, 0x00, 0x00];
+
+/// The glyph on a dark taskbar: white, as Windows draws its own.
+const ON_DARK: [u8; 3] = [0xff, 0xff, 0xff];
+
+/// How much opacity the outline keeps on a taskbar of known colour.
+///
+/// The least that keeps the outline at 3:1 (WCAG's minimum for a graphic)
+/// on Windows 11's light taskbar and its overflow flyout in [`ON_LIGHT`]:
+/// 3.3:1, where 35% gives 2.4:1. [`ON_DARK`] at this opacity is 4.1:1 to
+/// 4.4:1 on the dark ones. The solid glyph is 15:1 or more on all four, so
+/// the outline still reads as the fainter.
+const OUTLINE_ON_KNOWN_BAR_PERCENT: u16 = 45;
+
+/// The colour of the bar the tray icon is drawn on, where the system says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Bar {
+    Light,
+    Dark,
+}
+
+/// What colour the glyph's pixels are.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Colour {
+    /// As shipped, black: a template image the system recolours.
+    Template,
+    /// Every pixel in this colour; the shape stays in alpha.
+    Rgb([u8; 3]),
+}
+
+/// How the glyph is painted for one bar: its colour, and how much opacity
+/// the outline keeps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Paint {
+    colour: Colour,
+    outline_percent: u16,
+}
+
+/// The paint for a system that does or does not recolour its tray icons,
+/// on a bar whose colour is known or not.
+///
+/// Pure, so every combination is tested on any OS.
+const fn paint(system_recolours: bool, bar: Option<Bar>) -> Paint {
+    let _ = bar;
+    Paint {
+        colour: if system_recolours {
+            Colour::Template
+        } else {
+            Colour::Rgb(TINT)
+        },
+        outline_percent: OUTLINE_OPACITY_PERCENT,
+    }
+}
 
 /// What the tray icon is saying: the endpoint, and whether anything is
 /// loaded behind it.
@@ -51,7 +109,7 @@ pub(super) fn active_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../../icons/tray-active.png"))
 }
 
-/// The bubble, faded: no endpoint to connect to.
+/// The bubble, faded to `percent` of its opacity: no endpoint to connect to.
 ///
 /// Derived from the bubble rather than shipped as a third asset. It is the
 /// same glyph, so a separate file could only drift from it, and fading needs
@@ -59,54 +117,62 @@ pub(super) fn active_icon() -> tauri::Result<Image<'static>> {
 /// [`super::linux`]. Both icons carry their glyph entirely in the alpha
 /// channel, which is what macOS template mode requires, so scaling alpha is
 /// exactly "draw the same thing fainter" on every backend.
-pub(super) fn outline_icon() -> tauri::Result<Image<'static>> {
+fn outline_icon(percent: u16) -> tauri::Result<Image<'static>> {
     let idle = idle_icon()?;
     let (width, height) = (idle.width(), idle.height());
 
     let faded = idle
         .rgba()
         .chunks_exact(4)
-        .flat_map(|px| [px[0], px[1], px[2], fade(px[3])])
+        .flat_map(|px| [px[0], px[1], px[2], fade(px[3], percent)])
         .collect();
 
     Ok(Image::new_owned(faded, width, height))
 }
 
-/// One alpha byte, dimmed.
-const fn fade(alpha: u8) -> u8 {
-    // Cannot overflow: the largest product is 255 * 35, and dividing by 100
-    // lands well inside u8.
+/// One alpha byte, dimmed to `percent` (at most 100) of itself.
+const fn fade(alpha: u8, percent: u16) -> u8 {
+    // Cannot overflow or truncate: the largest product is 255 * 100, and
+    // dividing by 100 lands back inside u8.
     #[allow(
         clippy::cast_possible_truncation,
-        reason = "255 * OUTLINE_OPACITY_PERCENT / 100 is at most 89"
+        reason = "alpha * percent / 100 is at most 255 for a percent of at most 100"
     )]
     {
-        (alpha as u16 * OUTLINE_OPACITY_PERCENT / 100) as u8
+        (alpha as u16 * percent / 100) as u8
     }
 }
 
-/// The icon for a state, already decoded, in this platform's colour.
+/// The icon for a state, already decoded, in this platform's colour for
+/// the bar it is drawn on, read now.
+///
+/// macOS recolours the template image itself. Windows reports whether its
+/// taskbar is light, which is the system's mode and not the app's; macOS and
+/// Linux report nothing, and the glyph keeps the blue it had.
 pub(super) fn for_state(state: TrayState) -> tauri::Result<Image<'static>> {
+    image(state, paint(cfg!(target_os = "macos"), None))
+}
+
+/// The icon for a state in a given paint.
+fn image(state: TrayState, paint: Paint) -> tauri::Result<Image<'static>> {
     let glyph = match state {
-        TrayState::Outline => outline_icon(),
+        TrayState::Outline => outline_icon(paint.outline_percent),
         TrayState::Solid => idle_icon(),
         TrayState::SolidDot => active_icon(),
     }?;
 
-    Ok(if cfg!(target_os = "macos") {
-        glyph
-    } else {
-        tinted(&glyph)
+    Ok(match paint.colour {
+        Colour::Template => glyph,
+        Colour::Rgb(colour) => tinted(&glyph, colour),
     })
 }
 
-/// The same glyph in [`TINT`].
+/// The same glyph in `colour`.
 ///
 /// The shape is entirely in the alpha channel, so replacing the colour and
 /// keeping alpha redraws it exactly, with no image dependency, as
 /// [`outline_icon`] fades it.
-fn tinted(glyph: &Image<'_>) -> Image<'static> {
-    let [r, g, b] = TINT;
+fn tinted(glyph: &Image<'_>, [r, g, b]: [u8; 3]) -> Image<'static> {
     let rgba = glyph
         .rgba()
         .chunks_exact(4)
@@ -307,7 +373,7 @@ mod tests {
     #[test]
     fn the_outline_icon_is_the_bubble_dimmed() {
         let bubble = idle_icon().expect("bubble icon decodes");
-        let outline = outline_icon().expect("outline icon derives");
+        let outline = outline_icon(OUTLINE_OPACITY_PERCENT).expect("outline icon derives");
 
         assert_eq!(outline.width(), bubble.width());
         assert_eq!(outline.height(), bubble.height());
@@ -329,7 +395,7 @@ mod tests {
     #[test]
     fn the_tint_keeps_the_shape_and_takes_the_blue() {
         let glyph = active_icon().expect("icon decodes");
-        let tinted = tinted(&glyph);
+        let tinted = tinted(&glyph, TINT);
 
         assert_eq!(
             (tinted.width(), tinted.height()),
@@ -376,5 +442,171 @@ mod tests {
         assert_ne!(rgba(TrayState::Outline), rgba(TrayState::Solid));
         assert_ne!(rgba(TrayState::Solid), rgba(TrayState::SolidDot));
         assert_ne!(rgba(TrayState::Outline), rgba(TrayState::SolidDot));
+    }
+
+    const STATES: [TrayState; 3] = [TrayState::Outline, TrayState::Solid, TrayState::SolidDot];
+
+    /// The shipped glyph a state is drawn from, before any paint.
+    fn source(state: TrayState) -> Image<'static> {
+        match state {
+            TrayState::Outline | TrayState::Solid => idle_icon(),
+            TrayState::SolidDot => active_icon(),
+        }
+        .expect("icon decodes")
+    }
+
+    /// The paint for every system and bar: a system that recolours its
+    /// icons (macOS) keeps the template whatever is said of the bar; a bar
+    /// of unknown colour keeps today's blue and fade; a light bar takes the
+    /// dark glyph and a dark bar the light one, each with the stronger
+    /// outline.
+    #[test]
+    fn the_paint_follows_the_bar_where_the_system_does_not_recolour() {
+        let template = Paint {
+            colour: Colour::Template,
+            outline_percent: OUTLINE_OPACITY_PERCENT,
+        };
+        for bar in [None, Some(Bar::Light), Some(Bar::Dark)] {
+            assert_eq!(paint(true, bar), template, "recolouring system, {bar:?}");
+        }
+
+        let cases = [
+            (None, TINT, OUTLINE_OPACITY_PERCENT),
+            (Some(Bar::Light), ON_LIGHT, OUTLINE_ON_KNOWN_BAR_PERCENT),
+            (Some(Bar::Dark), ON_DARK, OUTLINE_ON_KNOWN_BAR_PERCENT),
+        ];
+        for (bar, colour, outline_percent) in cases {
+            assert_eq!(
+                paint(false, bar),
+                Paint {
+                    colour: Colour::Rgb(colour),
+                    outline_percent,
+                },
+                "{bar:?}"
+            );
+        }
+    }
+
+    /// On a bar of known colour every state is the shipped glyph in that
+    /// bar's colour: the same size, every pixel the colour, and alpha as
+    /// shipped, or faded to the stronger outline for the outline.
+    #[test]
+    fn every_state_on_a_known_bar_is_the_glyph_recoloured() {
+        for (bar, colour) in [(Bar::Light, ON_LIGHT), (Bar::Dark, ON_DARK)] {
+            for state in STATES {
+                let glyph = source(state);
+                let shown = image(state, paint(false, Some(bar))).expect("icon");
+
+                assert_eq!(
+                    (shown.width(), shown.height()),
+                    (glyph.width(), glyph.height()),
+                    "{bar:?} {state:?}"
+                );
+                for (before, after) in glyph
+                    .rgba()
+                    .chunks_exact(4)
+                    .zip(shown.rgba().chunks_exact(4))
+                {
+                    let alpha = match state {
+                        TrayState::Outline => fade(before[3], OUTLINE_ON_KNOWN_BAR_PERCENT),
+                        TrayState::Solid | TrayState::SolidDot => before[3],
+                    };
+                    assert_eq!(after[3], alpha, "{bar:?} {state:?}: alpha is the shape");
+                    assert_eq!(after[..3], colour, "{bar:?} {state:?}: the bar's colour");
+                }
+            }
+        }
+    }
+
+    /// A bar of unknown colour draws every state exactly as before: the
+    /// blue, and the outline at its old fade.
+    #[test]
+    fn a_bar_of_unknown_colour_keeps_todays_icon() {
+        for state in STATES {
+            let glyph = match state {
+                TrayState::Outline => outline_icon(OUTLINE_OPACITY_PERCENT).expect("outline"),
+                TrayState::Solid | TrayState::SolidDot => source(state),
+            };
+            let shown = image(state, paint(false, None)).expect("icon");
+
+            assert_eq!(shown.rgba(), tinted(&glyph, TINT).rgba(), "{state:?}");
+        }
+    }
+
+    /// Each state still draws its own image on either bar.
+    #[test]
+    fn each_state_draws_its_own_icon_on_either_bar() {
+        for bar in [Bar::Light, Bar::Dark] {
+            let rgba = |state| {
+                image(state, paint(false, Some(bar)))
+                    .expect("icon")
+                    .rgba()
+                    .to_vec()
+            };
+
+            assert_ne!(rgba(TrayState::Outline), rgba(TrayState::Solid), "{bar:?}");
+            assert_ne!(rgba(TrayState::Solid), rgba(TrayState::SolidDot), "{bar:?}");
+            assert_ne!(
+                rgba(TrayState::Outline),
+                rgba(TrayState::SolidDot),
+                "{bar:?}"
+            );
+        }
+    }
+
+    /// WCAG 2's relative luminance of an sRGB colour.
+    fn luminance(rgb: [f64; 3]) -> f64 {
+        let linear = |c: f64| {
+            let c = c / 255.0;
+            if c <= 0.040_45 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * linear(rgb[0]) + 0.7152 * linear(rgb[1]) + 0.0722 * linear(rgb[2])
+    }
+
+    /// WCAG 2's contrast ratio of `colour` drawn at `percent` opacity over
+    /// `background`.
+    fn contrast(colour: [u8; 3], percent: u16, background: [u8; 3]) -> f64 {
+        let a = f64::from(percent) / 100.0;
+        let bg = background.map(f64::from);
+        let seen = std::array::from_fn(|i| a * f64::from(colour[i]) + (1.0 - a) * bg[i]);
+        let (x, y) = (luminance(seen), luminance(bg));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    }
+
+    /// Windows 11's light taskbar and overflow flyout, and its dark ones,
+    /// as near as an opaque colour gets to their translucent material.
+    const LIGHT_BARS: [[u8; 3]; 2] = [[0xf3; 3], [0xf9; 3]];
+    const DARK_BARS: [[u8; 3]; 2] = [[0x20; 3], [0x2c; 3]];
+
+    /// Every state, the faded outline included, reaches 3:1 (WCAG's minimum
+    /// for a graphic) on the bar it is painted for, and the outline stays
+    /// the fainter.
+    #[test]
+    fn every_state_reaches_three_to_one_on_its_bar() {
+        for (bar, backgrounds) in [(Bar::Light, LIGHT_BARS), (Bar::Dark, DARK_BARS)] {
+            let Paint {
+                colour: Colour::Rgb(colour),
+                outline_percent,
+            } = paint(false, Some(bar))
+            else {
+                panic!("{bar:?} is not a template");
+            };
+            for background in backgrounds {
+                let outline = contrast(colour, outline_percent, background);
+                let solid = contrast(colour, 100, background);
+                assert!(
+                    outline >= 3.0,
+                    "{bar:?} on {background:?}: outline {outline:.2}"
+                );
+                assert!(
+                    solid > 2.0 * outline,
+                    "{bar:?} on {background:?}: solid {solid:.2}"
+                );
+            }
+        }
     }
 }
