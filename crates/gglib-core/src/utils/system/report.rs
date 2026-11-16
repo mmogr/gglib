@@ -7,9 +7,10 @@
 
 use std::collections::BTreeMap;
 
-use super::needs::{HostOs, Need, Purpose, Source, needs_on};
+use super::needs::{Need, Purpose, Source, needs_on};
 use super::packages::{LinuxDistro, install_hint, packages_for};
 use super::types::{Dependency, DependencyStatus, GpuInfo};
+use crate::host::HostOs;
 use crate::paths::{LLAMA_INSTALL_COMMAND, SD_INSTALL_COMMAND};
 
 /// What kind of gglib is asking.

@@ -66,6 +66,7 @@ import type { DashboardSnapshot } from '../../../src/services/transport/types/da
 import type { RemoteStatus } from '../../../src/services/transport/types/remote';
 import { activeConnection, dashboardSnapshot, residentSlot } from '../fixtures/dashboard';
 import { device } from '../places/devicesFixtures';
+import { applyHost } from '../../../src/services/hostRegistry';
 
 const UP: ProxyStatus = { running: true, state: 'on', port: 8080, base_url: 'http://127.0.0.1:8080/v1', key: 'none_needed', pinned_model: null, pinned_to: null, pinned_model_id: null };
 const DOWN: ProxyStatus = { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null };
@@ -404,6 +405,18 @@ describe('the tray panel', () => {
       expect(lines).toHaveLength(1);
       expect(lines[0]).toHaveTextContent('This MacNot sharing');
       expect(lines[0].querySelector('[data-kind]')).toHaveAttribute('data-kind', 'off');
+    });
+
+    it("names this machine in the service's words: This PC on Windows", async () => {
+      transport.getRemoteStatus.mockImplementation(async () => ({ ...IDLE_STATUS, sharing: 'Not sharing', sharing_note: '', reach_line: '' }));
+      applyHost({ os: 'windows', machine: 'PC', separators: '\\/' });
+      try {
+        await renderTray();
+        const devices = await screen.findByRole('region', { name: 'Devices' });
+        expect(within(devices).getByRole('listitem')).toHaveTextContent('This PCNot sharing');
+      } finally {
+        applyHost({ os: 'macos', machine: 'Mac', separators: '/' });
+      }
     });
 
     it('not drawn before the first status', async () => {

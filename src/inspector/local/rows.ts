@@ -14,8 +14,10 @@
  */
 
 import { CHOICE_WORDS } from '../../components/status/words';
+import { fileName } from '../../services/hostRegistry';
 import type { ProvenanceParamKey, SamplingExplanation, SamplingParamKey } from '../../types';
 import type { ChoiceSource } from '../../types/generated/ChoiceSource';
+import type { Host } from '../../types/generated/Host';
 import type { LaunchArg } from '../../types/generated/LaunchArg';
 import type { LaunchNarration } from '../../types/generated/LaunchNarration';
 import type { LaunchPlan } from '../../types/generated/LaunchPlan';
@@ -86,19 +88,19 @@ export function runRows(plan: Pick<LaunchPlan, 'args' | 'fit'>, draws: boolean, 
     .sort((a, b) => rank(a.key) - rank(b.key));
 }
 
-/** The last part of a path, for a value that names a file. */
-export const fileName = (value: string): string => (value.includes('/') ? (value.split('/').pop() ?? value) : value);
-
 /** A whole number grouped (`131,072`); any other value as sent. */
 export const grouped = (value: string): string => (/^\d+$/.test(value) ? Number(value).toLocaleString('en-US') : value);
 
-/** An argument's value for a person: a whole number grouped, a path as its file's name. */
-const readable = (value: string): string => fileName(grouped(value));
+/** An argument's value for a person: a whole number grouped, a path on `host` as its file's name. */
+const readable = (value: string, host: Host | null): string => fileName(grouped(value), host);
 
-/** A row's arguments as its value: one argument's value (or its flag), several as `flag value` pairs. */
-export function argsValue(args: LaunchArg[]): string {
-  if (args.length === 1) return args[0].value == null ? args[0].flag : readable(args[0].value);
-  return args.map((a) => (a.value == null ? a.flag : `${a.flag} ${readable(a.value)}`)).join(' · ');
+/**
+ * A row's arguments as its value: one argument's value (or its flag), several
+ * as `flag value` pairs, a path as its file's name on the service's `host`.
+ */
+export function argsValue(args: LaunchArg[], host: Host | null): string {
+  if (args.length === 1) return args[0].value == null ? args[0].flag : readable(args[0].value, host);
+  return args.map((a) => (a.value == null ? a.flag : `${a.flag} ${readable(a.value, host)}`)).join(' · ');
 }
 
 /** What the narration says of a row's decision, in Rust's words; `null` when it says nothing. */

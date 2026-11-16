@@ -40,6 +40,33 @@ async fn health_endpoint_returns_ok() {
     assert_eq!(json["status"], "ok");
 }
 
+/// The build answer carries the machine the daemon runs on, which every
+/// page names it by.
+#[tokio::test]
+async fn version_endpoint_says_what_machine_it_runs_on() {
+    let app = test_app(CorsConfig::AllowAll).await;
+
+    let response = app
+        .oneshot(
+            authed()
+                .header("Host", "127.0.0.1:9887")
+                .uri("/api/version")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value =
+        serde_json::from_slice(&body).expect("version response is valid JSON");
+    assert_eq!(
+        json["host"],
+        serde_json::to_value(gglib_core::host::Host::current()).unwrap()
+    );
+}
+
 #[tokio::test]
 async fn models_endpoint_returns_json() {
     let app = test_app(CorsConfig::AllowAll).await;

@@ -35,7 +35,12 @@ pub(crate) async fn execute(
 
     print!(
         "{}",
-        launch_display::launch_text(&model.name, model.id, &explanation.plan)
+        launch_display::launch_text(
+            &model.name,
+            model.id,
+            &explanation.plan,
+            explanation.command.as_ref()
+        )
     );
     explain_display::print_explanation(&model.name, model.id, &explanation.sampling);
 

@@ -6,6 +6,7 @@ import { usePairedModels } from '../../../hooks/usePairedModels';
 import { useResidency } from '../../../places/library/useResidency';
 import { useEndpointFacts } from '../../../services/proxyRegistry';
 import { useModelLibrary } from '../../../services/modelRegistry';
+import { useThisMachine } from '../../../services/hostRegistry';
 import { useToastContext } from '../../../contexts/ToastContext';
 import { formatError, loadFailed } from '../../../utils/errors';
 
@@ -37,7 +38,7 @@ const STAYS = 'A chat stays on its machine. Start a new chat to use this model.'
  * The composer's model: a picker ▾ while the chat is on this machine.
  *
  * Its groups are Loaded (the servers running here, the chat's own ticked),
- * On this Mac (the registered models that are not), and the paired
+ * On this <machine> (`useThisMachine`: the registered models that are not), and the paired
  * machine's models when one is connected; then Unload <model>, which stops
  * it for every client of the endpoint and leaves the chat open, and Show
  * <model>, which opens its inspector, where its log is. Each of this
@@ -45,7 +46,7 @@ const STAYS = 'A chat stays on its machine. Start a new chat to use this model.'
  * ("Qwen3-4B · Not loaded"), so a pick that must load first says so: a
  * running one's word is the proxy's live dashboard's (`useResidency`), else
  * Loaded. The chat's own model is ticked where it is: under Loaded while it
- * runs, else first under On this Mac. While the endpoint is pinned
+ * runs, else first under On this <machine>. While the endpoint is pinned
  * (`ProxyStatus.pinned_model_id`, the pinned model's id) the daemon
  * refuses to start any other model, so every other id is greyed, a model
  * sharing the pinned one's name too, each with the pin as its reason
@@ -73,6 +74,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({
   const paired = usePairedModels(canPick);
   const residency = useResidency();
   const { pinned } = useEndpointFacts();
+  const machine = useThisMachine();
 
   if (!canPick) {
     return <span className="truncate px-sm text-sm text-text-secondary">{modelName}</span>;
@@ -106,7 +108,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({
     const why = refusal(id);
     return { label: stated(id, name), checked: false, disabled: why !== undefined, title: why, onPick: () => void pick({ modelId: id, modelName: name }) };
   };
-  /** The chat's own model, ticked: under Loaded while it runs, else first under On this Mac. */
+  /** The chat's own model, ticked: under Loaded while it runs, else first under On this <machine>. */
   const own: MenuItem = { label: stated(modelId, modelName), checked: true, onPick: () => {} };
   const loaded: MenuItem[] = servers.map((s) => (s.modelId === modelId ? own : choice(s.modelId, s.modelName)));
   const here: MenuItem[] = [
@@ -117,7 +119,7 @@ export const ModelPicker: FC<ModelPickerProps> = ({
 
   const items: MenuItem[] = [
     ...(loaded.length > 0 ? [{ label: RESIDENCY_WORDS.loaded, heading: true }, ...loaded] : []),
-    ...(here.length > 0 ? [{ label: 'On this Mac', heading: true }, ...here] : []),
+    ...(here.length > 0 ? [{ label: `On ${machine.phrase}`, heading: true }, ...here] : []),
     ...(far.length > 0 ? [{ label: `On ${paired.name}`, heading: true }] : []),
     ...far.map((m) => ({
       label: m.id,

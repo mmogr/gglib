@@ -4,7 +4,8 @@ use axum::Json;
 
 use crate::dto::version::VersionDto;
 
-/// `GET /api/version` — which build of gglib is answering.
+/// `GET /api/version` — which build of gglib is answering, and on what
+/// machine (`host`).
 ///
 /// `/health` already carries the version and fingerprint, but it is an
 /// untyped liveness probe that also reports debug-switch state, and it sits

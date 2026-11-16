@@ -17,4 +17,9 @@ is also what `scripts/check_settings_surfaces.sh` reads to prove no
 command line by `SettingSecret::name`, so `--help`, completions and the
 refusal of an unknown key read the one spelling of each name.
 
+`path-entry` is hidden from `--help`: the Windows installer's command, not a
+user's. `installer_hooks_tests.rs` reads `src-tauri/windows/installer-hooks.nsh`
+and parses each `gglib` command line in it with this parser, so the
+installer cannot name a command this gglib does not have.
+
 <!-- module-docs:end -->

@@ -121,7 +121,9 @@ pub use model_sampling::{
 pub use launch_narration::{
     LaunchDecision, LaunchFit, LaunchNarration, format_gib, format_mib_as_gib,
 };
-pub use launch_plan::{ChoiceSource, ContextFit, LaunchArg, LaunchPlan, Unload, UnloadReason};
+pub use launch_plan::{
+    ChoiceSource, CommandLine, ContextFit, LaunchArg, LaunchPlan, Unload, UnloadReason,
+};
 
 // Re-export the first-run model recommendation at the domain level.
 pub use recommendation::BUDGET_UTILISATION;

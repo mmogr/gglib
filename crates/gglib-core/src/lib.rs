@@ -10,6 +10,7 @@ pub mod domain;
 pub mod download;
 pub mod events;
 pub mod hf_token;
+pub mod host;
 pub mod is_local_origin;
 pub mod normalize;
 pub mod paths;

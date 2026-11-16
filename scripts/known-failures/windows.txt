@@ -3,4 +3,3 @@
 # the job, and so does a row here whose test passes. Delete a row with the
 # change that makes its test pass; never add one for a test that passed.
 # One row per test, sorted: <package> <target> <test>
-gglib-cli gglib_cli handlers::model::explain::tests::the_launch_is_the_runtimes_plan_through_the_one_shot_runtime

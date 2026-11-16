@@ -15,9 +15,13 @@ import {
   setByYou,
   SAMPLING_KEYS,
 } from '../../../src/inspector/local/rows';
+import type { Host } from '../../../src/types/generated/Host';
 import type { LaunchArg } from '../../../src/types/generated/LaunchArg';
 import { chatPlan, samplingExplanation } from '../fixtures/explain';
 import { resolvedConfig } from '../fixtures/inference';
+
+const MAC: Host = { os: 'macos', machine: 'Mac', separators: '/' };
+const WINDOWS: Host = { os: 'windows', machine: 'PC', separators: '\\/' };
 
 const arg = (flag: string, decision: string, value?: string, source: LaunchArg['source'] = 'gglib'): LaunchArg => ({
   flag,
@@ -54,7 +58,7 @@ describe('the rows', () => {
     // The narration's `flags` line holds more than Templates' flag, so Templates never reads it.
     expect(narrated(narration, 'templates')).toBeNull();
     expect(narrated(narration, 'kv')).toBeNull();
-    expect(argsValue([arg('-c', 'ctx', '131072')])).toBe('131,072');
+    expect(argsValue([arg('-c', 'ctx', '131072')], MAC)).toBe('131,072');
   });
 
   it('are Parts alone for an image model, and keep a decision the table does not know under its own name', () => {
@@ -63,10 +67,11 @@ describe('the rows', () => {
     expect(runRows(plan, true, ['mtp']).map((r) => r.label)).toEqual(['Parts', 'novel']);
   });
 
-  it("read one argument as its value's file name, several as flag and value", () => {
-    expect(argsValue([arg('--mmproj', 'images', '/models/mmproj-F16.gguf')])).toBe('mmproj-F16.gguf');
-    expect(argsValue([arg('--jinja', 'templates')])).toBe('--jinja');
-    expect(argsValue([arg('-k', 'kv', 'q8_0'), arg('-v', 'kv', 'q8_0')])).toBe('-k q8_0 · -v q8_0');
+  it("read one argument as its value's file name on the service's machine, several as flag and value", () => {
+    expect(argsValue([arg('--mmproj', 'images', '/models/mmproj-F16.gguf')], MAC)).toBe('mmproj-F16.gguf');
+    expect(argsValue([arg('--mmproj', 'images', 'C:\\Users\\m\\mmproj-F16.gguf')], WINDOWS)).toBe('mmproj-F16.gguf');
+    expect(argsValue([arg('--jinja', 'templates')], MAC)).toBe('--jinja');
+    expect(argsValue([arg('-k', 'kv', 'q8_0'), arg('-v', 'kv', 'q8_0')], MAC)).toBe('-k q8_0 · -v q8_0');
   });
 
   it('are captioned by whose choices they are, in one order', () => {

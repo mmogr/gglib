@@ -31,6 +31,7 @@ import { useToastContext } from '../../contexts/ToastContext';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import type { PairedModelsState } from '../../hooks/usePairedModels';
 import { useModelLibrary } from '../../services/modelRegistry';
+import { useThisMachine } from '../../services/hostRegistry';
 import { getTransport } from '../../services/transport';
 import { cn } from '../../utils/cn';
 import { loadFailed } from '../../utils/errors';
@@ -61,6 +62,7 @@ export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
   const navigate = useNavigate();
   const { showToast } = useToastContext();
   const { models, loading } = useModelLibrary();
+  const machine = useThisMachine();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   // The highlighted row by its key, and where it was, for when it goes.
@@ -191,7 +193,7 @@ export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
             onKeyDown={onKeyDown}
           />
           {loading || query.trim() || local.length > 0 ? null : (
-            <p className="m-0 px-md py-xs text-xs text-text-secondary">{models.length === 0 ? 'No models on this Mac.' : 'Every model on this Mac is loaded.'}</p>
+            <p className="m-0 px-md py-xs text-xs text-text-secondary">{models.length === 0 ? `No models on ${machine.phrase}.` : `Every model on ${machine.phrase} is loaded.`}</p>
           )}
           <div
             id={listId}

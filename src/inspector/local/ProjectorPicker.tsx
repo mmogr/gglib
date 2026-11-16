@@ -1,4 +1,5 @@
 import { FC, useEffect, useState } from 'react';
+import { fileName, useHost } from '../../services/hostRegistry';
 import { listProjectorChoices } from '../../services/transport/api/models/local';
 import type { ModelDetail } from '../../types';
 import type { ProjectorChoice } from '../../types/generated/ProjectorChoice';
@@ -19,15 +20,12 @@ interface ProjectorPickerProps {
   onChanged: () => void;
 }
 
-function fileName(path: string): string {
-  return path.split(/[\\/]/).pop() || path;
-}
-
 /** One model's picker. Its choices, its wait and its refusal are that model's alone. */
 const Picker: FC<ProjectorPickerProps> = ({ modelId, detail, onUpdateModel, onChanged }) => {
   const [choices, setChoices] = useState<ProjectorChoice[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const host = useHost();
 
   useEffect(() => {
     let current = true;
@@ -44,7 +42,7 @@ const Picker: FC<ProjectorPickerProps> = ({ modelId, detail, onUpdateModel, onCh
   const offered = choices ?? [];
   const options =
     linked && !offered.some((c) => c.path === linked)
-      ? [{ path: linked, name: fileName(linked) }, ...offered]
+      ? [{ path: linked, name: fileName(linked, host) }, ...offered]
       : offered;
 
   const pick = async (value: string) => {

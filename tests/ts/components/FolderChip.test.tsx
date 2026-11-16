@@ -11,7 +11,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { useState } from 'react';
-import { FolderChip, folderName, folderOffer, folderTitle } from '../../../src/components/ChatMessagesPanel/components/FolderChip';
+import { FolderChip, folderOffer, folderTitle } from '../../../src/components/ChatMessagesPanel/components/FolderChip';
 import { FOLDER_GONE, type ChatFolder } from '../../../src/hooks/useChatFolder';
 
 function folder(over: Partial<ChatFolder> = {}): ChatFolder {
@@ -112,11 +112,5 @@ describe('FolderChip', () => {
       'title',
       'This model calls no tools, so /home/m/src is not read. × forgets it.',
     );
-  });
-
-  it('names a folder by its last name', () => {
-    expect(folderName('/home/m/src/gglib/')).toBe('gglib');
-    expect(folderName('C:\\Users\\m\\notes')).toBe('notes');
-    expect(folderName('/')).toBe('/');
   });
 });
