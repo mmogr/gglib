@@ -15,6 +15,7 @@ mod sd;
 mod slots;
 #[cfg(feature = "test-utils")]
 mod test_root;
+pub mod user_path;
 
 #[cfg(test)]
 pub(crate) mod test_utils;

@@ -284,7 +284,12 @@ and run `./gglib up`. The binaries are not code-signed yet:
   desktop app's tar.gz includes `macos-install.command`, which does this,
   and Homebrew does it for you.
 - **Windows** SmartScreen stops the desktop app's installer with "Windows
-  protected your PC". Choose **More info**, then **Run anyway**.
+  protected your PC". Choose **More info**, then **Run anyway**. The
+  installer puts its folder, which holds `gglib.exe`, on your PATH, so
+  `gglib` runs in a terminal you open after it; a terminal already open
+  keeps the PATH it started with. Uninstalling takes the folder off again
+  if the install put it there; a folder that was on your PATH already
+  stays.
 
 **Windows is experimental.** Its first test found that a new install doesn't
 get from the installer to a working chat without help.
