@@ -14,9 +14,10 @@ use std::sync::Arc;
 
 use gglib_core::ApiKeySource;
 use gglib_core::domain::KeyState;
+use gglib_core::events::AppEvent;
 use gglib_core::ports::{
-    AgentRunStarter, HubChatsPort, ImageGenerationPort, ModelCatalogPort, ModelRepository,
-    ModelRuntimePort, RemoteGatewayPort, RunsPort,
+    AgentRunStarter, AppEventEmitter, HubChatsPort, ImageGenerationPort, ModelCatalogPort,
+    ModelRepository, ModelRuntimePort, RemoteGatewayPort, RunsPort,
 };
 use gglib_core::services::{AppCore, CatalogPortImpl};
 use gglib_mcp::McpService;
@@ -36,6 +37,12 @@ pub struct ProxyDeps {
     /// benchmark share the same `ProcessManager`, enforcing the invariant
     /// that every llama-server on this machine lives in the same resident set.
     pub runtime: Arc<dyn ModelRuntimePort>,
+    /// Where the endpoint coming on (`proxy_started`) and going off
+    /// (`proxy_stopped`) is said. Said here, at the one start and the one
+    /// stop every caller goes through, so a model start, autostart, a remote
+    /// enable and an agent turn that bring the endpoint up are heard as the
+    /// explicit start is.
+    pub emitter: Arc<dyn AppEventEmitter>,
 }
 
 /// Proxy operations facade.
@@ -50,6 +57,7 @@ pub struct ProxyOps {
     mcp: Arc<McpService>,
     pub(crate) core: Arc<AppCore>,
     runtime: Arc<dyn ModelRuntimePort>,
+    emitter: Arc<dyn AppEventEmitter>,
     /// The daemon's shutdown token, once there is a daemon.
     ///
     /// Not a dependency, because it does not exist yet when this is built:
@@ -93,6 +101,7 @@ impl ProxyOps {
             mcp: deps.mcp,
             core: deps.core,
             runtime: deps.runtime,
+            emitter: deps.emitter,
             daemon_cancel: std::sync::OnceLock::new(),
             remote_gateway: std::sync::OnceLock::new(),
             runs: std::sync::OnceLock::new(),
@@ -281,6 +290,11 @@ impl ProxyOps {
                     .write()
                     .unwrap_or_else(std::sync::PoisonError::into_inner) =
                     bind.api_key.clone().map(|key| (key, bind.api_key_source));
+                // The endpoint went from off to on, and this start did it:
+                // the supervisor answers `Ok` only to the start that took
+                // its slot, under its own lock, so a racing start or one
+                // that finds it on (`AlreadyRunning`) says nothing.
+                self.emitter.emit(AppEvent::proxy_started(bind.addr.port()));
                 bind.addr
             })
     }
@@ -371,6 +385,11 @@ impl ProxyOps {
     /// Clears any model pin: the pin belongs to one proxy run, and leaving
     /// it set would make the next unpinned start refuse models for no
     /// visible reason.
+    ///
+    /// Says `proxy_stopped` whenever there was a run to stop, even one that
+    /// ended in an error or had to be aborted: the supervisor gives up its
+    /// handle before it waits, so the endpoint is off either way. A stop
+    /// that finds nothing running says nothing.
     pub async fn stop(&self) -> Result<(), GuiError> {
         if let Err(e) = self.runtime.set_pin(None) {
             tracing::debug!("could not clear model pin on stop: {e}");
@@ -379,7 +398,11 @@ impl ProxyOps {
             .effective_key
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
-        self.supervisor.stop().await.map_err(|e| match e {
+        let stopped = self.supervisor.stop().await;
+        if !matches!(stopped, Err(SupervisorError::NotRunning)) {
+            self.emitter.emit(AppEvent::proxy_stopped());
+        }
+        stopped.map_err(|e| match e {
             SupervisorError::NotRunning => GuiError::Conflict("Proxy is not running".to_string()),
             SupervisorError::AlreadyRunning(addr) => {
                 GuiError::Internal(format!("Proxy unexpectedly running at {addr}"))

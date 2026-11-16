@@ -27,6 +27,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLlamaStatus } from '../../hooks/useLlamaStatus';
 import type { ServerViewModel } from '../../hooks/useServers';
 import { installLlama, useEngineInstall } from '../../places/library/engineInstall';
+import { startEndpointPinned } from '../../services/proxyEvents';
 import { getTransport } from '../../services/transport';
 import { TransportError } from '../../services/transport/errors';
 import { toStartServerRequest } from '../../services/transport/mappers';
@@ -102,7 +103,7 @@ export function useLoad(
     setError(null);
     setBusy('load');
     try {
-      if (pin) await getTransport().startPinnedProxy({ model_id: model.id, options: toStartServerRequest(config) });
+      if (pin) await startEndpointPinned({ model_id: model.id, options: toStartServerRequest(config) });
       await getTransport().serveModel(config);
       return null;
     } catch (err) {

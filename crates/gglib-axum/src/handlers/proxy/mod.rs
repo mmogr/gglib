@@ -13,7 +13,6 @@ use crate::{error::HttpError, state::AppState};
 use gglib_core::domain::loop_guard_log::{
     LOOP_GUARD_LOG_DEFAULT_DAYS, LoopGuardTripDay, first_day_of_window,
 };
-use gglib_core::ports::AppEventEmitter;
 use wire::{to_api_status, to_runtime_config};
 
 /// Fetch current proxy status from backend.
@@ -228,35 +227,19 @@ pub(crate) async fn start(
         }
     }
 
-    let status = fetch_status(&state).await;
-
-    // Emit proxy started event if proxy is now running
-    if status.running
-        && let Some(port) = status.port
-    {
-        state
-            .sse
-            .emit(gglib_core::events::AppEvent::proxy_started(port));
-    }
-
-    Ok(Json(status))
+    // `proxy_started` is said by `ProxyOps` itself, by the start that
+    // turned the endpoint on, so a start that found it on says nothing more.
+    Ok(Json(fetch_status(&state).await))
 }
 
 /// Stop the proxy (idempotent).
 pub(crate) async fn stop(State(state): State<AppState>) -> Result<Json<ProxyStatus>, HttpError> {
-    // Idempotent: if not running (Conflict), treat as success
-    match state.proxy.stop().await {
-        Ok(()) => {
-            // Emit proxy stopped event on clean shutdown
-            state
-                .sse
-                .emit(gglib_core::events::AppEvent::proxy_stopped());
-        }
-        Err(e) => {
-            let http: HttpError = e.into();
-            if !matches!(http, HttpError::Conflict(_)) {
-                return Err(http);
-            }
+    // Idempotent: if not running (Conflict), treat as success. A stop that
+    // turned the endpoint off is said (`proxy_stopped`) by `ProxyOps`.
+    if let Err(e) = state.proxy.stop().await {
+        let http: HttpError = e.into();
+        if !matches!(http, HttpError::Conflict(_)) {
+            return Err(http);
         }
     }
 

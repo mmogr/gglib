@@ -215,6 +215,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         mcp: Arc::clone(&mcp),
         core: Arc::clone(&core),
         runtime: Arc::clone(&runtime),
+        emitter: Arc::clone(&emitter),
     }));
 
     // The tunnel's gateway is handed to the proxy here, before anything can
