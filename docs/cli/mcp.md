@@ -45,9 +45,18 @@ columns show `—` and a line under the table says why; `list` never starts a
 daemon.
 
 - A server is a process gglib starts (`stdio`): `--command` and `--args`
-  (comma-separated) say what to run, `--working-dir`, `--env KEY=VALUE` and
-  `--path-extra` shape its process. There are no HTTP (`sse`) servers; an
-  older library's are deleted the first time this gglib opens it.
+  (comma-separated, and they may start with a dash: `--args -y,pkg`) say
+  what to run, `--working-dir`, `--env KEY=VALUE` and `--path-extra`
+  shape its process. `--path-extra` is a list like `PATH`: entries
+  separated by `:` on Linux and macOS, `;` on Windows. There are no HTTP
+  (`sse`) servers; an older library's are deleted the first time this
+  gglib opens it.
+- `--command` is a program's name or path. On Windows a name is tried
+  with each extension in `PATHEXT` first (`npx` finds `npx.cmd`), and
+  only a file with one of those extensions counts as a program; on Linux
+  and macOS a file counts when its execute bit is set. A path gglib found
+  earlier that is no longer a program is dropped and the name looked up
+  again.
 - A server's name is its own: `add` refuses a name another server already
   has.
 - `--lifecycle` decides when gglib spawns the server: `eager` at host init,

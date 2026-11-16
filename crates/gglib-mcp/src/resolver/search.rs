@@ -27,7 +27,7 @@ impl<'a> ExecutableSearcher<'a> {
     }
 
     /// Check one candidate and record the attempt.
-    fn probe(&self, candidate: PathBuf, attempts: &mut Vec<Attempt>) -> Option<PathBuf> {
+    pub(crate) fn probe(&self, candidate: PathBuf, attempts: &mut Vec<Attempt>) -> Option<PathBuf> {
         let outcome = self.fs.check_executable(&candidate, self.platform);
         let found = (outcome == AttemptOutcome::Ok).then(|| candidate.clone());
         attempts.push(Attempt { candidate, outcome });
@@ -37,7 +37,7 @@ impl<'a> ExecutableSearcher<'a> {
     /// Check for `command` in each directory in turn, skipping an empty
     /// entry. Each directory is checked under every name the platform gives
     /// the command before the next directory is.
-    fn probe_dirs<D: AsRef<Path>>(
+    pub(crate) fn probe_dirs<D: AsRef<Path>>(
         &self,
         dirs: impl IntoIterator<Item = D>,
         command: &str,

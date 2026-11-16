@@ -226,10 +226,10 @@ impl McpService {
     /// Ensure a server's command is resolved to an absolute executable path.
     ///
     /// This method:
-    /// - Checks if `resolved_path_cache` is still valid → returns it
-    /// - Otherwise, resolves `command` using the path resolver
+    /// - Checks if `resolved_path_cache` is still a program → returns it
+    /// - Otherwise, drops it and resolves `command` using the path resolver
     /// - On success: updates `resolved_path_cache` in the database
-    /// - On failure: preserves old cache, updates `is_valid`/`last_error`
+    /// - On failure: stores no cache, updates `is_valid`/`last_error`
     ///
     /// Returns a `ResolutionStatus` with success flag and diagnostic information.
     /// Resolution failure is not an error - it returns Ok(ResolutionStatus { success: false, ... })
@@ -251,7 +251,10 @@ impl McpService {
             return Ok(cached_status);
         }
 
-        // Step 2: Cache miss or invalid - resolve from command
+        // Step 2: Cache miss or invalid - resolve from command. A cached path
+        // that is no longer a program is dropped, so a failure below neither
+        // keeps nor offers it.
+        server.config.resolved_path_cache = None;
         let user_search_paths = Self::extract_user_search_paths(&server);
 
         match crate::resolver::resolve_executable(&command, &user_search_paths) {

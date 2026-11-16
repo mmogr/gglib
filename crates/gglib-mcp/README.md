@@ -57,7 +57,8 @@ This crate provides MCP server lifecycle management, including:
 │    ├── types: Result/Error/Attempt types                    │
 │    ├── env: Environment variable access (injectable)        │
 │    ├── fs: Filesystem operations (injectable)               │
-│    ├── search: Platform-specific search strategies          │
+│    ├── platform: each OS's rules, as a value                │
+│    ├── search: where a command is looked for, in order      │
 │    └── resolve: 6-step resolution orchestration             │
 │                                                             │
 │  opened.rs: the servers open to paired devices              │
@@ -150,9 +151,9 @@ High-level facade combining persistence and lifecycle:
 
 Cross-platform executable path resolution:
 - **6-step search strategy**: Absolute path → PATH → /etc/paths (macOS) → Platform defaults → Node managers → User paths
-- **Trait-based testing**: Injectable `EnvProvider` and `FsProvider` for mocking
+- **Trait-based testing**: Injectable `EnvProvider` and `FsProvider` for mocking, and the OS's rules as a `Platform` value, so Windows's are tested on every OS
 - **Diagnostic output**: Detailed attempt log for troubleshooting path issues
-- **Platform-aware**: Handles macOS Finder minimal PATH, Windows PATHEXT, Node version managers
+- **Platform-aware**: Handles macOS Finder minimal PATH, Windows PATHEXT (each extension before the bare name; a program by its extension), Node version managers
 - **Fallback behavior**: Tries basename search if absolute path fails
 
 See [`resolver/mod.rs`](src/resolver/mod.rs) for detailed documentation and usage examples.
@@ -203,4 +204,4 @@ async fn example(repo: impl McpServerRepository + 'static) {
 
 ## Testing
 
-The crate uses trait-based testing: `McpService` is tested over a repository held in memory (`service_tests.rs`). The client's wait for its reply (matched by id, timed out, ended by EOF) is pinned over an in-process pipe standing in for the server, and what a server that exits printed over a shell script (`client_tests.rs`), what is kept of a server's stderr over a pipe standing in for it (`stderr_tail_tests.rs`), and what a tool's content items become over an attachment store held in memory (`tool_images_tests.rs`). The order the resolver tries candidates in, and the attempts it records, are pinned case by case over a mock environment and filesystem (`resolver/resolve_order_tests.rs`). See `gglib-db` for `SqliteMcpRepository`'s own tests, which run on the schema production creates.
+The crate uses trait-based testing: `McpService` is tested over a repository held in memory (`service_tests.rs`). The client's wait for its reply (matched by id, timed out, ended by EOF) is pinned over an in-process pipe standing in for the server, and what a server that exits printed over a shell script (`client_tests.rs`), what is kept of a server's stderr over a pipe standing in for it (`stderr_tail_tests.rs`), and what a tool's content items become over an attachment store held in memory (`tool_images_tests.rs`). The order the resolver tries candidates in, and the attempts it records, are pinned case by case over a mock environment and filesystem (`resolver/resolve_order_tests.rs`), and Windows's rules over real files in a temporary folder on every OS (`resolver/platform_tests.rs`). See `gglib-db` for `SqliteMcpRepository`'s own tests, which run on the schema production creates.

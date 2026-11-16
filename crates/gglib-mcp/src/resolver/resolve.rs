@@ -4,13 +4,14 @@ use super::env::{EnvProvider, SystemEnv};
 use super::fs::{FsProvider, SystemFs};
 use super::platform::Platform;
 use super::search::ExecutableSearcher;
-use super::types::{Attempt, AttemptOutcome, ResolveError, ResolveResult};
+use super::types::{Attempt, ResolveError, ResolveResult};
 use std::path::Path;
 
 /// Resolve a command to an absolute executable path.
 ///
 /// Search order:
-/// 1. If command is absolute and valid → return it
+/// 1. If command is absolute and a program, under one of the names the
+///    platform gives it → return that
 /// 2. Search in PATH environment variable
 /// 3. Search in /etc/paths and /etc/paths.d/* (macOS only)
 /// 4. Search in platform-specific default directories
@@ -40,25 +41,33 @@ pub(crate) fn resolve_executable_with_deps(
     let mut all_attempts = Vec::new();
     let mut warnings = Vec::new();
 
-    // Step 1: If command is absolute, validate and return
+    // Step 1: If command is absolute, check it in its own folder under each
+    // name the platform gives it: on Windows `C:\nodejs\npx` is found as
+    // `npx.cmd`, which is tried before the bare name.
     let command_path = Path::new(command);
     if command_path.is_absolute() {
-        let outcome = fs.check_executable(command_path, platform);
-        all_attempts.push(Attempt {
-            candidate: command_path.to_path_buf(),
-            outcome: outcome.clone(),
-        });
+        let searcher = ExecutableSearcher::new(env, fs, platform);
+        let basename = command_path.file_name().and_then(|n| n.to_str());
+        let found = match (command_path.parent(), basename) {
+            (Some(dir), Some(name)) => searcher.probe_dirs([dir], name, &mut all_attempts),
+            _ => searcher.probe(command_path.to_path_buf(), &mut all_attempts),
+        };
 
-        if outcome == AttemptOutcome::Ok {
+        if let Some(resolved_path) = found {
             return Ok(ResolveResult {
-                resolved_path: command_path.to_path_buf(),
+                resolved_path,
                 attempts: all_attempts,
                 warnings,
             });
         }
 
-        // Absolute path failed - try falling back to basename
-        if let Some(basename) = command_path.file_name().and_then(|n| n.to_str()) {
+        // Absolute path failed - try falling back to basename. The last
+        // attempt is the command as written.
+        if let Some(basename) = basename {
+            let outcome = all_attempts
+                .last()
+                .map(|attempt| attempt.outcome.to_string())
+                .unwrap_or_default();
             warnings.push(format!(
                 "Absolute path '{command}' failed ({outcome}), falling back to basename '{basename}'"
             ));
