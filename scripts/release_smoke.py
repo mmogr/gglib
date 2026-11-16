@@ -98,9 +98,11 @@ QUESTION = {
 DAEMON_PORT = 19487
 ENDPOINT_PORT = 19488
 
-# Each command's time limit, in seconds. The job's own limit is above their
-# sum, so a hang ends here, as a failure with its output kept. A command not
-# named here gets `short`.
+# Each command's time limit, in seconds. A command that hangs is stopped at
+# its limit, and the run goes on to stop the daemon, check what was left and
+# keep every output, so one hang fails the step with its logs. The workflow
+# step's own limit is the backstop for more than one. A command not named
+# here gets `short`.
 LIMITS = {
     "short": 60,
     "install": 900,
@@ -152,7 +154,92 @@ class Platform:
     new_shell_pending: str
 
 
-PLATFORMS: dict[str, Platform] = {}
+PLATFORMS: dict[str, Platform] = {
+    "windows": Platform(
+        target="x86_64-pc-windows-msvc",
+        how=(
+            "the NSIS installer, silently (/S), into its per-user folder "
+            "%LOCALAPPDATA%\\gglib-gui, and the gglib.exe it installs beside the app"
+        ),
+        cli_archive="gglib-{version}-{target}.zip",
+        cli_program="gglib.exe",
+        install=(("{artifacts}/gglib-gui-{version}-{target}-setup.exe", "/S"),),
+        installed="{LOCALAPPDATA}/gglib-gui",
+        installed_cli="{LOCALAPPDATA}/gglib-gui/gglib.exe",
+        # An NSIS uninstaller copies itself to %TEMP% and returns at once, so
+        # the run waits for the folder to go rather than for this command.
+        uninstall=(("{LOCALAPPDATA}/gglib-gui/uninstall.exe", "/S"),),
+        processes=("tasklist", "/FO", "CSV", "/NH"),
+        process_listing="tasklist",
+        kill=("taskkill", "/F", "/T", "/IM", "{name}.exe"),
+        # The machine's PATH, then the user's, from the registry, as Explorer
+        # gives them to a shell it starts. The job's own PATH proves nothing.
+        new_shell_path=(
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + "
+            "[Environment]::GetEnvironmentVariable('Path','User')",
+        ),
+        new_shell_pending=(
+            "the installer does not add its folder to the user's PATH until "
+            "https://github.com/mmogr/gglib/pull/2024 merges; empty "
+            "`new_shell_pending` then, and this check fails the job when it fails"
+        ),
+    ),
+    "macos": Platform(
+        target="aarch64-apple-darwin",
+        how=(
+            "the .dmg's gglib.app, copied to /Applications as a drag does, and the "
+            "gglib inside the app"
+        ),
+        cli_archive="gglib-{version}-{target}.tar.gz",
+        cli_program="gglib",
+        install=(
+            (
+                "hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", "{work}/dmg",
+                "{artifacts}/gglib-gui-{version}-{target}.dmg",
+            ),
+            ("ditto", "{work}/dmg/gglib.app", "/Applications/gglib.app"),
+            ("hdiutil", "detach", "{work}/dmg"),
+        ),
+        installed="/Applications/gglib.app",
+        installed_cli="/Applications/gglib.app/Contents/MacOS/gglib",
+        uninstall=(("rm", "-rf", "/Applications/gglib.app"),),
+        processes=("ps", "-A", "-o", "comm="),
+        process_listing="ps",
+        kill=("pkill", "-KILL", "-x", "{name}"),
+        new_shell_path=(),
+        new_shell_pending="",
+    ),
+    "linux": Platform(
+        target="x86_64-unknown-linux-gnu",
+        how=(
+            "the CLI's .deb and the app's .deb together with apt, which also proves "
+            "the app's Depends names the CLI's package; the AppImage needs FUSE and a "
+            "display, and build-gui already checks it carries the CLI"
+        ),
+        cli_archive="gglib-{version}-{target}.tar.gz",
+        cli_program="gglib",
+        install=(
+            ("sudo", "apt-get", "update"),
+            (
+                "sudo", "apt-get", "install", "-y", "--no-install-recommends",
+                "{artifacts}/gglib-{version}-{target}.deb",
+                "{artifacts}/gglib-gui-{version}-{target}.deb",
+            ),
+        ),
+        installed="/usr/bin/gglib",
+        installed_cli="/usr/bin/gglib",
+        uninstall=(("sudo", "apt-get", "remove", "-y", "gglib-gui", "gglib"),),
+        processes=("ps", "-A", "-o", "comm="),
+        process_listing="ps",
+        kill=("pkill", "-KILL", "-x", "{name}"),
+        new_shell_path=(),
+        new_shell_pending="",
+    ),
+}
 
 
 # --- the pure parts, which the self-test checks ------------------------------
@@ -186,17 +273,45 @@ def platform_templates(platform: Platform) -> list[str]:
 
 def check_table(platforms: Mapping[str, Platform], targets: list[str]) -> list[str]:
     """What is wrong with `platforms`, given the targets release.yml builds."""
-    raise NotImplementedError("check_table")
+    problems: list[str] = []
+    for name in ("windows", "macos", "linux"):
+        if name not in platforms:
+            problems.append(f"no entry for {name}")
+    by_target = {p.target: name for name, p in platforms.items()}
+    for target in targets:
+        if target not in by_target:
+            problems.append(f"release.yml builds {target}, which no entry is for")
+    for name, platform in platforms.items():
+        if platform.target not in targets:
+            problems.append(f"{name}: release.yml builds no {platform.target}")
+        for field in ("target", "how", "cli_archive", "cli_program", "installed", "installed_cli", "process_listing"):
+            if not getattr(platform, field):
+                problems.append(f"{name}: {field} is empty")
+        for field in ("install", "processes", "kill"):
+            if not getattr(platform, field):
+                problems.append(f"{name}: {field} is empty")
+        if platform.process_listing not in LISTINGS:
+            problems.append(f"{name}: no reader for a {platform.process_listing!r} process list")
+        if "{name}" not in " ".join(platform.kill):
+            problems.append(f"{name}: kill does not name {{name}}")
+        if platform.new_shell_pending and not platform.new_shell_path:
+            problems.append(f"{name}: a new-shell check is pending with no command to run it")
+        for template in platform_templates(platform):
+            # `kill` alone also takes the program's name.
+            unknown = template_names(template) - set(VALUES) - ({"name"} if template in platform.kill else set())
+            if unknown:
+                problems.append(f"{name}: {template!r} names {', '.join(sorted(unknown))}, which the run does not give")
+    return problems
 
 
 def tasklist_names(text: str) -> list[str]:
     """Image names from `tasklist /FO CSV /NH`."""
-    raise NotImplementedError("tasklist_names")
+    return [row[0] for row in csv.reader(io.StringIO(text)) if row and row[0].strip()]
 
 
 def ps_names(text: str) -> list[str]:
     """Program names from `ps -A -o comm=`, which macOS prints as paths."""
-    raise NotImplementedError("ps_names")
+    return [line.strip().rsplit("/", 1)[-1] for line in text.splitlines() if line.strip()]
 
 
 LISTINGS: dict[str, Callable[[str], list[str]]] = {"tasklist": tasklist_names, "ps": ps_names}
@@ -208,7 +323,14 @@ def leftovers(names: list[str], watched: tuple[str, ...] = WATCHED) -> list[str]
     `gglib.exe` and `GGLIB.EXE` are gglib; `gglib-test` and a command line
     that merely mentions gglib are not.
     """
-    raise NotImplementedError("leftovers")
+    found = set()
+    for name in names:
+        stem = name.strip()
+        if stem.lower().endswith(".exe"):
+            stem = stem[:-4]
+        if stem.lower() in watched:
+            found.add(stem.lower())
+    return sorted(found)
 
 
 def check_version(said: str, version: str, sha: str) -> str | None:
@@ -216,29 +338,65 @@ def check_version(said: str, version: str, sha: str) -> str | None:
 
     It must read `gglib <version> (<the commit's first 12 characters>)`.
     """
-    raise NotImplementedError("check_version")
+    lines = [line.strip() for line in said.splitlines() if line.strip()]
+    if not lines:
+        return "it printed nothing"
+    want = f"gglib {version} ({sha[:12]})"
+    if lines[0] == want:
+        return None
+    match = re.fullmatch(r"gglib (\S+)(?: \((\S+)\))?", lines[0])
+    if not match:
+        return f"it printed {lines[0]!r}, not {want!r}"
+    if match.group(1) != version:
+        return f"it names version {match.group(1)}, not {version}"
+    if match.group(2) is None:
+        return f"it names no commit; the release is {sha[:12]}"
+    return f"it names commit {match.group(2)}, not {sha[:12]}"
 
 
 def check_reply(status: int, body: str) -> tuple[str | None, str]:
     """Why a chat completion is not a reply, or None; and the reply's text."""
-    raise NotImplementedError("check_reply")
+    if status != 200:
+        return f"the endpoint answered HTTP {status}: {body[:400]}", ""
+    try:
+        answer = json.loads(body)
+    except json.JSONDecodeError:
+        return f"the body is not JSON: {body[:400]!r}", ""
+    if not isinstance(answer, dict):
+        return f"the body is not a JSON object: {body[:400]}", ""
+    if "error" in answer:
+        return f"the body is an error: {json.dumps(answer['error'])[:400]}", ""
+    try:
+        content = answer["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError):
+        return f"the body has no choices[0].message.content: {body[:400]}", ""
+    if not isinstance(content, str) or not content.strip():
+        return f"the reply is empty: {body[:400]}", ""
+    return None, content
 
 
 def read_settings(said: str) -> dict[str, str]:
     """`key = value` lines, as `gglib config paths` prints them."""
-    raise NotImplementedError("read_settings")
+    found: dict[str, str] = {}
+    for line in said.splitlines():
+        key, sep, value = line.partition(" = ")
+        if sep and key.strip() and " " not in key.strip():
+            found[key.strip()] = value.strip()
+    return found
 
 
 def model_id(said: str) -> str | None:
     """The id `gglib model add` says it gave the model, from its `ID:` line."""
-    raise NotImplementedError("model_id")
+    match = re.search(r"^\s*ID:\s*(\d+)\s*$", said, re.MULTILINE)
+    return match.group(1) if match else None
 
 
 def leftover_locks(paths: list[str]) -> list[str]:
     """The files among `paths`, relative to the data folder, that a running
     daemon or engine holds and a stopped one removes: the daemon's lock and
     the record beside it, and the engines' pid files."""
-    raise NotImplementedError("leftover_locks")
+    held = re.compile(r"^(?:daemon\.lock|daemon\.json(?:\.part)?|pids/[^/]+\.pid(?:\.tmp)?)$")
+    return sorted(path for path in (p.replace("\\", "/") for p in paths) if held.match(path))
 
 
 def release_targets(workflow: str) -> list[str]:
@@ -275,7 +433,9 @@ def slug(text: str) -> str:
 
 
 def annotate(kind: str, title: str, message: str) -> None:
+    """A GitHub annotation; a property's value escapes `:` and `,` too."""
     flat = message.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+    title = title.replace("%", "%25").replace(":", "%3A").replace(",", "%2C")
     print(f"::{kind} title={title}::{flat}", flush=True)
 
 
@@ -313,6 +473,7 @@ class Smoke:
         self.daemon_may_run = False
         self.stopped = False
         self.model = ""
+        self.new_shell_found = False
         self.results: list[tuple[str, str, str]] = []
 
     # -- helpers --
@@ -439,6 +600,9 @@ class Smoke:
         return said.strip()
 
     def new_shell_finds(self, want: bool) -> str | None:
+        if not want and not self.new_shell_found:
+            # Nothing to take away: the first check found it on no PATH.
+            return SKIPPED + "no new shell found gglib before the uninstall either"
         _, said, _ = self.run("the PATH a new shell is given", self.command(self.platform.new_shell_path), LIMITS["short"])
         folders = [os.path.expandvars(entry.strip()) for entry in said.strip().split(os.pathsep) if entry.strip()]
         name = os.path.basename(self.cli())
@@ -447,6 +611,8 @@ class Smoke:
             raise Failed(f"no folder on a new shell's PATH holds {name}; it is: {os.pathsep.join(folders)}")
         if not want and found:
             raise Failed(f"a new shell still finds {name} in {', '.join(found)}")
+        if want:
+            self.new_shell_found = True
         return ", ".join(found) or None
 
     def clean_data(self) -> str | None:
@@ -606,11 +772,11 @@ class Smoke:
                         self.results.append((step.name, "FAILED", str(error)))
                         annotate("error", f"Smoke test: {step.name}", str(error))
                     continue
-                if step.pending:
+                if said.startswith(SKIPPED):
+                    self.results.append((step.name, "skipped", said.removeprefix(SKIPPED)))
+                elif step.pending:
                     self.results.append((step.name, "passed, though expected to fail", said))
                     annotate("notice", f"Smoke test: {step.name} now passes", f"Switch it on: {step.pending}")
-                elif said.startswith(SKIPPED):
-                    self.results.append((step.name, "skipped", said.removeprefix(SKIPPED)))
                 else:
                     self.results.append((step.name, "passed", said))
         finally:
@@ -620,7 +786,10 @@ class Smoke:
 
     def clean_up(self) -> None:
         """After the checks have spoken: stop what a failed run left, so the
-        job ends and its logs upload."""
+        job ends and its logs upload. Nothing that was running before the
+        smoke started, nor anything at all when nothing was installed."""
+        if not self.installed:
+            return
         if self.daemon_may_run and not self.stopped:
             try:
                 self.run("clean-up: gglib daemon stop", [self.cli(), "daemon", "stop"], 120, check=False)
@@ -630,7 +799,7 @@ class Smoke:
             left = leftovers(self.processes())
         except Failed:
             left = list(WATCHED)
-        for name in left:
+        for name in (name for name in left if name not in self.before):
             try:
                 self.run(f"clean-up: kill {name}", self.command(tuple(p.replace("{name}", name) for p in self.platform.kill)), 60, check=False)
             except Failed:
@@ -638,9 +807,10 @@ class Smoke:
 
     def report(self) -> None:
         width = max(len(name) for name, _, _ in self.results)
+        lines = [f"{name:<{width}}  {verdict}{': ' + said if said else ''}" for name, verdict, said in self.results]
         print("\n=== Summary")
-        for name, verdict, said in self.results:
-            print(f"{name:<{width}}  {verdict}{': ' + said if said else ''}")
+        print("\n".join(lines))
+        self.save("00-summary.txt", "\n".join(lines) + "\n")
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
             with open(summary, "a", encoding="utf-8") as handle:
