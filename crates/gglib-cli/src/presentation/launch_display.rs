@@ -239,6 +239,7 @@ mod tests {
             // 40,005 tokens before snapping to 32K.
             &FitInputs {
                 budget_bytes: Some(48 << 30),
+                system_ram_bytes: None,
                 weights_bytes: Some(2_500_000_000),
                 kv: Some(KvBytes::uniform(1_097_000)),
                 trained_ctx: Some(131_072),

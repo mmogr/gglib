@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 mod deps;
+mod fit_memory;
 pub(crate) mod gpu;
 mod host;
 pub(crate) mod vulkan_devices;
@@ -10,6 +11,8 @@ use gglib_core::utils::system::{
     SystemMemoryInfo, dependency_report, needs_on, parse_os_release,
 };
 
+pub use fit_memory::FitMemory;
+pub(crate) use fit_memory::fit_memory_of;
 use gpu::{detect_gpu_info, get_system_memory_info};
 pub use host::{free_disk_bytes, host_facts, this_machine_name};
 
@@ -241,39 +244,47 @@ impl SystemProbePort for DefaultSystemProbe {
     }
 }
 
-/// Total device memory a model may be sized against, cached.
+/// What a context fit on this machine spends against, cached: the one
+/// answer every launch, every plan of one (`gglib model explain`, the
+/// inspector) and the endpoint's advertisement read.
 ///
-/// The GPU's nominal capacity — unified memory on Apple and on an integrated
-/// GPU, VRAM on a discrete card — **not** a live free reading. Free memory moves
-/// with whatever else the user has open, and a budget that moves produces a
-/// fitted context that moves, which recycles the resident and blows its prefix
-/// cache. The caller reserves a fixed allowance for the second slot from this
-/// figure and must *not* net out the models actually loaded — that set changes
-/// while a model is resident, which is exactly the drift this avoids.
+/// A GPU's nominal capacity (unified memory on Apple and on an integrated
+/// GPU, VRAM on a discrete card), never a live free reading. Free memory
+/// moves with whatever else the user has open, and a budget that moves
+/// produces a fitted context that moves, which recycles the resident and
+/// blows its prefix cache. The caller reserves a fixed allowance for the
+/// second slot from this figure and must *not* net out the models actually
+/// loaded: that set changes while a model is resident, which is exactly the
+/// drift this avoids.
 ///
-/// `None` when gglib cannot read the GPU's memory: a CPU-only host, a software
-/// rasteriser, or a device whose heaps cannot be shown to be its own.
-/// Deliberately a refusal rather than a fallback to system RAM: sizing a KV
-/// cache against 64 GiB of host memory on an 8 GiB card is exactly the
-/// "working but unusably slow" outcome the recommendation module exists to
-/// prevent, and it would look stable while measuring the wrong device.
+/// No budget ([`FitMemory::Unreadable`]) when gglib cannot read a GPU's
+/// memory: a software rasteriser, or a device whose heaps cannot be shown to
+/// be its own. Deliberately a refusal rather than a fallback to system RAM:
+/// sizing a KV cache against 64 GiB of host memory on an 8 GiB card is
+/// exactly the "working but unusably slow" outcome the recommendation module
+/// exists to prevent, and it would look stable while measuring the wrong
+/// device.
 ///
-/// Cached in a `OnceLock` because the probe behind it builds a whole `System`
-/// snapshot and forks `nvidia-smi` and `vulkaninfo`; this is read from the
-/// admission path. Warm it at startup — see `warm_device_memory`.
+/// Cached in a `OnceLock` because the probe behind it builds a whole
+/// `System` snapshot and forks `nvidia-smi` and `vulkaninfo`; this is read
+/// from the admission path. Warm it at startup — see `warm_device_memory`.
 #[must_use]
-pub fn total_device_memory_bytes() -> Option<u64> {
-    static TOTAL: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
-    *TOTAL.get_or_init(|| device_budget_of(&gpu::get_system_memory_info()))
+pub fn fit_memory() -> FitMemory {
+    static MEMORY: std::sync::OnceLock<FitMemory> = std::sync::OnceLock::new();
+    *MEMORY.get_or_init(|| {
+        let gpu = detect_gpu_info();
+        fit_memory_of(
+            fit_memory::a_gpu_is_present(&gpu),
+            &gpu::memory_info_for(&gpu),
+        )
+    })
 }
 
-/// The decision, over a plain struct.
-///
-/// Lifted out of the probe for the same reason `resolve_cache_ram_inner` and
-/// `resolve_kv_cache_types_inner` are: the interesting part is one line of
-/// policy, and it should be assertable without the hardware it describes.
-const fn device_budget_of(mem: &SystemMemoryInfo) -> Option<u64> {
-    mem.gpu_memory_bytes
+/// The GPU's memory, when [`fit_memory`] read one: `None` on a machine with
+/// no GPU and on one whose GPU could not be read.
+#[must_use]
+pub fn total_device_memory_bytes() -> Option<u64> {
+    fit_memory().device_bytes()
 }
 
 /// Populate the [`total_device_memory_bytes`] cache off the async runtime.
@@ -281,42 +292,12 @@ const fn device_budget_of(mem: &SystemMemoryInfo) -> Option<u64> {
 /// The first call forks `nvidia-smi` and enumerates every process; doing that
 /// lazily from `admit` would block a tokio worker on the first request.
 pub async fn warm_device_memory() {
-    let _ = tokio::task::spawn_blocking(total_device_memory_bytes).await;
+    let _ = tokio::task::spawn_blocking(fit_memory).await;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const GIB: u64 = 1024 * 1024 * 1024;
-
-    /// A machine whose VRAM gglib cannot read must get no budget at all —
-    /// never host RAM. Sizing a KV cache against 64 GiB of system memory on an
-    /// 8 GiB card is the "working but unusably slow" outcome the recommendation
-    /// module exists to prevent, and it would look perfectly stable while
-    /// measuring the wrong device.
-    #[test]
-    fn a_machine_with_unreadable_vram_gets_no_budget_rather_than_host_ram() {
-        let vulkan_box = SystemMemoryInfo {
-            total_ram_bytes: 64 * GIB,
-            gpu_memory_bytes: None,
-            is_unified_memory: false,
-            has_nvidia_gpu: false,
-        };
-        assert_eq!(device_budget_of(&vulkan_box), None);
-    }
-
-    /// A readable device reports what it reported.
-    #[test]
-    fn a_readable_device_reports_its_own_memory() {
-        let card = SystemMemoryInfo {
-            total_ram_bytes: 64 * GIB,
-            gpu_memory_bytes: Some(24 * GIB),
-            is_unified_memory: false,
-            has_nvidia_gpu: true,
-        };
-        assert_eq!(device_budget_of(&card), Some(24 * GIB));
-    }
 
     #[test]
     fn test_default_system_probe_creation() {

@@ -28,6 +28,12 @@ fitted: number | null,
  */
 budgetBytes: number | null, 
 /**
+ * The machine's system RAM, when it has no GPU and the budget above is
+ * a share of that RAM; `None` when the budget is a GPU's memory or none
+ * was read. A hub older than the field leaves it out.
+ */
+systemRamBytes: number | null, 
+/**
  * The weights, summed across shards, plus the projector when linked.
  */
 weightsBytes: number | null, 

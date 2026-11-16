@@ -16,6 +16,7 @@ const GIB: u64 = 1024 * 1024 * 1024;
 fn known() -> FitInputs {
     FitInputs {
         budget_bytes: Some(48 * GIB),
+        system_ram_bytes: None,
         weights_bytes: Some(2_500_000_000),
         kv: Some(KvBytes::uniform(1_097_000)),
         trained_ctx: Some(131_072),
@@ -66,6 +67,47 @@ fn a_served_context_above_the_fit_says_what_fits() {
         f.note.as_deref(),
         Some("does not fit (69.28 GiB of 43.20 GiB usable)")
     );
+}
+
+/// [`known`] on a machine with no GPU and 64 GiB of RAM, of which the
+/// budget is a share.
+fn on_ram() -> FitInputs {
+    FitInputs {
+        system_ram_bytes: Some(64 * GIB),
+        ..known()
+    }
+}
+
+/// With no GPU, each sentence names the memory the context was sized
+/// against, the machine's RAM, and that there is no GPU, where a GPU's
+/// sentence says "this machine".
+#[test]
+fn with_no_gpu_each_sentence_says_it_is_sized_to_ram() {
+    assert_eq!(
+        fit(32_768, Some(32_768), &on_ram()).sentence,
+        "Fits this machine's 64.0 GiB of RAM (no GPU) with 32K context, of 128K trained."
+    );
+    assert_eq!(
+        fit(65_536, Some(32_768), &on_ram()).sentence,
+        "Serves at 64K context, of 128K trained; 32K fits this machine's 64.0 GiB of RAM (no GPU)."
+    );
+    let refused = FitInputs {
+        unsnapped: None,
+        ..on_ram()
+    };
+    assert_eq!(
+        fit(4096, None, &refused).sentence,
+        "Serves at 4K context, of 128K trained; gglib could not fit one to this machine's 64.0 GiB of RAM (no GPU)."
+    );
+}
+
+/// With no GPU the budget row says it is RAM's, not a device's.
+#[test]
+fn with_no_gpu_the_budget_row_is_ram() {
+    let f = fit(32_768, Some(32_768), &on_ram());
+    let labels: Vec<&str> = f.figures.iter().map(|row| row.label.as_str()).collect();
+    assert!(labels.contains(&"RAM budget"), "{labels:?}");
+    assert!(!labels.contains(&"device budget"), "{labels:?}");
 }
 
 #[test]

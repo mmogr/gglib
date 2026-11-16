@@ -30,6 +30,7 @@ impl ContextFit {
             source,
             fitted,
             budget_bytes: inputs.budget_bytes,
+            system_ram_bytes: inputs.system_ram_bytes,
             weights_bytes: inputs.weights_bytes,
             kv_bytes_per_token: inputs.kv.map(|kv| kv.per_token),
             kv_bytes: inputs.kv.map(|kv| kv.at(serves_at)),

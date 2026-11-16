@@ -71,6 +71,7 @@ export function chatPlan(overrides: Partial<LaunchPlan> = {}): LaunchPlan {
       source: 'fitted_to_hardware',
       fitted: 32768,
       budgetBytes: 48 * 1024 ** 3,
+      systemRamBytes: null,
       weightsBytes: 2_500_000_000,
       kvBytesPerToken: 1_097_000,
       kvBytes: 35_946_496_000,

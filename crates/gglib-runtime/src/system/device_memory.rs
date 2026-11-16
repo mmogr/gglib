@@ -169,7 +169,7 @@ const fn read_amd_vram_bytes() -> Option<u64> {
     clippy::cast_sign_loss,
     clippy::cast_possible_truncation
 )]
-pub(super) fn unified_share(total_ram_bytes: u64) -> u64 {
+pub(in crate::system) fn unified_share(total_ram_bytes: u64) -> u64 {
     (total_ram_bytes as f64 * super::super::UNIFIED_MEMORY_GPU_SHARE) as u64
 }
 
