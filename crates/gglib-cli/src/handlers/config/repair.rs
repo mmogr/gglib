@@ -175,6 +175,9 @@ pub(crate) async fn offer_runtime(
         return Ok(Offered::Declined);
     }
     println!("Downloading it from Microsoft...");
+    if let Some(waiting) = fix.waiting() {
+        println!("{waiting}");
+    }
     let report = install_visual_cpp_runtime(kind).await;
     if report.works {
         println!("{}", report.says);

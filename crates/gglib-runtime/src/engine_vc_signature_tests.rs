@@ -245,57 +245,79 @@ fn a_malformed_name_is_refused() {
     }
 }
 
-fn product(name: &str, version: (u32, u32)) -> Product {
+/// The current installer's version information and signature type, as
+/// read from the download on Windows 11 and from the file itself.
+fn installer() -> Product {
     Product {
-        name: Some(name.to_owned()),
-        version,
+        signature_type: Some("Authenticode".to_owned()),
+        name: Some("Microsoft Visual C++ v14 Redistributable (x64) - 14.52.37029".to_owned()),
+        company: Some("Microsoft Corporation".to_owned()),
+        original_filename: Some("VC_redist.x64.exe".to_owned()),
+        version: (14, 52),
     }
 }
 
-/// The installer as Microsoft names it, now and since Visual C++ 2022, at
-/// 14.30 or later, is the product.
+/// The installer as Microsoft names it now, and as it named it for Visual
+/// C++ 2022, at 14.30 or later, is the product.
 #[test]
 fn the_runtime_s_installer_is_the_product() {
     for accepted in [
-        product(
-            "Microsoft Visual C++ v14 Redistributable (x64) - 14.52.37029",
-            (14, 52),
-        ),
-        product(
-            "Microsoft Visual C++ 2015-2022 Redistributable (x64) - 14.44.35211",
-            (14, 44),
-        ),
-        product(
-            "Microsoft Visual C++ 2015-2022 Redistributable (x64)",
-            (14, 30),
-        ),
+        installer(),
+        Product {
+            name: Some(
+                "Microsoft Visual C++ 2015-2022 Redistributable (x64) - 14.44.35211".to_owned(),
+            ),
+            version: (14, 44),
+            ..installer()
+        },
+        Product {
+            original_filename: Some("vc_redist.x64.exe".to_owned()),
+            version: (14, 30),
+            ..installer()
+        },
     ] {
         assert_eq!(visual_cpp_installer(&accepted), Ok(()), "{accepted:?}");
     }
 }
 
-/// Another Microsoft program, the x86 installer, an older one and a name
-/// with something after it are not.
+/// Another Microsoft program (PowerShell, signed through a catalog), the
+/// x86 installer, an older one, another company's, another file's, and
+/// nothing at all are not.
 #[test]
 fn another_program_or_an_older_installer_is_not_the_product() {
+    let powershell = Product {
+        signature_type: Some("Catalog".to_owned()),
+        name: Some("Microsoft® Windows® Operating System".to_owned()),
+        company: Some("Microsoft Corporation".to_owned()),
+        original_filename: Some("PowerShell.EXE.MUI".to_owned()),
+        version: (10, 0),
+    };
     for refused in [
-        product("Microsoft® Windows® Operating System", (10, 0)),
-        product(
-            "Microsoft Visual C++ v14 Redistributable (x86) - 14.52.37029",
-            (14, 52),
-        ),
-        product(
-            "Microsoft Visual C++ 2015-2019 Redistributable (x64) - 14.29.30139",
-            (14, 29),
-        ),
-        product(
-            "Microsoft Visual C++ 2015-2022 Redistributable (x64) - 14.29.30139",
-            (14, 29),
-        ),
-        product(
-            "Microsoft Visual C++ v14 Redistributable (x64) - 14.52 and more",
-            (14, 52),
-        ),
+        powershell,
+        Product {
+            name: Some("Microsoft Visual C++ v14 Redistributable (x86) - 14.52.37029".to_owned()),
+            original_filename: Some("VC_redist.x86.exe".to_owned()),
+            ..installer()
+        },
+        Product {
+            name: Some(
+                "Microsoft Visual C++ 2015-2019 Redistributable (x64) - 14.29.30139".to_owned(),
+            ),
+            version: (14, 29),
+            ..installer()
+        },
+        Product {
+            company: Some("Contoso".to_owned()),
+            ..installer()
+        },
+        Product {
+            original_filename: Some("setup.exe".to_owned()),
+            ..installer()
+        },
+        Product {
+            signature_type: Some("Catalog".to_owned()),
+            ..installer()
+        },
         Product::default(),
     ] {
         assert!(visual_cpp_installer(&refused).is_err(), "{refused:?}");
@@ -308,17 +330,21 @@ fn another_program_or_an_older_installer_is_not_the_product() {
 fn the_answer_is_read_between_its_markers() {
     use base64::Engine as _;
     let encode = |text: &str| base64::engine::general_purpose::STANDARD.encode(text);
+    let product = installer();
     let printed = format!(
         "WARNING: something PowerShell wanted to say\r\nGGLIB-BEGIN\r\nstatus={}\r\nsigner={}\r\n\
-         built={}\r\nroot={}\r\nrootIssuer={}\r\nrootThumbprint={}\r\nproduct={}\r\nmajor={}\r\n\
-         minor={}\r\nGGLIB-END\r\n",
+         built={}\r\nroot={}\r\nrootIssuer={}\r\nrootThumbprint={}\r\nsignatureType={}\r\n\
+         product={}\r\ncompany={}\r\noriginal={}\r\nmajor={}\r\nminor={}\r\nGGLIB-END\r\n",
         encode("Valid"),
         encode(SIGNER),
         encode("True"),
         encode(ROOT),
         encode(ROOT),
         encode(MICROSOFT_ROOTS[0].0),
-        encode("Microsoft Visual C++ v14 Redistributable (x64) - 14.52.37029"),
+        encode("Authenticode"),
+        encode(product.name.as_deref().unwrap()),
+        encode("Microsoft Corporation"),
+        encode("VC_redist.x64.exe"),
         encode("14"),
         encode("52"),
     );
@@ -326,13 +352,7 @@ fn the_answer_is_read_between_its_markers() {
     let (read_signature, read_product) = parse_answer(&printed).unwrap();
 
     assert_eq!(read_signature, signature("Valid", Some(SIGNER)));
-    assert_eq!(
-        read_product,
-        product(
-            "Microsoft Visual C++ v14 Redistributable (x64) - 14.52.37029",
-            (14, 52)
-        )
-    );
+    assert_eq!(read_product, product);
     let unsigned = "GGLIB-BEGIN\nstatus=Tm90U2lnbmVk\nsigner=\nbuilt=RmFsc2U=\nroot=\n\
                     rootIssuer=\nrootThumbprint=\nproduct=\nmajor=MA==\nminor=MA==\nGGLIB-END\n";
     let (read_signature, _) = parse_answer(unsigned).unwrap();
@@ -342,10 +362,11 @@ fn the_answer_is_read_between_its_markers() {
 }
 
 /// The real checks, on Windows. A program Microsoft signed (PowerShell
-/// itself) passes the signature check, also copied into a folder whose name
-/// holds quotes, `$(`, a backtick and `;`, which PowerShell would read as
-/// code were the path in its script; it is refused by the product check. A
-/// file nobody signed there is refused by what Windows said of it, not by a
+/// itself, through a catalog, under the 2010 root) passes the signature
+/// check, also copied into a folder whose name holds quotes, `$(`, a
+/// backtick and `;`, which PowerShell would read as code were the path in
+/// its script; the product check refuses it, as not the installer. A file
+/// nobody signed there is refused by what Windows said of it, not by a
 /// script that broke.
 #[cfg(windows)]
 #[test]

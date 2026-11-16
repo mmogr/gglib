@@ -239,8 +239,9 @@ describe("setup's engines", () => {
     const reason = (server: string) => `${server} cannot start: a library it needs is missing.`;
     const fix = {
       fix: 'install_visual_cpp_runtime',
-      offer: 'gglib can install the Microsoft Visual C++ Redistributable (x64) from Microsoft. Windows will ask for permission.',
+      offer: 'gglib can install the Microsoft Visual C++ Redistributable (x64) from Microsoft. Windows will ask for permission; if no question appears, look for a flashing shield on the taskbar.',
       action: 'Repair',
+      waiting: "Waiting for Windows' permission to install the Microsoft Visual C++ Redistributable (x64); if no question appears, look for a flashing shield on the taskbar.",
     } as const;
     const says = 'Installed the Microsoft Visual C++ Redistributable (x64). llama-server works now.';
     answer('llama', engine('llama', true, { broken: reason('llama-server'), fix }));

@@ -221,9 +221,15 @@ fn an_engine_without_the_visual_cpp_runtime_offers_it() {
     assert_eq!(
         json["fix"]["offer"],
         "gglib can install the Microsoft Visual C++ Redistributable (x64) from Microsoft. \
-         Windows will ask for permission."
+         Windows will ask for permission; if no question appears, look for a flashing shield \
+         on the taskbar."
     );
     assert_eq!(json["fix"]["action"], "Repair");
+    assert_eq!(
+        json["fix"]["waiting"],
+        "Waiting for Windows' permission to install the Microsoft Visual C++ Redistributable \
+         (x64); if no question appears, look for a flashing shield on the taskbar."
+    );
 }
 
 /// The repair route makes the runtime's install and nothing else: a

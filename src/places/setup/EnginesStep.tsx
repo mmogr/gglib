@@ -62,7 +62,7 @@ const Repair: FC<{ view: EngineView; onRepair: () => void }> = ({ view, onRepair
     <>
       {fix && view.installing === null && (
         <p className="m-0 flex flex-wrap items-center gap-sm">
-          <span>{view.repairing ? 'Repairing…' : fix.offer}</span>
+          <span>{view.repairing ? (fix.waiting ?? 'Repairing…') : fix.offer}</span>
           {fix.action && (
             <Button variant="secondary" size="sm" disabled={view.repairing} onClick={onRepair}>
               {fix.action}

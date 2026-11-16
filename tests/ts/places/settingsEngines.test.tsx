@@ -135,8 +135,9 @@ const KINDS = Object.keys(ENGINES) as RuntimeKind[];
 /** The fix a Windows engine without the Visual C++ runtime carries, as the daemon words it. */
 const RUNTIME_FIX: FixOffer = {
   fix: 'install_visual_cpp_runtime',
-  offer: 'gglib can install the Microsoft Visual C++ Redistributable (x64) from Microsoft. Windows will ask for permission.',
+  offer: 'gglib can install the Microsoft Visual C++ Redistributable (x64) from Microsoft. Windows will ask for permission; if no question appears, look for a flashing shield on the taskbar.',
   action: 'Repair',
+  waiting: "Waiting for Windows' permission to install the Microsoft Visual C++ Redistributable (x64); if no question appears, look for a flashing shield on the taskbar.",
 };
 const RUNTIME_SAYS = 'Installed the Microsoft Visual C++ Redistributable (x64).';
 const CPU_WARNING = 'No GPU runtime gglib can use was found, so the CPU build will be slow.';
@@ -463,11 +464,26 @@ describe('the engine rows', () => {
     expect(sd.queryByRole('button', { name: 'Repair' })).not.toBeInTheDocument();
   });
 
+  it("says where Windows' question may be while the repair waits for it", async () => {
+    fake.statuses.llama = [
+      status('llama', 'atPin', { broken: 'llama-server cannot start: a library it needs is missing.', fix: RUNTIME_FIX }),
+    ];
+    fake.repair = () => new Promise<RepairReport>(() => {});
+    renderApp('/settings/engines');
+    const r = await row('llama.cpp');
+
+    await userEvent.click(await r.findByRole('button', { name: 'Repair' }));
+
+    expect(await r.findByText(RUNTIME_FIX.waiting ?? '')).toBeInTheDocument();
+    expect(r.queryByText(RUNTIME_FIX.offer)).not.toBeInTheDocument();
+    expect(r.getByRole('button', { name: 'Repair' })).toBeDisabled();
+  });
+
   it('repairs an engine whose fix is a reinstall with its install', async () => {
     fake.statuses.llama = [
       status('llama', 'atPin', {
         broken: 'llama-server failed when asked `--version`: it exited with status 1',
-        fix: { fix: 'reinstall', offer: 'gglib can download llama.cpp again and reinstall it.', action: 'Repair' },
+        fix: { fix: 'reinstall', offer: 'gglib can download llama.cpp again and reinstall it.', action: 'Repair', waiting: null },
       }),
     ];
     renderApp('/settings/engines');
@@ -486,7 +502,7 @@ describe('the engine rows', () => {
     fake.statuses.llama = [
       status('llama', 'atPin', {
         broken: 'llama-server cannot start: a library it needs is missing.',
-        fix: { fix: 'repair_visual_cpp_runtime', offer: damaged, action: null },
+        fix: { fix: 'repair_visual_cpp_runtime', offer: damaged, action: null, waiting: null },
       }),
     ];
     renderApp('/settings/engines');

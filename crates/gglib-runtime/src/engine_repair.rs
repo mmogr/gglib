@@ -45,8 +45,9 @@ impl Fix {
     pub fn offer(self, kind: RuntimeKind) -> String {
         match self {
             Self::InstallVisualCppRuntime => format!(
-                "gglib can install the {} from Microsoft. Windows will ask for permission.",
-                runtime::RUNTIME
+                "gglib can install the {} from Microsoft. Windows will ask for permission; {}",
+                runtime::RUNTIME,
+                runtime::LOOK_FOR_IT
             ),
             Self::RepairVisualCppRuntime => format!(
                 "The {} is installed but damaged: its files are missing. {}",
@@ -57,6 +58,20 @@ impl Fix {
                 "gglib can download {} again and reinstall it.",
                 kind.label()
             ),
+        }
+    }
+
+    /// What is said while it is being made, when there is something to say
+    /// beyond progress: where Windows' question for permission may be.
+    #[must_use]
+    pub fn waiting(self) -> Option<String> {
+        match self {
+            Self::InstallVisualCppRuntime => Some(format!(
+                "Waiting for Windows' permission to install the {}; {}",
+                runtime::RUNTIME,
+                runtime::LOOK_FOR_IT
+            )),
+            Self::RepairVisualCppRuntime | Self::Reinstall => None,
         }
     }
 
@@ -85,6 +100,9 @@ pub struct FixOffer {
     /// [`Fix::action`]: the button's word; null when there is no button,
     /// because gglib cannot make the fix.
     pub action: Option<String>,
+    /// [`Fix::waiting`]: shown while the fix is being made; null when
+    /// progress says enough.
+    pub waiting: Option<String>,
 }
 
 impl FixOffer {
@@ -95,6 +113,7 @@ impl FixOffer {
             fix,
             offer: fix.offer(kind),
             action: fix.action().map(str::to_owned),
+            waiting: fix.waiting(),
         }
     }
 }

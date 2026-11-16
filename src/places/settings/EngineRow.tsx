@@ -168,7 +168,7 @@ export const EngineRow: FC<{ kind: RuntimeKind }> = ({ kind }) => {
       {engine.statusError && <Line tone="danger">{engine.statusError}</Line>}
       {status?.broken && <Line tone="danger">{status.broken}</Line>}
       {fix && !engine.repairing && <Line>{fix.offer}</Line>}
-      {engine.repairing && <Line>Repairing {product}…</Line>}
+      {engine.repairing && <Line>{fix?.waiting ?? `Repairing ${product}…`}</Line>}
       {engine.repairError && <Line tone="danger">{engine.repairError}</Line>}
       {engine.repairResult && <Line>{engine.repairResult}</Line>}
       {fromTerminal && <Line>The update is a source build, run from a terminal: {status?.installCommand}.</Line>}

@@ -12,10 +12,11 @@
 //!   Microsoft's PKI repository). A file Microsoft's signing service signed
 //!   for a customer chains elsewhere and is refused, as is any root gglib
 //!   does not know.
-//! - **The product** ([`visual_cpp_installer`]): the version information
-//!   the signature covers names the x64 Visual C++ runtime, at 14.30 or
-//!   later, so an older or another Microsoft program is not run in its
-//!   place.
+//! - **The product** ([`visual_cpp_installer`]): the file carries its own
+//!   signature (not a Windows catalog's), and the version information the
+//!   signature covers names the x64 Visual C++ runtime's installer, from
+//!   Microsoft Corporation, made as `VC_redist.x64.exe`, at 14.30 or later,
+//!   so an older or another Microsoft program is not run in its place.
 //!
 //! Windows is asked through Windows PowerShell 5.1, which every Windows 10
 //! and 11 has: `Get-AuthenticodeSignature` (which asks `WinVerifyTrust`)
@@ -71,15 +72,20 @@ pub(crate) const MICROSOFT_ROOTS: [(&str, &str); 2] = [
     ),
 ];
 
-/// The names Microsoft has given the x64 runtime's installer
-/// (`ProductName`, before ` - <version>`) since Visual C++ 2022: "2015-2022"
-/// for 14.3x and 14.4x, and "v14" from 14.50 on (the current download, read
-/// from its version information: "Microsoft Visual C++ v14 Redistributable
-/// (x64) - 14.52.37029"). The "2015-2019" name is 14.2x, below [`FLOOR`].
-const PRODUCT_NAMES: [&str; 2] = [
-    "Microsoft Visual C++ v14 Redistributable (x64)",
-    "Microsoft Visual C++ 2015-2022 Redistributable (x64)",
-];
+/// How the installer's `ProductName` starts and what it holds. Microsoft
+/// has renamed it, with the version in the name: "Microsoft Visual C++
+/// 2015-2022 Redistributable (x64) - 14.4x.…" for Visual C++ 2022, and now
+/// "Microsoft Visual C++ v14 Redistributable (x64) - 14.52.37029" (read
+/// from the current download's version information, on Windows and from
+/// the file). So the years between are not compared: the start, and the
+/// architecture, are.
+const PRODUCT_START: &str = "Microsoft Visual C++ ";
+const PRODUCT_HOLDS: &str = "Redistributable (x64)";
+
+/// The installer's `CompanyName` and `OriginalFilename` (compared without
+/// regard to case), as the current download gives them.
+const COMPANY: &str = "Microsoft Corporation";
+const ORIGINAL_FILENAME: &str = "VC_redist.x64.exe";
 
 /// The oldest installer run: 14.30, Visual C++ 2022's first, the first
 /// whose runtime has every DLL the engines' builds load.
@@ -120,7 +126,10 @@ const SCRIPT: &str = "$ErrorActionPreference = 'Stop'; \
      'root=' + (e $(if ($root) { $root.Subject })); \
      'rootIssuer=' + (e $(if ($root) { $root.Issuer })); \
      'rootThumbprint=' + (e $(if ($root) { $root.Thumbprint })); \
+     'signatureType=' + (e $s.SignatureType.ToString()); \
      'product=' + (e $v.ProductName); \
+     'company=' + (e $v.CompanyName); \
+     'original=' + (e $v.OriginalFilename); \
      'major=' + (e $v.FileMajorPart); \
      'minor=' + (e $v.FileMinorPart); \
      'GGLIB-END'";
@@ -150,8 +159,15 @@ pub(crate) struct Root {
 /// What a file's version information says it is.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Product {
+    /// How it is signed: `Authenticode` for a signature the file carries,
+    /// `Catalog` for one in a Windows catalog, as Windows' own programs are.
+    pub signature_type: Option<String>,
     /// `ProductName`.
     pub name: Option<String>,
+    /// `CompanyName`.
+    pub company: Option<String>,
+    /// `OriginalFilename`.
+    pub original_filename: Option<String>,
     /// `FileMajorPart` and `FileMinorPart`.
     pub version: (u32, u32),
 }
@@ -216,22 +232,36 @@ pub(crate) fn microsoft_signed(signature: &Signature) -> Result<(), String> {
 }
 
 /// Whether `product` is the x64 Visual C++ runtime's installer at
-/// [`FLOOR`] or later, or why not.
+/// [`FLOOR`] or later, carrying its own signature, or why not.
 pub(crate) fn visual_cpp_installer(product: &Product) -> Result<(), String> {
     let name = product.name.as_deref().unwrap_or("");
-    // `<name>` alone, or `<name> - <version>`, exactly.
-    let named = PRODUCT_NAMES.iter().any(|known| {
-        name == *known
-            || name
-                .strip_prefix(known)
-                .and_then(|rest| rest.strip_prefix(" - "))
-                .is_some_and(|version| {
-                    !version.is_empty() && version.chars().all(|c| c.is_ascii_digit() || c == '.')
-                })
-    });
-    if !named {
+    if !(name.starts_with(PRODUCT_START) && name.contains(PRODUCT_HOLDS)) {
         return Err(format!(
             "it says it is \"{name}\", not the Microsoft Visual C++ Redistributable (x64)"
+        ));
+    }
+    if product.company.as_deref() != Some(COMPANY) {
+        return Err(format!(
+            "its company is \"{}\", not {COMPANY}",
+            product.company.as_deref().unwrap_or("")
+        ));
+    }
+    if !product
+        .original_filename
+        .as_deref()
+        .is_some_and(|original| original.eq_ignore_ascii_case(ORIGINAL_FILENAME))
+    {
+        return Err(format!(
+            "it was made as \"{}\", not {ORIGINAL_FILENAME}",
+            product.original_filename.as_deref().unwrap_or("")
+        ));
+    }
+    // The installer carries its own signature; a file vouched for only by a
+    // Windows catalog is one of Windows' own programs, not it.
+    if product.signature_type.as_deref() != Some("Authenticode") {
+        return Err(format!(
+            "it does not carry its own signature ({})",
+            product.signature_type.as_deref().unwrap_or("none")
         ));
     }
     if product.version < FLOOR {
@@ -418,7 +448,10 @@ pub(crate) fn parse_answer(printed: &str) -> Result<(Signature, Product), String
         root,
     };
     let product = Product {
+        signature_type: text("signatureType"),
         name: text("product"),
+        company: text("company"),
+        original_filename: text("original"),
         version: (number("major"), number("minor")),
     };
     Ok((signature, product))

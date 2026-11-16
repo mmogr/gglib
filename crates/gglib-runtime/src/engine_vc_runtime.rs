@@ -82,6 +82,11 @@ mod state;
 /// What the runtime is called wherever gglib names it.
 pub(super) const RUNTIME: &str = "Microsoft Visual C++ Redistributable (x64)";
 
+/// Where Windows' question for permission may be. The service, not the
+/// window clicked in, asks for it, so Windows may leave it on the taskbar.
+pub(super) const LOOK_FOR_IT: &str =
+    "if no question appears, look for a flashing shield on the taskbar.";
+
 /// How a damaged runtime is repaired: by Windows, which gglib cannot do.
 pub(super) const REPAIR_IT: &str = "Repair it in Windows: Settings › Apps › Installed apps › \
      Microsoft Visual C++ v14 Redistributable (x64) (2015-2022 on an older one) › Modify › \
@@ -504,9 +509,10 @@ fn words(
              now. Wait for that to finish, then try again."
         ),
         RuntimeInstall::TimedOut => format!(
-            "gglib stopped waiting for the {RUNTIME} installer after {} minutes; it may still \
-             finish. Check again in a while, or install it by hand from \
-             {VISUAL_CPP_RUNTIME_X64_URL}.",
+            "gglib stopped waiting for the {RUNTIME} installer after {} minutes. Windows' \
+             question for permission was probably waiting behind a flashing shield on the \
+             taskbar; the installer may still finish if it is answered. Check again in a \
+             while, or install it by hand from {VISUAL_CPP_RUNTIME_X64_URL}.",
             INSTALL_WAIT.as_secs() / 60
         ),
         RuntimeInstall::Failed => {

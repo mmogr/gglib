@@ -23,7 +23,9 @@ fn windows_dll_not_found() -> Failure {
 }
 
 /// A Windows engine that cannot find a DLL, with the runtime missing, is
-/// offered the runtime, in words that say Windows will ask, with Repair.
+/// offered the runtime, with Repair, in words that say Windows will ask
+/// and where its question may be, before and while it waits: the service
+/// asks, so Windows may leave the question on the taskbar.
 #[test]
 fn a_missing_windows_library_without_the_runtime_offers_the_runtime() {
     let fix = fix_for(&windows_dll_not_found(), HostOs::Windows, || {
@@ -36,11 +38,20 @@ fn a_missing_windows_library_without_the_runtime_offers_the_runtime() {
         FixOffer {
             fix: Fix::InstallVisualCppRuntime,
             offer: "gglib can install the Microsoft Visual C++ Redistributable (x64) from \
-                    Microsoft. Windows will ask for permission."
+                    Microsoft. Windows will ask for permission; if no question appears, look \
+                    for a flashing shield on the taskbar."
                 .to_owned(),
             action: Some("Repair".to_owned()),
+            waiting: Some(
+                "Waiting for Windows' permission to install the Microsoft Visual C++ \
+                 Redistributable (x64); if no question appears, look for a flashing shield on \
+                 the taskbar."
+                    .to_owned()
+            ),
         }
     );
+    assert_eq!(Fix::Reinstall.waiting(), None);
+    assert_eq!(Fix::RepairVisualCppRuntime.waiting(), None);
 }
 
 /// With the runtime there, the DLL Windows could not find came with the

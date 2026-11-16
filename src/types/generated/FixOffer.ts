@@ -15,4 +15,9 @@ offer: string,
  * [`Fix::action`]: the button's word; null when there is no button,
  * because gglib cannot make the fix.
  */
-action: string | null, };
+action: string | null, 
+/**
+ * [`Fix::waiting`]: shown while the fix is being made; null when
+ * progress says enough.
+ */
+waiting: string | null, };

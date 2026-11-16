@@ -89,8 +89,10 @@ fn each_outcome_says_what_happened() {
     assert_eq!(
         says(RuntimeInstall::TimedOut, None, None),
         "gglib stopped waiting for the Microsoft Visual C++ Redistributable (x64) installer \
-         after 10 minutes; it may still finish. Check again in a while, or install it by hand \
-         from https://aka.ms/vc14/vc_redist.x64.exe."
+         after 10 minutes. Windows' question for permission was probably waiting behind a \
+         flashing shield on the taskbar; the installer may still finish if it is answered. \
+         Check again in a while, or install it by hand from \
+         https://aka.ms/vc14/vc_redist.x64.exe."
     );
     assert_eq!(
         says(RuntimeInstall::Failed, Some("2"), None),
@@ -378,7 +380,7 @@ async fn an_installer_that_never_exits_is_no_longer_waited_for() {
 
     assert_eq!(report.outcome, RuntimeInstall::TimedOut);
     assert!(
-        report.says.contains("it may still finish"),
+        report.says.contains("the installer may still finish"),
         "{}",
         report.says
     );
