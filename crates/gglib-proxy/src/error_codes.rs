@@ -109,6 +109,7 @@ const CODES: &[ErrorCode] = &[
     row("embedding_model_cannot_chat", INVALID, Some(400), "A chat request named an embedding model."),
     row("image_model_cannot_chat", INVALID, Some(400), "A chat request named an image model, which draws and cannot chat."),
     row("image_model_incomplete", INVALID, Some(400), "An image model's family needs a file it has none linked for, such as its VAE; the message names every missing role and the gglib model update --component command that links it."),
+    row("model_load_failed", SERVER, Some(500), "The model did not load: its engine cannot start, its server could not be started or reached, stopped while loading, or was not ready in time. The proxy says which, and nothing of the machine; the daemon's API, which only its owner reaches, says why, with the line the engine printed."),
     row("image_runtime_not_installed", SERVER, Some(503), "An image model was asked for and stable-diffusion.cpp's sd-server is not installed; install it with gglib config sd install. Retrying will not help."),
     row("model_does_not_fit", SERVER, Some(507), "A chat model's weights and its smallest context need more memory than this device gives a model; the message gives both sizes. Use a smaller model or quantization. Retrying will not help."),
     // Drawing: `ImageError::code`, on `/v1/images/generations` and the daemon's twin.
@@ -154,7 +155,7 @@ const CODES: &[ErrorCode] = &[
     row("conversation_not_found", INVALID, Some(404), "No conversation has that id."),
     row("agent_busy", RATE, Some(429), "Every agent loop slot is in use; retry later."),
     row("no_model", INVALID, Some(422), "The chat names no model and nothing is running on the hub."),
-    row("model_unavailable", SERVER, Some(503), "The chat's model could not be loaded on the hub."),
+    row("model_unavailable", SERVER, Some(503), "The chat's model could not be loaded on the hub. When it did not load or its file is missing, the message says why: in full on this machine's own turn, as its kind alone on a paired device's."),
     row("unavailable", SERVER, Some(503), "Something the run needs is unavailable, such as a model stopped while the run was prepared; retry."),
     // The daemon's refusals of its own page's run, which a device's turn never meets.
     row("folder_unusable", UNTYPED, Some(400), "The folder a run says is not an absolute path to a folder on this machine; the message names the path."),

@@ -191,6 +191,12 @@ impl From<GuiError> for HttpError {
                 suggested_command,
                 reason,
             },
+            // The code is `LoadFailure::CODE`, spelled out for the code scan.
+            GuiError::LoadFailed(message) => Self::Coded {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                code: "model_load_failed",
+                message,
+            },
             GuiError::Internal(msg) => Self::Internal(msg),
         }
     }
@@ -291,6 +297,29 @@ mod tests {
 
         let from_gui: HttpError = GuiError::Conflict("dup".to_string()).into();
         assert_eq!(from_gui.into_response().status(), StatusCode::CONFLICT);
+    }
+
+    /// A failed load reaches the app as its own sentence, coded, with no
+    /// wrapping (#1959 C5): the inspector places `error` as it stands.
+    #[test]
+    fn a_failed_load_reaches_the_client_coded_in_its_own_words() {
+        let said = "llama-server stopped while loading qwen: it exited with status 1";
+        let HttpError::Coded {
+            status,
+            code,
+            message,
+        } = GuiError::LoadFailed(said.to_owned()).into()
+        else {
+            panic!("a failed load is a coded refusal");
+        };
+        assert_eq!(
+            (status, code, message.as_str()),
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                gglib_core::ports::LoadFailure::CODE,
+                said
+            )
+        );
     }
 
     /// The neighbouring repository errors must not also become 409 — a

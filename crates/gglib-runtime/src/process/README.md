@@ -17,6 +17,8 @@ This module provides shared infrastructure for managing llama-server and
 - `AdmissionQueue` (`admission/`) - Decides who gets the GPU next, and for how long
 - `ServerEvent` / `ServerEventBroadcaster` - Lifecycle event broadcasting
 - `ServerLogManager` - Log streaming infrastructure
+- `OutputTail` (`output_tail.rs`) - The last lines one server printed, which a
+  launch that fails reads for the line that says why (the rule is in its docs)
 - `check_http_health` / `wait_for_http_health` - Health checks, at each runtime's own path
 - `shutdown_child` / `kill_pid` (`shutdown/`) - Stopping a server: SIGTERM, then SIGKILL with a bounded wait
 

@@ -469,9 +469,22 @@ impl From<ModelRuntimeError> for ErrorResponse {
         match err {
             ModelRuntimeError::ModelNotFound(name) => Self::model_not_found(&name),
             ModelRuntimeError::ModelLoading => Self::model_loading(),
-            ModelRuntimeError::SpawnFailed(reason)
-            | ModelRuntimeError::HealthCheckFailed(reason) => Self::upstream_error(&reason),
+            // In the variant's own words: no connection was tried, so it is
+            // not said to be one that failed.
+            ModelRuntimeError::SpawnFailed(_) | ModelRuntimeError::HealthCheckFailed(_) => {
+                Self::with_code(err.to_string(), "server_error", "upstream_error")
+            }
             ModelRuntimeError::AdmissionTimeout(msg) => Self::admission_timeout(&msg),
+            // The kind of failure only (#1959 C5): the endpoint cannot tell
+            // this machine's clients from another's (it can listen on the
+            // network, and the tunnel's requests reach it as a client's), so
+            // the engine's printed line and this machine's paths stay here.
+            // The code is `LoadFailure::CODE`, spelled out for the code scan.
+            ModelRuntimeError::LoadFailed(failure) => Self::with_code(
+                failure.remote_sentence(),
+                "server_error",
+                "model_load_failed",
+            ),
             ModelRuntimeError::ModelFileNotFound(path) => Self::with_code(
                 format!("Model file not found: {path}"),
                 "invalid_request_error",

@@ -6,6 +6,7 @@ mod events;
 mod health;
 mod logs;
 mod manager;
+mod output_tail;
 mod ports;
 #[allow(
     clippy::significant_drop_tightening,
@@ -26,6 +27,7 @@ pub use events::{ServerEvent, ServerStateInfo, ServerStatus};
 pub use health::{check_http_health, wait_for_http_health};
 pub use logs::{ServerLogEntry, ServerLogManager, get_log_manager};
 pub use manager::ProcessManager;
+pub(crate) use output_tail::{OutputTail, said_line};
 pub use residency::ResidentSet;
 pub use shutdown::{kill_pid, shutdown_child};
 pub use spawn_config::{RuntimeBinaries, SpawnConfig};

@@ -599,6 +599,7 @@ impl ProxyOps {
         let stored = self.core.settings().get().await?;
         let key =
             crate::remote::key::demanded(self.effective_api_key(), stored.proxy_api_key.as_deref());
+        let asked = std::time::Instant::now();
         crate::proxy_prove::prove(
             &gglib_proxy::loopback::client(),
             &base_url,
@@ -609,7 +610,9 @@ impl ProxyOps {
             crate::proxy_prove::LOAD_TIMEOUT,
         )
         .await
-        .map_err(|refusal| GuiError::ValidationFailed(refusal.reason))
+        .map_err(|refusal| {
+            crate::proxy_prove::refused(refusal, self.runtime().as_ref(), gglib_id, asked)
+        })
     }
 
     /// The model the shared runtime is currently pinned to, if any.

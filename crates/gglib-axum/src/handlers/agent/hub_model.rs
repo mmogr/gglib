@@ -193,11 +193,14 @@ pub(super) struct Loaded {
 /// # Errors
 ///
 /// `model_not_found` (404), naming `model`, when this machine has no such
-/// model, and `model_unavailable` (503) when it has one it cannot load.
+/// model, and `model_unavailable` (503) when it has one it cannot load,
+/// saying why as [`unavailable`] does for whoever asked: `for_device` when
+/// a paired device's turn asked.
 pub(super) async fn on_model(
     state: &AppState,
     model: &str,
     loading: &Loading,
+    for_device: bool,
 ) -> Result<Loaded, HttpError> {
     let found = state.core.models().get(model).await.ok().flatten();
     let id = found.as_ref().map(|m| m.id);
@@ -218,27 +221,47 @@ pub(super) async fn on_model(
         .runtime
         .admit(&model, None, default_ctx, LaunchOverrides::default())
         .await
-        .map_err(|e| match e {
-            ModelRuntimeError::ModelNotFound(model) => coded(
-                StatusCode::NOT_FOUND,
-                "model_not_found",
-                format!("no model named {model} on this machine"),
-            ),
-            e => {
-                tracing::warn!(error = %e, "a turn could not load its chat's model");
-                coded(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "model_unavailable",
-                    "the chat's model could not be loaded on the hub",
-                )
-            }
-        })?;
+        .map_err(|e| unavailable(e, for_device))?;
     let target = Admission::into_target(admission);
     Ok(Loaded {
         // The catalogue's id; a name it does not hold, by what was loaded.
         id: id.unwrap_or_else(|| i64::from(target.model_id)),
         port: target.port,
     })
+}
+
+/// What a turn whose model did not load ends with, said to whoever asked
+/// (#1959 C5). This machine's turn (`gglib q`, `gglib chat`, the chat page)
+/// is told the runtime's whole sentence, with the line the engine printed
+/// and the file it names. A paired device's turn is told only what kind of
+/// failure it was ([`LoadFailure::remote_sentence`]); a missing file, whose
+/// only words are its path here, is not named to it.
+///
+/// [`LoadFailure::remote_sentence`]: gglib_core::ports::LoadFailure::remote_sentence
+pub(super) fn unavailable(e: ModelRuntimeError, for_device: bool) -> HttpError {
+    /// What a turn is told when there is nothing more it may be told.
+    const UNSAID: &str = "the chat's model could not be loaded on the hub";
+    if let ModelRuntimeError::ModelNotFound(model) = e {
+        return coded(
+            StatusCode::NOT_FOUND,
+            "model_not_found",
+            format!("no model named {model} on this machine"),
+        );
+    }
+    tracing::warn!(error = %e, "a turn could not load its chat's model");
+    let message = match (&e, for_device) {
+        (ModelRuntimeError::LoadFailed(failure), true) => failure.remote_sentence(),
+        (ModelRuntimeError::LoadFailed(failure), false) => failure.sentence(),
+        (ModelRuntimeError::ModelFileNotFound(_), false) => e.to_string(),
+        // Anything else is not a cause the user can act on, and is left in
+        // the log.
+        _ => UNSAID.to_owned(),
+    };
+    coded(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "model_unavailable",
+        message,
+    )
 }
 
 #[cfg(test)]

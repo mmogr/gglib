@@ -310,6 +310,7 @@ pub(crate) mod runs;
 mod settings;
 pub(crate) mod wire;
 
+pub(crate) use calls::LoadFailed;
 pub(crate) use calls::StartedOrDiffers;
 pub(crate) use library_changes::LibraryChanges;
 pub(crate) use wire::{

@@ -191,6 +191,26 @@ async fn a_refused_pin_is_the_daemons_sentence_and_loads_nothing() {
     assert_eq!(taken.len(), 1, "nothing was asked after the refusal");
 }
 
+/// A model that did not load is said in the daemon's sentence alone: no
+/// HTTP status, and no "did not load" before a sentence that says so and
+/// why (#1959 C5). What `main` prints is the error's whole chain.
+#[tokio::test]
+async fn a_model_that_did_not_load_is_said_in_the_daemons_sentence_alone() {
+    let sentence = "llama-server stopped while loading qwen: it exited with status 1. \
+                    It printed: gguf_init_from_reader: invalid magic characters: 'this', \
+                    expected 'GGUF'";
+    let refusal =
+        serde_json::json!({ "error": sentence, "status": 500, "type": "model_load_failed" });
+    let (lines, _) = against(vec![(500, refusal.to_string())], |handle| async move {
+        load_on(&handle, &body(3, None), false, &mut consent(false, false)).await
+    })
+    .await;
+
+    let err = lines.expect_err("the model did not load");
+    assert_eq!(format!("{err:#}"), sentence);
+    assert_eq!(err.chain().count(), 1, "{err:?}");
+}
+
 /// An unload is one stop request naming the model, and the line printed is
 /// the daemon's sentence; a model that is not loaded is the daemon's 404,
 /// in its words.

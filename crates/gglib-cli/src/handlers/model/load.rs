@@ -105,10 +105,15 @@ pub(super) async fn load_on(
             |model| format!("  Endpoint on port {port}, pinned to {model}"),
         ));
     }
-    let started = handle
-        .start_model_server(body)
-        .await
-        .context("the daemon did not load the model")?;
+    // A model that did not load is said in the daemon's sentence alone,
+    // which already says that and why (#1959 C5).
+    let started = handle.start_model_server(body).await.map_err(|e| {
+        if e.is::<daemon_client::LoadFailed>() {
+            e
+        } else {
+            e.context("the daemon did not load the model")
+        }
+    })?;
     lines.push(format!("  {}", started.message));
     Ok(lines)
 }
