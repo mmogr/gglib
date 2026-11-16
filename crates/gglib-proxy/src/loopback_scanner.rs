@@ -45,9 +45,7 @@ pub(super) const INTERNET: [(&str, &str); 1] = [(
 pub(super) const CONTROL: &str = "crates/gglib-proxy/src/server.rs";
 
 pub(super) fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
+    gglib_core::paths::canonical(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
         .expect("the workspace root above crates/gglib-proxy")
 }
 

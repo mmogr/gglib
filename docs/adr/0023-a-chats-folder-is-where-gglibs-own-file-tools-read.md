@@ -316,6 +316,15 @@ Costs, stated plainly:
   the page next reads the conversation and shows the canonical path.
 - On Windows the recorded folder is a verbatim `\\?\C:\...` path, which the
   chip, the CLI's line and the descriptions show.
+
+  > **Amended 2026-11-16.** No longer so. A folder is resolved through
+  > `gglib_core::paths::canonical`, which writes it as the plain path
+  > (`C:\...`) whenever that names the same folder, so the plain form is
+  > recorded and shown. The file tools join a name onto it and compare a path
+  > with it through the same module, so a name a plain path reads otherwise,
+  > such as `notes.`, still opens that file and is still inside the folder.
+  > A library an older build wrote on Windows that holds a model or a chat
+  > folder is refused (`crates/gglib-db/src/setup_generation.rs`).
 - Downgrade: an older binary's write of a chat's settings drops `folder`, and
   the chip asks again; an older daemon ignores `folder`, so the chat silently
   gets no file tools.

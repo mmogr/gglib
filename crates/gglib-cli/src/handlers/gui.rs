@@ -158,7 +158,7 @@ fn launch(os: Os, artifact: &Path) -> Result<()> {
 /// [`sibling_artifact`] finds next to the running executable.
 fn launch_prebuilt() -> Result<()> {
     let exe_dir = std::env::current_exe()
-        .and_then(|p| p.canonicalize())
+        .and_then(gglib_core::paths::canonical)
         .ok()
         .and_then(|p| p.parent().map(Path::to_path_buf));
     let Some(exe_dir) = exe_dir else {

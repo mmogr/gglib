@@ -241,3 +241,30 @@ fn matches_under_a_root_behind_a_link_are_relative_to_it() {
     .unwrap();
     assert_eq!(result, "src/main.rs:1:match_me");
 }
+
+#[test]
+fn a_name_a_plain_path_misreads_is_searched_as_itself() {
+    let dir = tempfile::tempdir().unwrap();
+    // Made through the owner, so that Windows makes them under these names.
+    let root = gglib_core::paths::canonical(dir.path()).unwrap();
+    for (name, text) in [
+        ("notes", "needle in plain\n"),
+        ("notes.", "needle in dotted\n"),
+        ("aux.c", "needle in aux\n"),
+    ] {
+        fs::write(gglib_core::paths::child(&root, name), text).unwrap();
+    }
+
+    let result = grep(&args_with_pattern("needle"), dir.path()).unwrap();
+    let mut lines: Vec<&str> = result.lines().collect();
+    lines.sort_unstable();
+    assert_eq!(
+        lines,
+        [
+            "aux.c:1:needle in aux",
+            "notes.:1:needle in dotted",
+            "notes:1:needle in plain"
+        ],
+        "{result}"
+    );
+}
