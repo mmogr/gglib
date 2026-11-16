@@ -14,7 +14,10 @@ the window for the *main* process — not any child processes.
 Use [`cmd`] and [`async_cmd`] instead of `Command::new` at every call site.
 The Windows-specific flag is applied here and nowhere else.
 
-- [`host`]: what a gglib binary does to its own process before anything else.
+- [`host`]: what a gglib binary does to its own process before anything
+  else, and the one file that calls Windows, its registry included: the
+  user's own `Path`, and gglib's record of what it added there, which
+  `crate::paths::user_path` edits for the Windows installer.
 - [`bounded`]: running a program that should answer and exit, with a time
   limit, and why a run failed (`failure_kind`): the one place that reads
   each OS's report of a library that cannot be loaded (Windows' exit

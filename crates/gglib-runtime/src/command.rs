@@ -4,7 +4,7 @@
 //! capturing stdout/stderr output.
 
 use crate::llama::{LlamaServerError, resolve_llama_server};
-use crate::process::spawn_stream_reader;
+use crate::process::{OutputTail, spawn_stream_reader};
 use gglib_core::debug_switches;
 use gglib_core::ports::{JinjaMode, ServerConfig};
 use gglib_core::utils::process::cmd;
@@ -155,7 +155,9 @@ pub(crate) fn build_and_spawn(
 
     let child = cmd
         .spawn()
-        .map_err(|e| anyhow::anyhow!("Failed to spawn llama-server: {e}"))?;
+        // The system's error is kept as the source, so a launch can read
+        // why with `failure_kind`.
+        .map_err(|e| anyhow::Error::new(e).context("Failed to spawn llama-server"))?;
 
     Ok(child)
 }
@@ -357,15 +359,15 @@ fn with(tokens: &mut Vec<Token>, flag: &'static str, value: impl Into<OsString>)
 /// Spawn background tasks to stream stdout/stderr logs asynchronously.
 ///
 /// The tasks read lines from the process output, log them via tracing and
-/// hand them to the log manager under `port`. They exit when the streams
-/// close.
-pub(crate) fn spawn_log_readers(child: &mut Child, port: u16) {
+/// hand them to the log manager under `port`, and keep the last of them in
+/// `tail`, the server's own. They exit when the streams close.
+pub(crate) fn spawn_log_readers(child: &mut Child, port: u16, tail: &OutputTail) {
     if let Some(stdout) = child.stdout.take() {
-        spawn_stream_reader(stdout, port, "stdout");
+        spawn_stream_reader(stdout, port, "stdout", tail.clone());
     }
 
     if let Some(stderr) = child.stderr.take() {
-        spawn_stream_reader(stderr, port, "stderr");
+        spawn_stream_reader(stderr, port, "stderr", tail.clone());
     }
 }
 

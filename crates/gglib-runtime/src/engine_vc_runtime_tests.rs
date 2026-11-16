@@ -587,3 +587,58 @@ async fn an_install_outlives_a_caller_that_stops_waiting() {
     until("the first install's folder going", || !dir.exists()).await;
     until("the lock being let go", || !LOCK.load(Ordering::SeqCst)).await;
 }
+
+/// What glibc's loader writes for a library that is not there, which the
+/// engine check reads as an engine that cannot start.
+const LOADER_LINE: &str = "./llama-server: error while loading shared libraries: \
+                           libvulkan.so.1: cannot open shared object file: No such file or directory";
+
+/// After a repair that made the engine work, the engine check has
+/// forgotten that it could not start, so a load straight after it starts
+/// the engine without being refused, and without asking it again: here the
+/// engine is made slow to answer after the repair, and the load's check
+/// still answers at once.
+#[tokio::test]
+async fn a_load_straight_after_a_repair_starts_the_engine() {
+    let dir = tempfile::tempdir().unwrap();
+    let engines = tempfile::tempdir().unwrap();
+    let engine = gglib_test_proc::install(
+        engines.path(),
+        "llama-server",
+        &format!("eprint {LOADER_LINE}\nexit 127"),
+    );
+    let kind = RuntimeKind::Llama;
+    crate::engine::validate_engine_at(kind, &engine).expect_err("it cannot start");
+    assert!(crate::engine::refuse_if_known_not_working(kind, &engine).is_err());
+
+    // The installer puts the missing library in place: the engine starts.
+    let mended = engine.clone();
+    let instructions = gglib_test_proc::instructions_path(&engine);
+    let base = Fake::default().installer(dir.path(), &Ran::default());
+    let repaired = Installer {
+        os: base.os,
+        dir: base.dir,
+        verify: base.verify,
+        wait: base.wait,
+        recheck: move || crate::engine::validate_engine_at(kind, &mended).is_ok(),
+        runtime: base.runtime,
+    };
+    let installer_download = download("exit 0".to_owned(), &Ran::default());
+    let report = repaired
+        .run(kind, move |path: PathBuf, file: File| {
+            std::fs::write(&instructions, "print version: 1 (abc)\nexit 0\n").unwrap();
+            installer_download(path, file)
+        })
+        .await;
+    assert_eq!(report.outcome, RuntimeInstall::Installed);
+    assert!(report.works, "{}", report.says);
+
+    std::fs::write(gglib_test_proc::instructions_path(&engine), "sleep 60\n").unwrap();
+    let asked = std::time::Instant::now();
+    assert!(crate::engine::refuse_if_known_not_working(kind, &engine).is_ok());
+    assert!(
+        asked.elapsed() < Duration::from_secs(5),
+        "the load asked the engine again: {:?}",
+        asked.elapsed()
+    );
+}

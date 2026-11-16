@@ -1,5 +1,6 @@
 //! Shared types for process management.
 
+use super::output_tail::OutputTail;
 use gglib_core::domain::RuntimeKind;
 use serde::Serialize;
 use tokio::process::Child;
@@ -46,10 +47,16 @@ impl ServerInfo {
 pub struct RunningProcess {
     pub info: ServerInfo,
     pub child: Child,
+    /// The last lines it printed, which a launch that fails reads.
+    pub(crate) output: OutputTail,
 }
 
 impl RunningProcess {
     pub fn new(info: ServerInfo, child: Child) -> Self {
-        Self { info, child }
+        Self {
+            info,
+            child,
+            output: OutputTail::default(),
+        }
     }
 }

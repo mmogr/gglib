@@ -22,7 +22,7 @@ use crate::binary_install::{
     resolve_selector, standing,
 };
 pub use check::{NotWorking, validate_engine, validate_engine_at};
-pub(crate) use check::{first_line, validate_binary};
+pub(crate) use check::{first_line, refuse_if_known_not_working, validate_binary};
 pub use repair::{
     Fix, FixOffer, RepairReport, RuntimeInstall, current_fix, install_visual_cpp_runtime,
 };

@@ -7,10 +7,14 @@
 //! Verify phase all check here, so each says the same thing for the same
 //! binary. A `#[path]` child of `engine.rs`.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::Output;
+use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
+
+use crate::process::said_line;
 
 use gglib_core::domain::RuntimeKind;
 use gglib_core::paths::{
@@ -36,6 +40,29 @@ pub struct NotWorking {
 }
 
 impl std::error::Error for NotWorking {}
+
+impl NotWorking {
+    /// `kind`'s binary at `path` failing as `failure` when it was started
+    /// to serve, worded as the check words it: a load that could not start
+    /// it says what its status would.
+    pub(crate) fn when_started(kind: RuntimeKind, path: &Path, failure: Failure) -> Self {
+        Self {
+            failure,
+            path: path.to_path_buf(),
+            install_command: install_command_of(kind),
+            wait_secs: PROBE_WAIT.as_secs(),
+            said: None,
+        }
+    }
+}
+
+/// The command that installs `kind`.
+const fn install_command_of(kind: RuntimeKind) -> &'static str {
+    match kind {
+        RuntimeKind::Llama => LLAMA_INSTALL_COMMAND,
+        RuntimeKind::StableDiffusion => SD_INSTALL_COMMAND,
+    }
+}
 
 impl fmt::Display for NotWorking {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -109,16 +136,74 @@ pub fn validate_engine(kind: RuntimeKind) -> anyhow::Result<()> {
 ///
 /// It does not work.
 pub fn validate_engine_at(kind: RuntimeKind, path: &Path) -> Result<Output, NotWorking> {
-    let install_command = match kind {
-        RuntimeKind::Llama => LLAMA_INSTALL_COMMAND,
-        RuntimeKind::StableDiffusion => SD_INSTALL_COMMAND,
-    };
-    validate_binary(path, install_command, PROBE_WAIT)
+    validate_binary(path, install_command_of(kind), PROBE_WAIT)
+}
+
+/// The binaries this check last found unable to start ([`cannot_start`]),
+/// in this process.
+///
+/// A load reads it ([`refuse_if_known_not_working`]) so it need not run the
+/// check on every launch: a binary not in it is started as it is. One whose
+/// `--version` only timed out, crashed or failed is not in it, and its load
+/// is not refused.
+static FOUND_NOT_WORKING: LazyLock<Mutex<HashSet<PathBuf>>> = LazyLock::new(Mutex::default);
+
+fn found_not_working() -> std::sync::MutexGuard<'static, HashSet<PathBuf>> {
+    FOUND_NOT_WORKING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Refuse a load of `kind`'s binary at `path` when this check last found it
+/// not working, in the words it gives.
+///
+/// Such a binary is asked again first, so the refusal is never stale: a
+/// library put back or a runtime installed since leaves the binary as it
+/// was, and the check is all that can tell. Running a binary that cannot
+/// start costs milliseconds. A binary the check has not found unable to
+/// start, or found working since, is not run: a load of it is not delayed,
+/// and a server that then fails says why itself.
+///
+/// Blocking, when the binary is asked again.
+///
+/// # Errors
+///
+/// It still cannot start. Asked again, a binary that now only times out,
+/// crashes or fails is let through to its load.
+pub(crate) fn refuse_if_known_not_working(
+    kind: RuntimeKind,
+    path: &Path,
+) -> Result<(), NotWorking> {
+    if !found_not_working().contains(path) {
+        return Ok(());
+    }
+    match validate_engine_at(kind, path) {
+        Err(not_working) if cannot_start(&not_working.failure) => Err(not_working),
+        _ => Ok(()),
+    }
 }
 
 /// Ask the binary at `path` `--version`, giving it `wait`, and give what it
-/// answered; `install_command` installs it.
+/// answered; `install_command` installs it. What it found is remembered for
+/// [`refuse_if_known_not_working`].
 pub(crate) fn validate_binary(
+    path: &Path,
+    install_command: &'static str,
+    wait: Duration,
+) -> Result<Output, NotWorking> {
+    let answer = check_binary(path, install_command, wait);
+    match &answer {
+        Err(not_working) if cannot_start(&not_working.failure) => {
+            found_not_working().insert(path.to_path_buf());
+        }
+        _ => {
+            found_not_working().remove(path);
+        }
+    }
+    answer
+}
+
+fn check_binary(
     path: &Path,
     install_command: &'static str,
     wait: Duration,
@@ -144,11 +229,28 @@ pub(crate) fn validate_binary(
     run.map_err(|e| not_working(failure_kind(Ended::NotStarted(&e)), None))
 }
 
-/// The first line of `bytes` with anything on it.
+/// The first line of `bytes` with anything on it, made plain and cut as a
+/// line of a server's output is ([`said_line`]): what an engine prints is
+/// shown, and carries no terminal control.
 pub(crate) fn first_line(bytes: &[u8]) -> Option<String> {
     String::from_utf8_lossy(bytes)
         .lines()
-        .map(str::trim)
+        .map(said_line)
         .find(|line| !line.is_empty())
-        .map(str::to_owned)
+}
+
+/// Whether `failure` proves the binary cannot start, whatever it is asked:
+/// it is not there, not a program, missing or refused a library, or the
+/// system would not start it. A run that timed out, crashed or exited
+/// non-zero on `--version` does not: a scanner or a loaded machine can slow
+/// the first, and a server may still load where its `--version` failed.
+fn cannot_start(failure: &Failure) -> bool {
+    matches!(
+        failure,
+        Failure::NotFound
+            | Failure::NotExecutable
+            | Failure::MissingLibrary { .. }
+            | Failure::BadLibrary { .. }
+            | Failure::CouldNotStart { .. }
+    )
 }
