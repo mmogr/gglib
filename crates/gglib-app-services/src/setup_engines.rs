@@ -122,11 +122,14 @@ impl SetupOps {
     ) -> Result<(), GuiError> {
         refuse_while_serving(runtime, kind, "installing").await?;
         refuse_a_source_build(kind)?;
-        match kind {
+        let installed = match kind {
             RuntimeKind::Llama => gglib_runtime::llama::download_prebuilt_binaries(tx).await,
             RuntimeKind::StableDiffusion => gglib_runtime::sd::install_sd_prebuilt(tx).await,
+        };
+        match install_ended(kind, installed) {
+            InstallEnded::Completed => Ok(()),
+            InstallEnded::Failed(e) => Err(e),
         }
-        .map_err(|e| GuiError::Internal(format!("Failed to install {}: {e}", kind.label())))
     }
 
     /// Make the repair `kind`'s status offers that changes the machine:
@@ -140,6 +143,27 @@ impl SetupOps {
             .map_err(|e| GuiError::Internal(e.to_string()))?;
         refuse_another_repair(kind, fix)?;
         Ok(install_visual_cpp_runtime(kind).await)
+    }
+}
+
+/// How the daemon's install of an engine ended, from what its pipeline
+/// returned.
+#[derive(Debug)]
+pub(crate) enum InstallEnded {
+    /// It completed, and the pipeline said so on its stream.
+    Completed,
+    /// It did not install.
+    Failed(GuiError),
+}
+
+/// How the install of `kind` that returned `installed` ended.
+pub(crate) fn install_ended(kind: RuntimeKind, installed: anyhow::Result<()>) -> InstallEnded {
+    match installed {
+        Ok(()) => InstallEnded::Completed,
+        Err(e) => InstallEnded::Failed(GuiError::Internal(format!(
+            "Failed to install {}: {e}",
+            kind.label()
+        ))),
     }
 }
 
