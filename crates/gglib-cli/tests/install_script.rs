@@ -15,10 +15,11 @@
 #[path = "support/stub_tools.rs"]
 mod stub_tools;
 
+use gglib_core::utils::process::cmd;
 use std::io::Write as _;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Output, Stdio};
 use std::time::{Duration, Instant};
 
 use stub_tools::{Machine, one_at_a_time};
@@ -131,7 +132,7 @@ fn install_fed(packaged: &Path, path: &[&Path], fed: Fed) -> Output {
     let text = text.replace(PACKAGED, &format!("packaged='{}'\n", packaged.display()));
     std::fs::write(&copy, &text).expect("the copy is written");
     let run = |shell: &str| {
-        let mut command = Command::new(shell);
+        let mut command = cmd(shell);
         command
             .current_dir(cwd.path())
             .env_clear()

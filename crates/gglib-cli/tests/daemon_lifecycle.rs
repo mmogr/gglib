@@ -7,11 +7,12 @@
 //! machine with no daemon up. Data is isolated via `GGLIB_DATA_DIR`; the
 //! port cannot be.
 
+use gglib_core::utils::process::cmd;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 fn gglib() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_gglib"))
+    cmd(env!("CARGO_BIN_EXE_gglib"))
 }
 
 fn spawn_daemon(data_dir: &std::path::Path) -> Child {
@@ -121,7 +122,5 @@ fn sigterm_shuts_the_daemon_down_cleanly() {
 /// Send SIGTERM via the `kill` binary — no libc dependency for one signal.
 #[cfg(unix)]
 fn send_sigterm(pid: u32) {
-    let _ = Command::new("kill")
-        .args(["-15", &pid.to_string()])
-        .status();
+    let _ = cmd("kill").args(["-15", &pid.to_string()]).status();
 }

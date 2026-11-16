@@ -3,7 +3,7 @@
 
 mod common;
 
-use std::process::Command;
+use gglib_core::utils::process::cmd;
 
 use tempfile::TempDir;
 
@@ -65,7 +65,7 @@ fn started_with_the_token(test: &str) -> bool {
     if std::env::var_os(STARTED_WITH_THE_TOKEN).is_some() {
         return true;
     }
-    let ran = Command::new(std::env::current_exe().expect("this test binary"))
+    let ran = cmd(std::env::current_exe().expect("this test binary"))
         .args(["--exact", test])
         .env(STARTED_WITH_THE_TOKEN, "1")
         // Spelled out, as whoever sets it spells it.

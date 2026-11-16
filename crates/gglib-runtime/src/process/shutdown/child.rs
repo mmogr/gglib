@@ -132,14 +132,14 @@ async fn shutdown_windows(child: &mut Child) -> io::Result<ExitStatus> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::process::Command;
+    use gglib_core::utils::process::async_cmd;
     use tokio::time::sleep;
 
     #[tokio::test]
     #[cfg(unix)]
     async fn shutdown_responds_to_sigterm() {
         // Spawn sleep process that should respond to SIGTERM
-        let child = Command::new("sleep")
+        let child = async_cmd("sleep")
             .arg("30")
             .spawn()
             .expect("failed to spawn sleep");
@@ -151,7 +151,7 @@ mod tests {
     #[tokio::test]
     async fn shutdown_handles_already_exited() {
         // Spawn process that exits immediately
-        let child = Command::new("echo")
+        let child = async_cmd("echo")
             .arg("test")
             .spawn()
             .expect("failed to spawn echo");
@@ -189,7 +189,7 @@ mod tests {
     async fn shutdown_escalates_to_sigkill_when_sigterm_is_ignored() {
         // Spawn a single process that ignores SIGTERM — forces escalation to SIGKILL.
         // Uses python3 to avoid orphaning a subprocess (which bash -c 'sleep' would do).
-        let child = Command::new("python3")
+        let child = async_cmd("python3")
             .arg("-c")
             .arg("import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)")
             .spawn()

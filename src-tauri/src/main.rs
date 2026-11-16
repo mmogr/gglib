@@ -23,6 +23,8 @@ use tauri::menu::Menu;
 use tracing::{debug, error, info};
 
 fn main() {
+    gglib_core::utils::process::host::prepare();
+
     // Initialize shared tracing (idempotent; safe to call from multiple entry points)
     let _ = gglib_core::telemetry::init_tracing(false);
 

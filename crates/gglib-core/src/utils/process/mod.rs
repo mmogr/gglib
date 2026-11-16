@@ -1,18 +1,17 @@
-//! Process spawning utilities with consistent cross-platform behaviour.
-//!
-//! On Windows, every child process created with `std::process::Command::new`
-//! inherits a new console window unless `CREATE_NO_WINDOW` is explicitly set.
-//! The `windows_subsystem = "windows"` attribute on the main binary only
-//! suppresses the window for the *main* process — not any child processes.
-//!
-//! Use [`cmd`] and [`async_cmd`] instead of `Command::new` at every call site.
-//! The Windows-specific flag is applied here and nowhere else.
+#![doc = include_str!("README.md")]
+
+pub mod detached;
+pub mod host;
 
 use std::ffi::OsStr;
 
 /// `CREATE_NO_WINDOW` — the process-creation flag that stops a child from
 /// getting a console window. Named once here so the two spawn helpers below
 /// cannot drift apart on the value.
+///
+/// It also gives a console program a console of its own, with no window, in
+/// place of its parent's. So the service, started through [`cmd`], is not
+/// stopped by a Ctrl-C or a closed window in the terminal that started it.
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -27,15 +26,20 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 ///
 /// let output = cmd("nvidia-smi").arg("--list-gpus").output()?;
 /// ```
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the one place a std Command is made; clippy.toml sends every other caller here"
+)]
 pub fn cmd(program: impl AsRef<OsStr>) -> std::process::Command {
-    #[allow(unused_mut)]
-    let mut c = std::process::Command::new(program);
+    let command = std::process::Command::new(program);
     #[cfg(windows)]
-    {
+    let command = {
         use std::os::windows::process::CommandExt;
-        c.creation_flags(CREATE_NO_WINDOW);
-    }
-    c
+        let mut command = command;
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    };
+    command
 }
 
 /// Create a [`tokio::process::Command`] that will not open a console window on Windows.
@@ -49,14 +53,19 @@ pub fn cmd(program: impl AsRef<OsStr>) -> std::process::Command {
 ///
 /// let child = async_cmd("llama-server").arg("--port").arg("8080").spawn()?;
 /// ```
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the one place a tokio Command is made; clippy.toml sends every other caller here"
+)]
 pub fn async_cmd(program: impl AsRef<OsStr>) -> tokio::process::Command {
-    #[allow(unused_mut)]
-    let mut c = tokio::process::Command::new(program);
+    let command = tokio::process::Command::new(program);
     #[cfg(windows)]
-    {
+    let command = {
         // No `CommandExt` import here: unlike `std`, tokio puts `creation_flags`
         // directly on its own `Command`, so importing the trait warns as unused.
-        c.creation_flags(CREATE_NO_WINDOW);
-    }
-    c
+        let mut command = command;
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    };
+    command
 }

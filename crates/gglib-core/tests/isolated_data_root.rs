@@ -7,8 +7,8 @@
 //! roots of their own, which a root set in their process would override.
 //! Built only with the `test-utils` feature (see `Cargo.toml`).
 
+use gglib_core::utils::process::cmd;
 use std::path::Path;
-use std::process::Command;
 
 use gglib_core::paths::{
     data_root, database_path, isolate_data_root, llama_server_path, pids_dir, remote_identity_path,
@@ -89,7 +89,7 @@ fn the_root_is_a_temporary_directory_set_once() {
 fn the_test_root_comes_before_the_environment() {
     let elsewhere = isolate_data_root().join("from-the-environment");
 
-    let out = Command::new(std::env::current_exe().unwrap())
+    let out = cmd(std::env::current_exe().unwrap())
         .args(["--exact", CHILD, "--nocapture", "--test-threads=1"])
         .env(CHILD_ENV, "1")
         .env("GGLIB_DATA_DIR", &elsewhere)

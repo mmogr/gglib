@@ -8,6 +8,7 @@
 //! as an argument: each system's rule is written once, for an install and a
 //! checkout alike, and all three are checked on whichever one runs the tests.
 
+use gglib_core::utils::process::cmd;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -120,11 +121,11 @@ fn find_repo_gui_artifact(repo_root: &Path) -> PathBuf {
 fn launch_command(os: Os, artifact: &Path) -> Command {
     match os {
         Os::Mac => {
-            let mut open = Command::new("open");
+            let mut open = cmd("open");
             open.arg(artifact);
             open
         }
-        Os::Linux | Os::Windows => Command::new(artifact),
+        Os::Linux | Os::Windows => cmd(artifact),
     }
 }
 

@@ -19,8 +19,9 @@
 #[path = "support/library.rs"]
 mod library;
 
+use gglib_core::utils::process::cmd;
 use std::path::Path;
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Child, Output, Stdio};
 
 use library::{data_root, gglib, library, resource_root, run, write_gguf};
 
@@ -48,7 +49,7 @@ struct StandIn(Child);
 impl StandIn {
     fn start() -> Self {
         Self(
-            Command::new(SLEEP)
+            cmd(SLEEP)
                 .arg("120")
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
@@ -90,7 +91,7 @@ fn record_a_server(root: &Path, pid: u32) {
 
 /// The pid of a process that has run and been reaped, so it names nothing.
 fn pid_of_a_process_that_is_gone() -> u32 {
-    let mut child = Command::new(SLEEP).arg("0").spawn().expect("sleep starts");
+    let mut child = cmd(SLEEP).arg("0").spawn().expect("sleep starts");
     let pid = child.id();
     child.wait().expect("it ends");
     pid

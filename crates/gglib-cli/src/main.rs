@@ -11,6 +11,7 @@ use gglib_cli::{bootstrap, dispatch, dispatch_without_library, parse};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    gglib_core::utils::process::host::prepare();
     let (cli, remote) = parse();
     gglib_core::telemetry::init_tracing(cli.verbose)?;
     let Some(command) = dispatch_without_library(cli.command)? else {

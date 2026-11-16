@@ -4,7 +4,7 @@
 //! command a person types, against the database the binary opens under
 //! `GGLIB_DATA_DIR`.
 
-use std::process::Command;
+use gglib_core::utils::process::cmd;
 
 use gglib_core::{Device, RemotePairing, RemoteServe, Settings};
 
@@ -42,7 +42,7 @@ fn a_reset_keeps_the_pairing_the_device_roster_and_the_proxy_key() {
     });
     let before = data_dir::read_settings(root.path());
 
-    let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
+    let out = cmd(env!("CARGO_BIN_EXE_gglib"))
         .args(["config", "reset", "--yes"])
         .env("GGLIB_DATA_DIR", root.path())
         .output()

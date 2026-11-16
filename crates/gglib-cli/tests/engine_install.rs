@@ -4,15 +4,16 @@
 //! a port nobody listens on, so a command that went ahead would find no git
 //! and no network to go ahead with.
 
+use gglib_core::utils::process::cmd;
 use std::path::Path;
-use std::process::{Command, Output, Stdio};
+use std::process::{Output, Stdio};
 
 /// `gglib <args>` over `root`, with nothing on its `PATH` and the end of
 /// input on its standard input.
 fn gglib(root: &Path, args: &[&str]) -> Output {
     let nothing = tempfile::tempdir().expect("an empty PATH");
     let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
-    Command::new(env!("CARGO_BIN_EXE_gglib"))
+    cmd(env!("CARGO_BIN_EXE_gglib"))
         .args(args)
         .current_dir(elsewhere.path())
         .env_clear()
