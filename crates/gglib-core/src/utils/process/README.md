@@ -24,5 +24,7 @@ The Windows-specific flag is applied here and nowhere else.
   started it.
 - [`stop`]: hearing that this process is asked to stop, and whether it has
   time for an orderly teardown or seconds before the OS ends it.
+- [`tied`]: tying a child to this process, so it ends when this process
+  ends, however it ends.
 
 <!-- module-docs:end -->

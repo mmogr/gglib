@@ -15,6 +15,7 @@
 //! it printed last: the reason a server that cannot start gives.
 
 use gglib_core::utils::process::async_cmd;
+use gglib_core::utils::process::tied::tie_to_this_process;
 use gglib_core::{McpTool, McpToolResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -255,6 +256,16 @@ impl McpClient {
                 "Failed to spawn '{exe_path}': {e}\nArgs: {args:?}\nCwd: {cwd:?}\nEffective PATH: {effective_path_str}"
             ))
         })?;
+        // So it ends with this process even if this process dies without
+        // its teardown (#1985).
+        if let Err(e) = tie_to_this_process(&child) {
+            tracing::warn!(
+                exe = exe_path,
+                error = %e,
+                "the MCP server is not tied to this process: if gglib dies without its \
+                 teardown, it keeps running"
+            );
+        }
 
         let stdin = child
             .stdin
