@@ -149,6 +149,33 @@ fn with_no_gpu_a_model_too_big_for_ram_gets_the_floor_and_says_why() {
     );
 }
 
+/// A model whose header says neither what its context costs nor what it
+/// was trained for cannot be fitted on any machine. With no GPU the floor
+/// is served and the refusal names the RAM it would have been sized
+/// against and what the header leaves out; the budget row is RAM's, the
+/// undivided share the fit tried last (three quarters of 7.9 GiB).
+#[test]
+fn with_no_gpu_a_model_that_says_nothing_of_its_context_is_refused_for_it() {
+    let mut bare = qwen3_4b();
+    bare.kv_shape = None;
+    bare.context_length = None;
+    let request = launch_on(no_gpu(VM_RAM), bare, None, None);
+    assert_eq!(
+        request.context,
+        (DEFAULT_CONTEXT_SIZE, ContextSizeSource::BuiltInDefault)
+    );
+    assert_eq!(
+        sentence(&request),
+        "Serves at 4K context; gglib could not fit one to this machine's 7.9 GiB of RAM (no GPU): the model does not say what its context costs or what it was trained for."
+    );
+    let budget = request
+        .fit
+        .as_ref()
+        .and_then(|f| f.figures.iter().find(|row| row.label == "RAM budget"))
+        .map(|row| row.value.as_str());
+    assert_eq!(budget, Some("5.92 GiB"));
+}
+
 /// The user's `default-context-size` outranks the fit, GPU or none.
 #[test]
 fn with_no_gpu_the_users_default_context_size_still_wins() {
