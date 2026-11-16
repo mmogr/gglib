@@ -11,8 +11,9 @@ use std::ffi::OsStr;
 /// cannot drift apart on the value.
 ///
 /// It also gives a console program a console of its own, with no window, in
-/// place of its parent's. So the service, started through [`cmd`], is not
-/// stopped by a Ctrl-C or a closed window in the terminal that started it.
+/// place of its parent's. So the service, started by
+/// [`detached::spawn_daemon`], which sets it too, is not stopped by a Ctrl-C
+/// or a closed window in the terminal that started it.
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
