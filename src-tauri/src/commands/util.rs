@@ -122,6 +122,8 @@ pub(crate) async fn start_gglib(state: tauri::State<'_, AppState>) -> Result<(),
 mod tests {
     use std::sync::{Arc, Mutex};
 
+    use gglib_core::utils::process::foreground::Foreground;
+
     use super::*;
     use crate::daemon::{LAUNCH_WAIT, Ownership};
 
@@ -260,5 +262,87 @@ mod tests {
         file.mint("second");
         restart.settle(Ok(Ownership::Launched));
         assert_eq!(asked.await.expect("the request"), Ok(answer("second")));
+    }
+
+    /// The process ids the process module was asked to allow, and what it
+    /// answers each time.
+    struct Grants {
+        asked: Mutex<Vec<u32>>,
+        answer: fn() -> std::io::Result<Foreground>,
+    }
+
+    impl Grants {
+        fn answering(answer: fn() -> std::io::Result<Foreground>) -> Self {
+            Self {
+                asked: Mutex::new(Vec::new()),
+                answer,
+            }
+        }
+
+        fn allow(&self, pid: u32) -> std::io::Result<Foreground> {
+            self.asked.lock().expect("the grants").push(pid);
+            (self.answer)()
+        }
+
+        fn asked(&self) -> Vec<u32> {
+            self.asked.lock().expect("the grants").clone()
+        }
+    }
+
+    /// A service the app talks to: the launch settled on it.
+    fn running() -> Service {
+        let (service, launch) = Service::launching();
+        launch.settle(Ok(Ownership::Adopted));
+        service
+    }
+
+    /// The service the app talks to is the one allowed, by the id its
+    /// record gives, and the page hears that the grant was made.
+    #[tokio::test]
+    async fn the_service_the_app_talks_to_is_allowed() {
+        let grants = Grants::answering(|| Ok(Foreground::Allowed));
+        let granted = allow_service(&running(), || Some(4242), |pid| grants.allow(pid)).await;
+        assert!(granted);
+        assert_eq!(grants.asked(), [4242]);
+    }
+
+    /// With no service known (no record of a running one), nothing is
+    /// asked and nothing is granted.
+    #[tokio::test]
+    async fn no_known_service_asks_nothing() {
+        let grants = Grants::answering(|| Ok(Foreground::Allowed));
+        let granted = allow_service(&running(), || None, |pid| grants.allow(pid)).await;
+        assert!(!granted);
+        assert_eq!(grants.asked(), Vec::<u32>::new());
+    }
+
+    /// A launch that failed leaves no service to allow: the record is not
+    /// even read.
+    #[tokio::test]
+    async fn a_failed_launch_asks_nothing() {
+        let (service, launch) = Service::launching();
+        launch.settle(Err("the gglib daemon did not come up within 15s".to_owned()));
+        let grants = Grants::answering(|| Ok(Foreground::Allowed));
+        let granted = allow_service(
+            &service,
+            || panic!("the record was read with no service running"),
+            |pid| grants.allow(pid),
+        )
+        .await;
+        assert!(!granted);
+        assert_eq!(grants.asked(), Vec::<u32>::new());
+    }
+
+    /// Windows refusing, and an OS with no such right, are both no grant:
+    /// the page then posts the repair as it would have.
+    #[tokio::test]
+    async fn a_refusal_or_no_such_right_is_no_grant() {
+        let refused = Grants::answering(|| Err(std::io::Error::from_raw_os_error(5)));
+        assert!(!allow_service(&running(), || Some(4242), |pid| refused.allow(pid)).await);
+        assert_eq!(refused.asked(), [4242]);
+
+        let none = Grants::answering(|| Ok(Foreground::NotNeeded));
+        assert!(!allow_service(&running(), || Some(4242), |pid| none.allow(pid)).await);
+        assert_eq!(none.asked(), [4242]);
     }
 }

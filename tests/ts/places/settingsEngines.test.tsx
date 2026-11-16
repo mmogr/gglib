@@ -19,7 +19,8 @@
  * test loads the app afresh.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
@@ -494,6 +495,75 @@ describe('the engine rows', () => {
 
     await waitFor(() => expect(fake.streams.llama).toHaveLength(1));
     expect(fake.repaired).toEqual([]);
+  });
+
+  describe("Windows' permission prompt, in front", () => {
+    /** Each request in the order it was made: the app's commands and the daemon's repair. */
+    let sent: string[];
+
+    beforeEach(() => {
+      sent = [];
+      fake.statuses.llama = [
+        status('llama', 'atPin', { broken: 'llama-server cannot start: a library it needs is missing.', fix: RUNTIME_FIX }),
+      ];
+      fake.repair = async () => {
+        sent.push('repair');
+        return { outcome: 'installed', works: true, says: RUNTIME_SAYS };
+      };
+      vi.mocked(invoke).mockImplementation(async (command: string) => {
+        sent.push(command);
+        return true;
+      });
+    });
+
+    afterEach(() => {
+      delete window.__TAURI_INTERNALS__;
+      vi.mocked(invoke).mockReset();
+    });
+
+    /** The desktop app's bridge, as Tauri puts it on the window. */
+    const inTheApp = () => {
+      window.__TAURI_INTERNALS__ = {
+        invoke: vi.fn(async (command: string) => (command === 'get_embedded_api_info' ? { port: 9887, token: null } : undefined)) as never,
+      };
+    };
+
+    it('in the app, lets the service bring the prompt to the front before it posts the repair', async () => {
+      inTheApp();
+      renderApp('/settings/engines');
+      const r = await row('llama.cpp');
+
+      await userEvent.click(await r.findByRole('button', { name: 'Repair' }));
+
+      expect(await r.findByText(RUNTIME_SAYS)).toBeInTheDocument();
+      expect(sent.filter((s) => s === 'allow_service_foreground' || s === 'repair')).toEqual(['allow_service_foreground', 'repair']);
+    });
+
+    it('in the app, posts the repair even when the grant fails', async () => {
+      inTheApp();
+      vi.mocked(invoke).mockImplementation(async (command: string) => {
+        sent.push(command);
+        throw new Error('the app could not grant it');
+      });
+      renderApp('/settings/engines');
+      const r = await row('llama.cpp');
+
+      await userEvent.click(await r.findByRole('button', { name: 'Repair' }));
+
+      expect(await r.findByText(RUNTIME_SAYS)).toBeInTheDocument();
+      expect(sent.filter((s) => s === 'allow_service_foreground' || s === 'repair')).toEqual(['allow_service_foreground', 'repair']);
+    });
+
+    it('in a browser, posts the repair with nothing to grant, and keeps where to look', async () => {
+      renderApp('/settings/engines');
+      const r = await row('llama.cpp');
+
+      expect(await r.findByText(RUNTIME_FIX.offer)).toBeInTheDocument();
+      await userEvent.click(r.getByRole('button', { name: 'Repair' }));
+
+      expect(await r.findByText(RUNTIME_SAYS)).toBeInTheDocument();
+      expect(sent).toEqual(['repair']);
+    });
   });
 
   it("says how Windows repairs a damaged runtime, with no button that would install it again", async () => {

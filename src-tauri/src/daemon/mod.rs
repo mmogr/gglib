@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 
+mod holder;
 mod launch;
 mod service;
 mod snapshot;

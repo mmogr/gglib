@@ -460,6 +460,32 @@ mod windows {
         unsafe { SetErrorMode(GetErrorMode() | QUIET) };
     }
 
+    // ---- The foreground right, for Windows' permission prompt (#2046) ----
+
+    #[cfg(test)]
+    mod foreground_tests {
+        use windows_sys::Win32::System::Threading::GetCurrentProcessId;
+        use windows_sys::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
+
+        use super::allow_set_foreground;
+
+        /// For this process's own id the answer is Windows' own: granted
+        /// when Windows grants, refused when it refuses. Which of the two a
+        /// test runner gets depends on its desktop, so this holds the
+        /// answer to Windows' and proves no grant.
+        #[test]
+        fn the_answer_for_this_process_is_windows_own() {
+            let ours = allow_set_foreground(std::process::id());
+            // SAFETY: both take and return plain values. A second grant to
+            // the same process keeps the first ("unless the same process is
+            // specified as in the previous call"), so it is asked the same
+            // question.
+            let windows = unsafe { AllowSetForegroundWindow(GetCurrentProcessId()) } != 0;
+            assert_eq!(ours.is_ok(), windows, "{ours:?}");
+        }
+    }
+    // ---- end of the foreground right ----
+
     #[cfg(test)]
     mod tests {
         use std::ptr;

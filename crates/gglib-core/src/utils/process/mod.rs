@@ -2,6 +2,7 @@
 
 pub mod bounded;
 pub mod detached;
+pub mod foreground;
 pub mod held;
 pub mod host;
 pub mod stop;
