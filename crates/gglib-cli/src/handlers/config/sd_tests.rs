@@ -15,6 +15,7 @@ fn status(install_type: Option<&str>) -> SdStatus {
     SdStatus {
         installed,
         health_error: None,
+        fix: None,
         binary_path: "/data/.sd/bin/sd-server".to_owned(),
         config_path: "/data/.sd/sd-config.json".to_owned(),
         pinned_release: "master-948-228c707".to_owned(),

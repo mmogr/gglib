@@ -98,31 +98,34 @@ fn check_deps_prints_each_tool_under_what_it_is_for() {
         "stdout: {stdout}\nstderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
+    // Every state and every note starts in one column for every group: the
+    // first after the widest name (` stable-diffusion.cpp`) and the widest
+    // state.
     assert_eq!(
         rows_under("Building gglib from source", 4),
         [
-            "*cargo               ✓ v1.97.1        Builds gglib's Rust code",
-            "*rustc               ✓ v1.97.1        The Rust compiler",
-            "*node                ✓ v22.12.0       Builds the web UI and the desktop app",
-            "*npm                 ✓ v10.9.0        Installs the web UI's packages",
+            "*cargo                ✓ v1.97.1       Builds gglib's Rust code",
+            "*rustc                ✓ v1.97.1       The Rust compiler",
+            "*node                 ✓ v22.12.0      Builds the web UI and the desktop app",
+            "*npm                  ✓ v10.9.0       Installs the web UI's packages",
         ],
         "{explain}"
     );
     assert_eq!(
         rows_under("Building an engine from source", 6),
         [
-            "*git                 ✓ v2.39.5        Fetches an engine's source",
-            "*cmake               ✓ v3.28.1        Configures an engine's build",
-            "*make                ✓ v4.4.1         Runs the build cmake writes",
-            "*C++ compiler        ✓ v18.1.3        Compiles an engine",
-            "*pkg-config          ✓ v0.29.2        Finds the system libraries an engine links",
-            "*libssl-dev          ✓ v3.0.13        llama.cpp's HTTPS support (development files)",
+            "*git                  ✓ v2.39.5       Fetches an engine's source",
+            "*cmake                ✓ v3.28.1       Configures an engine's build",
+            "*make                 ✓ v4.4.1        Runs the build cmake writes",
+            "*C++ compiler         ✓ v18.1.3       Compiles an engine",
+            "*pkg-config           ✓ v0.29.2       Finds the system libraries an engine links",
+            "*libssl-dev           ✓ v3.0.13       llama.cpp's HTTPS support (development files)",
         ],
         "{explain}"
     );
     assert!(
         stdout.contains(
-            " python3             ✓ v3.12.1        Turns on the optional hf_xet download accelerator"
+            " python3              ✓ v3.12.1       Turns on the optional hf_xet download accelerator"
         ),
         "{explain}"
     );
@@ -154,7 +157,7 @@ fn check_deps_reports_a_tool_that_is_absent_or_broken_as_missing() {
     let stdout = plain(&String::from_utf8_lossy(&out.stdout));
     assert!(!out.status.success(), "{stdout}");
     assert!(
-        stdout.contains("*cargo               ✓ v1.97.1        Builds gglib's Rust code"),
+        stdout.contains("*cargo                ✓ v1.97.1       Builds gglib's Rust code"),
         "{stdout}"
     );
     for missing in ["*rustc ", "*git ", "*cmake "] {

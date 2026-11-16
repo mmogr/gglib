@@ -17,7 +17,9 @@ use gglib_mcp::McpService;
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, Absent, DaemonHandle};
 use crate::mcp_commands::McpCommand;
-use crate::presentation::{print_separator, truncate_string};
+use crate::presentation::table_layout::{Column, Shorten, Table};
+use crate::presentation::terminal::stdout_width;
+use crate::presentation::truncate_string;
 use crate::utils::input;
 
 /// Dispatch an MCP subcommand to its handler.
@@ -69,29 +71,39 @@ async fn list(ctx: &CliContext) -> Result<()> {
     }
 
     println!("Found {} MCP server(s):\n", servers.len());
-    println!(
-        "{:<4} {:<25} {:<9} {:<7} {:<11} {:<10} {:<6}",
-        "ID", "Name", "Enabled", "Remote", "Lifecycle", "Status", "Tools"
-    );
-    print_separator(76);
+    // In a narrow terminal the id, the name and the status stay; the
+    // lifecycle goes first, then whether it is shared with paired devices,
+    // the tool count, and whether it is enabled.
+    let mut table = Table::new(vec![
+        Column::new("ID").pad(4),
+        Column::new("Name")
+            .pad(25)
+            .shorten(Shorten::End { min: 12 }),
+        Column::new("Enabled").pad(9).droppable(4),
+        Column::new("Remote").pad(7).droppable(2),
+        Column::new("Lifecycle").pad(11).droppable(1),
+        Column::new("Status").pad(10),
+        Column::new("Tools").pad(6).droppable(3),
+    ])
+    .ruler('-');
 
     let daemon = daemon_servers().await;
     let mut failures = Vec::new();
     for s in &servers {
-        let yes_no = |on: bool| if on { "yes" } else { "no" };
-        let lifecycle_str = s.lifecycle.to_string();
-
-        println!(
-            "{:<4} {:<25} {:<9} {:<7} {:<11} {}",
-            s.id,
+        let yes_no = |on: bool| if on { "yes" } else { "no" }.to_owned();
+        let (status, tools) = status_and_tools(s, daemon.as_deref().ok());
+        table.row(vec![
+            s.id.to_string(),
             truncate_string(&s.name, 24),
             yes_no(s.enabled),
             yes_no(s.allow_remote),
-            lifecycle_str,
-            status_and_tools(s, daemon.as_deref().ok())
-        );
+            s.lifecycle.to_string(),
+            status,
+            tools,
+        ]);
         failures.extend(failure_line(s, daemon.as_deref().ok()));
     }
+    print!("{}", table.lay_out(stdout_width()).text());
     if !failures.is_empty() {
         println!();
         for line in failures {
@@ -125,11 +137,14 @@ async fn daemon_servers() -> Result<Vec<McpServerInfo>, String> {
 /// `daemon`'s list, its state in the word every surface uses, and a dash in
 /// each when there is no daemon to read. A failed server's reason is said
 /// under the table ([`failure_line`]).
-fn status_and_tools(server: &gglib_core::McpServer, daemon: Option<&[McpServerInfo]>) -> String {
+fn status_and_tools(
+    server: &gglib_core::McpServer,
+    daemon: Option<&[McpServerInfo]>,
+) -> (String, String) {
     let Some(info) = in_daemon(server, daemon) else {
-        return format!("{:<10} {:<6}", "—", "—");
+        return ("—".to_owned(), "—".to_owned());
     };
-    format!("{:<10} {:<6}", info.state.word(), info.tools.len())
+    (info.state.word().to_owned(), info.tools.len().to_string())
 }
 
 /// The daemon's copy of `server`, when there is a daemon to read.
@@ -279,17 +294,23 @@ async fn tools(ctx: &CliContext, identifier: &str) -> Result<()> {
     }
 
     println!("{} tool(s) from '{}':\n", tools.len(), server.name);
-    println!("{:<30} Description", "Name");
-    print_separator(75);
-
+    let mut table = Table::new(vec![
+        Column::new("Name")
+            .pad(30)
+            .shorten(Shorten::End { min: 16 }),
+        Column::new("Description")
+            .shorten(Shorten::End { min: 16 })
+            .droppable(1),
+    ])
+    .ruler('-');
     for tool in &tools {
         let desc = tool.description.as_deref().unwrap_or("(no description)");
-        println!(
-            "{:<30} {}",
+        table.row(vec![
             truncate_string(&tool.name, 29),
-            truncate_string(desc, 44)
-        );
+            truncate_string(desc, 44),
+        ]);
     }
+    print!("{}", table.lay_out(stdout_width()).text());
 
     Ok(())
 }

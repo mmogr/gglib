@@ -24,6 +24,7 @@ use super::launch::{LaunchRequest, LlamaResolutions, plan_llama, plan_sd};
 use super::{explain_args, prepare, vram};
 use crate::process::SpawnConfig;
 use crate::process::admission::Resident;
+use crate::system::FitMemory;
 
 /// What this machine would fit for a model, and what that answer worked from.
 ///
@@ -39,6 +40,27 @@ pub fn explain_fit(
     k: KvCacheType,
     v: KvCacheType,
 ) -> (Option<u64>, FitInputs) {
+    explain_fit_against(
+        crate::system::fit_memory(),
+        trained_ctx,
+        weights_bytes,
+        kv,
+        k,
+        v,
+    )
+}
+
+/// [`explain_fit`] against `memory`, the machine's reading lifted into a
+/// parameter so every shape of machine can be asserted on any one.
+#[must_use]
+pub(super) fn explain_fit_against(
+    memory: FitMemory,
+    trained_ctx: Option<u64>,
+    weights_bytes: Option<u64>,
+    kv: Option<KvShape>,
+    k: KvCacheType,
+    v: KvCacheType,
+) -> (Option<u64>, FitInputs) {
     // Captured through the seam rather than beside it. `fit_or_undivided`
     // tries the reserved budget and falls back to the undivided device, so the
     // *last* closure call is always the one that answered — and running the
@@ -46,6 +68,7 @@ pub fn explain_fit(
     // no test could tell had drifted. `FitInputs` is `Copy`, so a `Cell` is
     // enough to carry it back out of an `Fn`.
     let captured = std::cell::Cell::new(None);
+    let undivided = memory.budget_bytes();
     let fitted = fit_or_undivided(
         |budget| {
             let (rung, inputs) =
@@ -53,12 +76,13 @@ pub fn explain_fit(
             captured.set(Some(inputs));
             rung
         },
-        vram::fit_budget_for(),
-        crate::system::total_device_memory_bytes(),
+        undivided.map(vram::fit_budget_from),
+        undivided,
     );
-    let inputs = captured
+    let mut inputs = captured
         .into_inner()
         .expect("fit_or_undivided calls the closure at least once");
+    inputs.system_ram_bytes = memory.system_ram_bytes();
     (fitted, inputs)
 }
 

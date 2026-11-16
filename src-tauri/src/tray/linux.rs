@@ -148,10 +148,9 @@ pub(super) struct Handle(ServiceHandle<GglibTray>);
 pub(super) fn build(app: &AppHandle) -> Result<Handle, String> {
     let tray = GglibTray {
         app: app.clone(),
-        // Nothing has been polled yet, and the default says so: the tray
-        // starts out reading "not running" rather than asserting a state it
-        // cannot know.
-        snapshot: DaemonSnapshot::default(),
+        // Built before the app's launch of the daemon has an answer, and
+        // says so: "starting", never "not running" for a daemon on its way.
+        snapshot: DaemonSnapshot::starting(),
     };
 
     // Blocking here matches the rest of `setup_app`, which is not itself inside

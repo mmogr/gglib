@@ -13,7 +13,9 @@
  * the sentence in the app's words; elsewhere it is drawn disabled. The poll in
  * `useDaemonReachable` notices it coming back, and Turn on becomes live.
  * Before the first answer, and until the registries have heard the
- * daemon, the panel claims neither.
+ * daemon, the panel claims neither; in the desktop app, while the app's
+ * lookup of the daemon's address is still out (its launch of the daemon is
+ * in flight), it says gglib is starting (`useAddressLookup`).
  *
  * The panel is its own window with none of the app's providers
  * (`tray-main.tsx`), so it starts its own bridges for the registries it
@@ -35,6 +37,7 @@
 
 import { useEffect, useState, type FC } from 'react';
 import { Button } from '../components/ui/Button';
+import { STARTING_WORDS, useAddressLookup } from '../hooks/useAddressLookup';
 import { useDaemonRecovery } from '../hooks/useDaemonRecovery';
 import { useServers } from '../hooks/useServers';
 import { useEndpointActions } from '../places/endpoint/useEndpointActions';
@@ -55,6 +58,7 @@ export const TrayPanel: FC = () => {
   // The daemon going lets go of what the registries held; its coming back
   // wakes the stream, whose opening reads them again (`useDaemonRecovery`).
   const reachable = useDaemonRecovery();
+  const lookup = useAddressLookup();
   const facts = useEndpointFacts();
   const dash = useEndpointDashboard();
   const actions = useEndpointActions();
@@ -115,6 +119,11 @@ export const TrayPanel: FC = () => {
       <span className="shrink-0 px-md pt-md text-sm font-semibold text-text">gglib</span>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {reachable === null && isDesktop() && lookup.state !== 'known' && (
+          <p role="status" className="m-0 px-md py-md text-sm text-text-secondary">
+            {STARTING_WORDS}
+          </p>
+        )}
         {reachable === false && (
           <div className="flex flex-col gap-sm px-md py-md">
             <p className="m-0 text-sm text-text-secondary">

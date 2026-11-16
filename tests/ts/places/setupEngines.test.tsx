@@ -5,7 +5,9 @@
  * stable-diffusion.cpp's a warning (SU-2); a stream that closes without a
  * result ending with a reason; the source build's sentence, Check again,
  * and the poll that finds the build; faster downloads set up where Python
- * 3 is there and not otherwise; and an unreadable engine with Retry.
+ * 3 is there and not otherwise; an unreadable engine with Retry; and an
+ * engine that does not work, with Repair where gglib can repair it, holding
+ * Continue until llama.cpp works.
  *
  * The install stream is played by the test through the callbacks
  * `streamEngineInstall` was handed.
@@ -28,6 +30,7 @@ const api = vi.hoisted(() => ({
   getSetupStatus: vi.fn(async (): Promise<unknown> => ({})),
   getEngineStatus: vi.fn(async (_k: string): Promise<unknown> => ({})),
   streamEngineInstall: vi.fn(),
+  repairEngine: vi.fn(async (_k: string): Promise<unknown> => ({})),
   enableFastDownloads: vi.fn(async () => {}),
   getRecommendedModel: vi.fn(async (): Promise<unknown> => null),
 }));
@@ -73,7 +76,7 @@ const line = (region: HTMLElement, name: string) => within(region).getByRole('gr
 
 describe("setup's engines", () => {
   beforeEach(() => {
-    for (const mock of [...Object.values(transport), api.getSetupStatus, api.getEngineStatus, api.enableFastDownloads]) mock.mockClear();
+    for (const mock of [...Object.values(transport), api.getSetupStatus, api.getEngineStatus, api.enableFastDownloads, api.repairEngine]) mock.mockClear();
     api.streams = [];
     reads = { llama: [engine('llama')], stable_diffusion: [engine('stable_diffusion')] };
     api.getEngineStatus.mockImplementation(async (kind: string) => {
@@ -230,6 +233,54 @@ describe("setup's engines", () => {
     expect(await within(llama).findByText('Installed, not working')).toBeInTheDocument();
     expect(within(llama).getByText('Installed, not working').closest('[data-kind]')).toHaveAttribute('data-kind', 'failed');
     expect(within(llama).getByRole('alert')).toHaveTextContent('llama-server exited: missing libggml');
+  });
+
+  it('offers Repair on each engine gglib can repair, holds Continue until llama.cpp works, and reads both working after', async () => {
+    const reason = (server: string) => `${server} cannot start: a library it needs is missing.`;
+    const fix = {
+      fix: 'install_visual_cpp_runtime',
+      offer: 'gglib can install the Microsoft Visual C++ Redistributable (x64) from Microsoft. Windows will ask for permission; if no question appears, look for a flashing shield on the taskbar.',
+      action: 'Repair',
+      waiting: "Waiting for Windows' permission to install the Microsoft Visual C++ Redistributable (x64); if no question appears, look for a flashing shield on the taskbar.",
+    } as const;
+    const says = 'Installed the Microsoft Visual C++ Redistributable (x64). llama-server works now.';
+    answer('llama', engine('llama', true, { broken: reason('llama-server'), fix }));
+    answer('stable_diffusion', engine('stable_diffusion', true, { broken: reason('sd-server'), fix }));
+    api.repairEngine.mockImplementation(async () => {
+      answer('llama', engine('llama', true));
+      answer('stable_diffusion', engine('stable_diffusion', true));
+      return { outcome: 'installed', works: true, says };
+    });
+    const { user, region } = await reachEngines();
+    const llama = line(region, 'llama.cpp');
+    const drawing = line(region, 'stable-diffusion.cpp (for drawing)');
+
+    expect(await within(llama).findByText(fix.offer)).toBeInTheDocument();
+    expect(within(llama).getByRole('alert')).toHaveTextContent(reason('llama-server'));
+    expect(within(drawing).getByRole('status')).toHaveTextContent(reason('sd-server'));
+    expect(within(drawing).getByText(fix.offer)).toBeInTheDocument();
+    expect(within(region).getByRole('button', { name: 'Continue' })).toBeDisabled();
+    expect(within(region).getByRole('button', { name: 'Skip' })).toBeInTheDocument();
+
+    await user.click(within(llama).getByRole('button', { name: 'Repair' }));
+
+    expect(api.repairEngine).toHaveBeenCalledWith('llama');
+    expect(await within(llama).findByText(says)).toBeInTheDocument();
+    expect(within(llama).queryByText('Installed, not working')).not.toBeInTheDocument();
+    expect(within(llama).getByText('Installed')).toBeInTheDocument();
+    expect(within(drawing).queryByText('Installed, not working')).not.toBeInTheDocument();
+    expect(within(region).queryByRole('button', { name: 'Repair' })).not.toBeInTheDocument();
+    expect(within(region).getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it('holds Continue while llama.cpp is installed and not working, with no repair', async () => {
+    answer('llama', engine('llama', true, { broken: 'llama-server failed when asked `--version`: it was ended by a signal' }));
+    answer('stable_diffusion', engine('stable_diffusion', true));
+    const { region } = await reachEngines();
+
+    expect(await within(line(region, 'llama.cpp')).findByText('Installed, not working')).toBeInTheDocument();
+    expect(within(region).getByRole('button', { name: 'Continue' })).toBeDisabled();
+    expect(within(region).queryByRole('button', { name: 'Repair' })).not.toBeInTheDocument();
   });
 
   it('shows what it reads under StrictMode, as a development build renders it', async () => {

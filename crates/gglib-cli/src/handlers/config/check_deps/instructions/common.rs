@@ -3,11 +3,13 @@
 // Re-export from the centralised style module so sibling instruction files
 // can continue to use `super::common::{BOLD, RESET}`.
 pub(super) use crate::presentation::style::{BOLD, INFO, RESET};
+use crate::presentation::table_layout::rule;
+use crate::presentation::terminal::stdout_width;
 
 /// Print a section header for installation instructions.
 pub(super) fn print_header(title: &str) {
     println!("\n{BOLD}{INFO}Installation Instructions ({title}):{RESET}");
-    println!("{}", "=".repeat(60));
+    println!("{}", rule('=', 60, stdout_width()));
 }
 
 /// Print a command with proper formatting.

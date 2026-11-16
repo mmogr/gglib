@@ -85,9 +85,9 @@ fn build_inner(app: &AppHandle) -> tauri::Result<Handle> {
     let mut separators = Vec::new();
     let mut order: Vec<(bool, usize)> = Vec::new();
 
-    // Nothing has been polled yet, and the default says so: the tray starts
-    // out reading "not running" rather than asserting a state it cannot know.
-    let initial = DaemonSnapshot::default();
+    // Built before the app's launch of the daemon has an answer, and says
+    // so: "starting", never "not running" for a daemon on its way.
+    let initial = DaemonSnapshot::starting();
     let status = icon::derive(&initial).status;
 
     for item in ITEMS {

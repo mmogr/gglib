@@ -29,6 +29,7 @@ const FIELDS: Record<keyof ContextFit, true> = {
   source: true,
   fitted: true,
   budgetBytes: true,
+  systemRamBytes: true,
   weightsBytes: true,
   kvBytesPerToken: true,
   kvBytes: true,

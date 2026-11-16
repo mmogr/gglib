@@ -25,8 +25,9 @@ pub struct ServeConfig {
     pub listener: TcpListener,
     /// Default context size, for a request that does not name one.
     pub default_ctx: Option<u64>,
-    /// Whether this machine's device memory can be read, and therefore
-    /// whether a launch with nothing configured gets a context fitted to it.
+    /// Whether this machine's memory can be read for a fit (a GPU's, or with
+    /// no GPU its RAM), and therefore whether a launch with nothing
+    /// configured gets a context fitted to it.
     /// The caller says, because this crate has no probe and cannot depend on
     /// the crate that does.
     pub device_memory_readable: bool,

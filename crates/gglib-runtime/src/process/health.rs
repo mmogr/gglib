@@ -63,6 +63,40 @@ pub(crate) const fn launch_deadline_secs(weights_bytes: u64) -> u64 {
     }
 }
 
+/// The error [`wait_for_http_health`] gives when its wait is up: the server
+/// may still be loading. A launch tells it from the wait's other errors
+/// by downcasting.
+#[derive(Debug, thiserror::Error)]
+#[error("{server} was not ready within {timeout_secs}s on port {port} (after {attempt} probes)")]
+pub(crate) struct NotReadyInTime {
+    server: &'static str,
+    /// How long it was given.
+    pub(crate) timeout_secs: u64,
+    port: u16,
+    attempt: u32,
+}
+
+/// The error [`wait_for_http_health`] gives when another program answers
+/// on the port: a 200 that is not this runtime's server, or a 403 or 404.
+#[derive(Debug, thiserror::Error)]
+#[error("another program answers on port {port}, where {server} was to listen")]
+pub(crate) struct PortHeld {
+    server: &'static str,
+    /// The port.
+    pub(crate) port: u16,
+}
+
+#[cfg(test)]
+impl PortHeld {
+    /// llama-server's port `port`, held by another program.
+    pub(crate) const fn for_test(port: u16) -> Self {
+        Self {
+            server: "llama-server",
+            port,
+        }
+    }
+}
+
 /// Wait for a freshly spawned server to answer its health probe.
 ///
 /// Polls `runtime`'s [`health_path`](RuntimeKind::health_path) until it
@@ -107,9 +141,7 @@ pub async fn wait_for_http_health(
                             }
                             debug!("Health check returned unexpected response: {}", body);
                             if attempt > 5 {
-                                return Err(anyhow::anyhow!(
-                                    "Port {port} is responding but doesn't appear to be {server}"
-                                ));
+                                return Err(PortHeld { server, port }.into());
                             }
                         }
                         Err(e) => {
@@ -124,9 +156,8 @@ pub async fn wait_for_http_health(
 
                     // If we get a clear error from wrong service, fail faster
                     if (status.as_u16() == 403 || status.as_u16() == 404) && attempt > 3 {
-                        return Err(anyhow::anyhow!(
-                            "Port {port} appears to be in use by another service (status {status}). Try using a different port range."
-                        ));
+                        debug!(%status, "another service answers on port {port}");
+                        return Err(PortHeld { server, port }.into());
                     }
                 }
             }
@@ -136,9 +167,13 @@ pub async fn wait_for_http_health(
         }
 
         if tokio::time::Instant::now() >= deadline {
-            return Err(anyhow::anyhow!(
-                "{server} failed to start within {timeout_secs}s on port {port} (after {attempt} probes). Check if the port is available."
-            ));
+            return Err(NotReadyInTime {
+                server,
+                timeout_secs,
+                port,
+                attempt,
+            }
+            .into());
         }
     }
 }

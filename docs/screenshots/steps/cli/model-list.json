@@ -1,5 +1,5 @@
 {
- "cols": 88,
+ "cols": 240,
  "rows": 30,
  "env": {
   "GGLIB_DATA_DIR": "~/.local/share/gglib-demo",

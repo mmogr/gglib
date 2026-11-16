@@ -6,42 +6,79 @@ use gglib_core::ports::SystemProbePort;
 use gglib_core::utils::system::{Dependency, DependencyReport, DependencyStatus};
 
 use crate::presentation::style::{BOLD, DANGER, DIM, RESET, SUCCESS, WARNING};
-
-const RULE_WIDTH: usize = 85;
+use crate::presentation::table_layout::{Column, Shorten, Table, rule, wrap};
+use crate::presentation::terminal::stdout_width;
 
 /// The report as `check-deps` prints it: each group's heading and what it
 /// says about this gglib, its rows, then the conclusion. Every word comes from
-/// the report, which is also what the app's diagnostics show.
-pub(super) fn render_report(report: &DependencyReport) -> String {
-    let mut out = String::new();
-    let _ = writeln!(
-        out,
-        "{BOLD}{:<20} {:<15} {:<50}{RESET}",
-        "DEPENDENCY", "STATUS", "NOTES"
-    );
-    let _ = writeln!(out, "{}", "=".repeat(RULE_WIDTH));
+/// the report, which is also what the app's diagnostics show. The rows of
+/// every group are one table, so their columns line up across groups; it
+/// fits `width`, the terminal's, or is whole when there is none. A note
+/// wraps before it is dropped; a name and a state are never shortened.
+pub(super) fn render_report(report: &DependencyReport, width: Option<usize>) -> String {
+    let mut table = Table::new(vec![
+        Column::new("DEPENDENCY").pad(20),
+        Column::new("STATUS").pad(15),
+        Column::new("NOTES")
+            .shorten(Shorten::Wrap { min: 20 })
+            .droppable(1),
+    ])
+    .ruler('=');
+    for group in &report.groups {
+        for dep in &group.dependencies {
+            table.row(dependency_cells(dep));
+        }
+    }
+    let laid = table.lay_out(width);
+    let closing = laid
+        .ruler
+        .clone()
+        .unwrap_or_else(|| rule('=', width.unwrap_or_default(), width));
 
+    let mut out = String::new();
+    if let Some(header) = &laid.header {
+        let _ = writeln!(out, "{BOLD}{header}{RESET}");
+    }
+    if let Some(ruler) = &laid.ruler {
+        let _ = writeln!(out, "{ruler}");
+    }
+    let mut rows = laid.rows.iter();
     for group in &report.groups {
         let _ = writeln!(out, "\n{BOLD}{}{RESET}", group.title);
-        let _ = writeln!(out, "{DIM}{}{RESET}", group.explanation);
-        for dep in &group.dependencies {
-            let _ = writeln!(out, "{}", dependency_row(dep));
+        for line in prose(&group.explanation, width) {
+            let _ = writeln!(out, "{DIM}{line}{RESET}");
+        }
+        for row in rows.by_ref().take(group.dependencies.len()) {
+            if laid.is_blocks() {
+                out.push('\n');
+            }
+            for line in row {
+                let _ = writeln!(out, "{line}");
+            }
         }
     }
 
-    let _ = writeln!(out, "\n{}", "=".repeat(RULE_WIDTH));
-    let verdict = report.verdict();
-    if report.missing().is_empty() {
-        let _ = writeln!(out, "{SUCCESS}✓ {verdict}{RESET}");
+    let _ = writeln!(out, "\n{closing}");
+    let (colour, mark) = if report.missing().is_empty() {
+        (SUCCESS, '✓')
     } else {
-        let _ = writeln!(out, "{DANGER}✗ {verdict}{RESET}");
+        (DANGER, '✗')
+    };
+    for line in prose(&format!("{mark} {}", report.verdict()), width) {
+        let _ = writeln!(out, "{colour}{line}{RESET}");
     }
     out
 }
 
-/// A single dependency row of the status table. A `*` marks what this gglib
-/// needs; the state is [`Dependency::status_word`], the app's word too.
-fn dependency_row(dep: &Dependency) -> String {
+/// A sentence of the report, wrapped to `width` when there is one.
+fn prose(text: &str, width: Option<usize>) -> Vec<String> {
+    width.map_or_else(|| vec![text.to_owned()], |width| wrap(text, width))
+}
+
+/// A single dependency row of the status table, one cell per column. A `*`
+/// marks what this gglib needs; the state is [`Dependency::status_word`],
+/// the app's word too.
+fn dependency_cells(dep: &Dependency) -> Vec<String> {
     let word = dep.status_word();
     let status_str = match &dep.status {
         DependencyStatus::Present { .. } => format!("{SUCCESS}✓ {word}{RESET}"),
@@ -57,10 +94,11 @@ fn dependency_row(dep: &Dependency) -> String {
         " ".to_string()
     };
 
-    format!(
-        "{}{:<19} {:<25} {}",
-        req_indicator, dep.name, status_str, dep.description
-    )
+    vec![
+        format!("{req_indicator}{}", dep.name),
+        status_str,
+        dep.description.clone(),
+    ]
 }
 
 /// Print GPU detection status and recommendations. `builds_engine` is
@@ -70,7 +108,7 @@ pub(super) fn print_gpu_status(probe: &dyn SystemProbePort, builds_engine: bool)
     let gpu_info = probe.detect_gpu_info();
 
     println!("\n{BOLD}GPU Detection:{RESET}");
-    println!("{}", "-".repeat(40));
+    println!("{}", rule('-', 40, stdout_width()));
 
     if gpu_info.has_nvidia_gpu {
         println!("  {SUCCESS}✓ NVIDIA GPU detected{RESET}");

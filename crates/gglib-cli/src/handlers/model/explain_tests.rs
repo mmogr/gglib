@@ -250,24 +250,40 @@ async fn the_launch_is_the_runtimes_plan_through_the_one_shot_runtime() {
         "{:?}",
         explanation.plan.args
     );
-    // The fit sentence the runtime served, over the figures: this fixture's
-    // header says neither what its context costs nor its trained window.
-    // Whether this machine's memory is read depends on where the test runs,
-    // so that reason may come first.
-    let Some((sentence, _)) = text
-        .split("\nContext\n  ")
-        .nth(1)
-        .and_then(|rest| rest.split_once("\n  serves at"))
-    else {
-        panic!("{text}")
-    };
+    // The context section is the plan's own fit, words and figures, as
+    // `context_text` draws it. What the fit says of memory is this
+    // machine's (a GPU's, RAM's with no GPU, or unreadable), so the
+    // sentence for each is asserted where the memory is passed in
+    // (gglib-runtime's `machine_fit_tests`, gglib-core's fit-sentence
+    // tests), not here.
+    let fit = explanation
+        .plan
+        .fit
+        .as_ref()
+        .expect("a chat model has a fit");
     assert!(
-        sentence.starts_with("Serves at 4K context; gglib could not fit one to this machine: "),
+        text.contains(&format!("\n{}", launch_display::context_text(fit))),
         "{text}"
     );
+    // What this fixture's header leaves out decides the rest on any
+    // machine: it says neither what its context costs nor its trained
+    // window, so nothing is fitted, the floor is served, and the refusal
+    // names the header.
+    assert_eq!(
+        (fit.serves_at, fit.source, fit.fitted),
+        (
+            4096,
+            gglib_core::server_config::ContextSizeSource::BuiltInDefault,
+            None
+        )
+    );
     assert!(
-        sentence
-            .ends_with("the model does not say what its context costs or what it was trained for."),
-        "{text}"
+        fit.sentence
+            .starts_with("Serves at 4K context; gglib could not fit one to this machine")
+            && fit.sentence.ends_with(
+                "the model does not say what its context costs or what it was trained for."
+            ),
+        "{}",
+        fit.sentence
     );
 }

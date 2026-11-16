@@ -141,6 +141,11 @@ pub struct LaunchFit {
     /// Device memory the fit was allowed to spend against.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub budget_bytes: Option<u64>,
+    /// The machine's system RAM, when it has no GPU and the budget above is
+    /// a share of that RAM; a hub older than the field leaves it out.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    #[serde(default)]
+    pub system_ram_bytes: Option<u64>,
     /// The weights, summed across shards, plus the projector when linked.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub weights_bytes: Option<u64>,
@@ -176,6 +181,7 @@ impl From<ContextFit> for LaunchFit {
             source,
             fitted,
             budget_bytes,
+            system_ram_bytes,
             weights_bytes,
             kv_bytes_per_token,
             kv_bytes,
@@ -190,6 +196,7 @@ impl From<ContextFit> for LaunchFit {
             source,
             fitted,
             budget_bytes,
+            system_ram_bytes,
             weights_bytes,
             kv_bytes_per_token,
             kv_bytes,
@@ -321,6 +328,7 @@ mod tests {
             Some(32_768),
             &FitInputs {
                 budget_bytes: Some(48 << 30),
+                system_ram_bytes: None,
                 weights_bytes: Some(2_500_000_000),
                 kv: Some(KvBytes::uniform(1_097_000)),
                 trained_ctx: Some(131_072),
@@ -341,7 +349,7 @@ mod tests {
         };
         let want: serde_json::Map<String, serde_json::Value> =
             camel.into_iter().map(|(k, v)| (snake(&k), v)).collect();
-        assert_eq!(want.len(), 12, "a field went missing from the fit itself");
+        assert_eq!(want.len(), 13, "a field went missing from the fit itself");
         assert!(want.contains_key("kv_bytes_per_token"));
         assert_eq!(
             serde_json::to_value(LaunchFit::from(fit)).unwrap(),

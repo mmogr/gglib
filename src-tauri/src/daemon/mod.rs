@@ -1,11 +1,13 @@
 #![doc = include_str!("README.md")]
 
 mod launch;
+mod service;
 mod snapshot;
 mod token;
 mod watch;
 
 use launch::spawn_external_daemon;
+pub(crate) use service::{Launch, Service, Started};
 pub(crate) use snapshot::DaemonSnapshot;
 pub(crate) use token::daemon_token;
 pub(crate) use watch::{Refresh, spawn as watch};
@@ -14,13 +16,17 @@ use std::time::Duration;
 
 use gglib_app_services::types::AppSettings;
 use gglib_core::daemon_port;
+use tauri::Manager;
 use tracing::{error, info, warn};
 
 /// One identity probe's budget.
 const PROBE_TIMEOUT: Duration = Duration::from_millis(500);
 
 /// How long to wait for a launched (or in-process) daemon to come up.
-const LAUNCH_WAIT: Duration = Duration::from_secs(15);
+///
+/// With the first probe before it and the last poll after it, a launch
+/// settles a little over this after it begins (about 16.25 s at most).
+pub(crate) const LAUNCH_WAIT: Duration = Duration::from_secs(15);
 
 /// How this app came by the daemon it is talking to.
 ///
@@ -38,8 +44,10 @@ pub(crate) enum Ownership {
     /// Running inside this process (bundle-only fallback). Its lifetime is
     /// this app's whether we like it or not.
     Hosted,
-    /// Nothing was reachable when the app started, and nothing has been
-    /// claimed since. The app runs anyway — see [`Daemon::disconnected`].
+    /// Not known yet (a launch is in flight), or the launch failed and
+    /// nothing has been claimed since. The app runs anyway, and a daemon
+    /// found later ([`Service::found`]) stays unresolved: not this app's to
+    /// stop.
     Unresolved,
 }
 
@@ -56,12 +64,14 @@ impl Ownership {
     }
 }
 
-/// A connected daemon.
+/// The app's daemon: the client it is reached through, and whether it is
+/// known yet.
 pub(crate) struct Daemon {
     /// Shared HTTP client for daemon calls.
     pub client: reqwest::Client,
-    /// How this app came by it — see [`Ownership`].
-    pub ownership: Ownership,
+    /// Whether a launch is in flight, and once not, how it ended and how
+    /// this app came by the daemon (see [`Ownership`]).
+    pub service: Service,
 }
 
 /// The daemon's base URL, on the loopback port `gglib_core::daemon_port`
@@ -91,39 +101,53 @@ async fn probe(client: &reqwest::Client) -> Probe {
 }
 
 impl Daemon {
-    /// A client for a daemon that is not there.
+    /// The app's daemon before anything is known about it, and the launch
+    /// that will find out ([`Self::connect_or_launch`]).
     ///
-    /// A port 9887 held by another program, or a `gglib daemon run` that died
-    /// on startup, leaves the app coming up disconnected rather than exiting
-    /// before `setup_app` has built a tray or shown a window: the tray exists,
-    /// reads "not running", and offers Start gglib.
-    ///
-    /// Every call made through this fails until a daemon answers, which is
-    /// exactly what the watcher reports as unreachable.
+    /// Needs nothing a window, the tray or the daemon provides, so the state
+    /// holding it is managed before any of them exists.
     #[must_use]
-    pub(crate) fn disconnected() -> Self {
-        Self {
+    pub(crate) fn new() -> (Self, Launch) {
+        let (service, launch) = Service::launching();
+        let daemon = Self {
             client: gglib_proxy::loopback::client(),
-            ownership: Ownership::Unresolved,
-        }
+            service,
+        };
+        (daemon, launch)
     }
 
-    /// Find the daemon, launching or hosting one if nothing is running.
+    /// How this app came by its daemon, once the launch in flight (if any)
+    /// has settled, whether or not it came up: a failed Start gglib keeps
+    /// the ownership of the daemon it replaced. The wait is the launch's own
+    /// budget at most.
+    pub(crate) async fn ownership(&self) -> Ownership {
+        self.service.ownership().await
+    }
+
+    /// Find the daemon, launching or hosting one if nothing is running, and
+    /// settle `launch` with how that ended.
+    ///
+    /// A daemon that will not start is a state, not a crash: the window and
+    /// the tray are already up, the page is told why, and the tray offers
+    /// Start gglib.
     ///
     /// # Errors
     ///
     /// Fails when the port is held by a foreign program, or when neither an
     /// external launch nor the in-process fallback becomes healthy in time.
-    pub(crate) async fn connect_or_launch() -> Result<Self, String> {
-        let client = gglib_proxy::loopback::client();
+    pub(crate) async fn connect_or_launch(&self, launch: Launch) -> Result<Ownership, String> {
+        let outcome = self.find_or_start().await;
+        launch.settle(outcome.clone());
+        outcome
+    }
 
-        match probe(&client).await {
+    async fn find_or_start(&self) -> Result<Ownership, String> {
+        let client = &self.client;
+
+        match probe(client).await {
             Probe::Running => {
                 info!("connected to running gglib daemon");
-                return Ok(Self {
-                    client,
-                    ownership: Ownership::Adopted,
-                });
+                return Ok(Ownership::Adopted);
             }
             Probe::Foreign => {
                 return Err(format!(
@@ -154,9 +178,9 @@ impl Daemon {
             }
         };
 
-        wait_until_healthy(&client).await?;
+        wait_until_healthy(client).await?;
 
-        Ok(Self { client, ownership })
+        Ok(ownership)
     }
 
     /// Start a daemon again after one has been stopped.
@@ -171,27 +195,52 @@ impl Daemon {
     /// toward leaving it alone at quit, which is the safe direction to be
     /// wrong in.
     ///
-    /// # Errors
+    /// While it runs, the page's question of where the daemon is waits for
+    /// the new one. A start asked for while a launch is already in flight
+    /// (the app's own, or another Start gglib) starts nothing and answers
+    /// with that launch's outcome, as [`Started::Joined`]: that launch's
+    /// owner reports its failure, so one failure is reported once.
     ///
-    /// Fails when one is already running, when the port is held by a foreign
-    /// program, when no `gglib` binary can be found, or when the launched
-    /// daemon does not become healthy in time.
-    pub(crate) async fn restart(&self) -> Result<(), String> {
+    /// It fails when one is already running, when the port is held by a
+    /// foreign program, when no `gglib` binary can be found, or when the
+    /// launched daemon does not become healthy in time.
+    pub(crate) async fn restart(&self) -> Started {
+        match self.service.begin() {
+            Some(launch) => Started::Ran(self.relaunch(launch).await),
+            None => self.service.join().await,
+        }
+    }
+
+    /// Launch an external daemon again, and settle `launch` with how it went.
+    async fn relaunch(&self, launch: Launch) -> Result<(), String> {
+        let keeps = launch.before();
+
         match probe(&self.client).await {
-            Probe::Running => return Err("the gglib daemon is already running".to_owned()),
+            Probe::Running => {
+                // It is there: the page may go on asking it.
+                launch.settle(Ok(keeps));
+                return Err("the gglib daemon is already running".to_owned());
+            }
             Probe::Foreign => {
-                return Err(format!(
+                let refusal = format!(
                     "port {} is held by another program (not a gglib daemon)",
                     daemon_port()
-                ));
+                );
+                launch.settle(Err(refusal.clone()));
+                return Err(refusal);
             }
             Probe::NotRunning => {}
         }
 
-        spawn_external_daemon()?;
-        info!("relaunched external gglib daemon");
-
-        wait_until_healthy(&self.client).await
+        let started = match spawn_external_daemon() {
+            Ok(()) => {
+                info!("relaunched external gglib daemon");
+                wait_until_healthy(&self.client).await
+            }
+            Err(e) => Err(e),
+        };
+        launch.settle(started.clone().map(|()| keeps));
+        started
     }
 
     /// GET a JSON value from the daemon.
@@ -262,6 +311,29 @@ impl Daemon {
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
     }
+}
+
+/// Run the app's first launch of its daemon beside the window, not before it.
+///
+/// Called from `setup` once the tray exists, so a failure is reported
+/// alongside the Start gglib entry that acts on it. Until it settles, the
+/// page's question of where the daemon is waits ([`Service`]).
+pub(crate) fn start(app: &tauri::AppHandle, launch: Launch) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<crate::app::AppState>();
+        let outcome = state.daemon.connect_or_launch(launch).await;
+        match &outcome {
+            Ok(ownership) => info!(?ownership, "daemon connection established"),
+            Err(e) => error!(error = %e, "Could not reach or start the gglib daemon"),
+        }
+        // Not while quitting: the user quit during the launch.
+        let failure =
+            Started::Ran(outcome.map(drop)).failure_to_report(crate::lifecycle::is_shutting_down());
+        if let Some(e) = failure {
+            crate::tray::report_failure(&app, "gglib is not running", &e);
+        }
+    });
 }
 
 /// Whether a daemon on this machine still holds its lock.

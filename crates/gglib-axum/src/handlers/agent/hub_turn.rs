@@ -249,7 +249,8 @@ pub(super) async fn start(
     let slot = slot.ok_or_else(agent_busy)?;
     // The run exists before its model does: found on its port or loaded,
     // and its loop composed, as the run's own work.
-    let late = late_on(Arc::clone(state), model, chat, asked, folder);
+    let for_device = scope.device().is_some();
+    let late = late_on(Arc::clone(state), model, chat, asked, folder, for_device);
     begin(state, scope, id, shown, transcript, late, slot)
 }
 
@@ -274,12 +275,13 @@ pub(super) fn late_on(
     chat: LoopRequest,
     asked: Asked,
     folder: Option<PathBuf>,
+    for_device: bool,
 ) -> LatePrepare {
     Box::new(move |loading| {
         Box::pin(async move {
             let loaded = match &chat.far {
                 Some(far) => Err(far.clone()),
-                None => Ok(on_model(&state, &model, &loading).await?),
+                None => Ok(on_model(&state, &model, &loading, for_device).await?),
             };
             let chat = device_tools::settle(&state, chat, &asked).await;
             let upstream = match loaded {

@@ -133,6 +133,44 @@ fn from_health_check_failed_error() {
     assert_eq!(err.error.code.as_deref(), Some("upstream_error"));
 }
 
+/// A failed load is its own sentence over HTTP, with nothing wrapped round
+/// it, and a code of its own (#1959 C5).
+#[test]
+fn from_load_failed_error() {
+    use gglib_core::domain::RuntimeKind;
+    use gglib_core::ports::{LoadCause, LoadFailure};
+
+    let failure = LoadFailure {
+        model: "qwen".to_owned(),
+        runtime: RuntimeKind::Llama,
+        cause: LoadCause::NotReady {
+            waited_secs: 120,
+            said: Some("load_tensors: loading model tensors".to_owned()),
+        },
+        fitted_context: None,
+    };
+    let err: ErrorResponse = ModelRuntimeError::LoadFailed(Box::new(failure.clone())).into();
+    // The endpoint cannot tell this machine's clients from another's, so it
+    // gives the kind of failure, not what the engine printed.
+    assert_eq!(err.error.message, failure.remote_sentence());
+    assert!(
+        !err.error.message.contains("load_tensors"),
+        "{}",
+        err.error.message
+    );
+    assert_eq!(err.error.code.as_deref(), Some("model_load_failed"));
+    assert_eq!(err.error.r#type, "server_error");
+}
+
+/// A spawn or health failure that is not a typed load failure is said in
+/// its own words, not as a connection that failed: none was tried.
+#[test]
+fn a_spawn_failure_is_not_said_to_be_a_failed_connection() {
+    let err: ErrorResponse = ModelRuntimeError::SpawnFailed("no binary".into()).into();
+    assert_eq!(err.error.message, "Failed to start model: no binary");
+    assert_eq!(err.error.code.as_deref(), Some("upstream_error"));
+}
+
 #[test]
 fn from_model_file_not_found_error() {
     let err: ErrorResponse =

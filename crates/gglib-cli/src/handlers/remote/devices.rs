@@ -5,6 +5,8 @@ use gglib_app_services::RemoteDevice;
 
 use crate::daemon_client;
 use crate::presentation::style;
+use crate::presentation::table_layout::{Column, Shorten, Table};
+use crate::presentation::terminal::stderr_width;
 
 /// Execute `gglib remote list`.
 ///
@@ -25,11 +27,17 @@ pub(crate) async fn list() -> Result<()> {
         return Ok(());
     }
 
-    let width = devices.iter().map(|d| d.id.len()).max().unwrap_or(2).max(2);
-    eprintln!("  {:<width$}  DEVICE", "ID", width = width);
+    // Printed on standard error, so fitted to its width.
+    let mut table = Table::new(vec![
+        Column::new("ID"),
+        Column::new("DEVICE").shorten(Shorten::Wrap { min: 16 }),
+    ])
+    .indent(2)
+    .gap(2);
     for d in &devices {
-        eprintln!("  {:<width$}  {}", d.id, line(d), width = width);
+        table.row(vec![d.id.clone(), line(d)]);
     }
+    eprint!("{}", table.lay_out(stderr_width()).text());
     eprintln!();
     eprintln!("  Retire one:  gglib remote forget <id>");
     style::print_banner_close();

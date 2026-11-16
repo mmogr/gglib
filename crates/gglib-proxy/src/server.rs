@@ -65,14 +65,15 @@ pub(crate) struct AppState {
     pub(crate) sessions: SessionManager,
     /// Default context size when not specified in request.
     pub(crate) default_ctx: Option<u64>,
-    /// Whether this machine's device memory can be read, and therefore whether
-    /// a launch with nothing configured gets a context fitted to it.
+    /// Whether this machine's memory can be read for a fit (a GPU's, or with
+    /// no GPU its RAM), and therefore whether a launch with nothing
+    /// configured gets a context fitted to it.
     ///
     /// Supplied by the runtime, which owns the probe; this crate has none and
-    /// cannot depend on the one that does. `false` on every AMD, Intel, Vulkan
-    /// and CPU-only host, where `fit_context` refuses and the chain lands on
-    /// the built-in floor — see [`crate::models_endpoint`] for what that means
-    /// for the advertisement.
+    /// cannot depend on the one that does. `false` on a host with a GPU whose
+    /// memory cannot be read, where `fit_context` refuses and the chain lands
+    /// on the built-in floor — see [`crate::models_endpoint`] for what that
+    /// means for the advertisement.
     pub(crate) device_memory_readable: bool,
     /// What the caller can read of this machine; `/v1/models` asks it for
     /// the machine's name on every listing.

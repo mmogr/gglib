@@ -154,6 +154,7 @@ mod tests {
             Some(32_768),
             &FitInputs {
                 budget_bytes: Some(48 << 30),
+                system_ram_bytes: None,
                 weights_bytes: Some(2_500_000_000),
                 kv: Some(KvBytes::uniform(1_097_000)),
                 trained_ctx: Some(131_072),
@@ -191,6 +192,7 @@ mod tests {
             Some(524_288),
             &FitInputs {
                 budget_bytes: Some(999 << 30),
+                system_ram_bytes: None,
                 weights_bytes: Some(99 << 30),
                 kv: Some(KvBytes::uniform(1023 << 10)),
                 trained_ctx: Some(1_048_576),

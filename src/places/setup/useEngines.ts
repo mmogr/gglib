@@ -10,7 +10,9 @@
  * banner read, and a stream that closes without a result ends with a
  * reason. stable-diffusion.cpp's failure is only a warning (SU-2). Where
  * the install is a source build, llama.cpp is read again every few seconds
- * until a terminal has built it (`recheck` reads it at once).
+ * until a terminal has built it (`recheck` reads it at once). An engine that
+ * does not work for a reason gglib can repair is repaired on request
+ * (`repair`), and both are read again afterwards.
  *
  * Held by the place, not by the step, so going Back and forward again
  * starts nothing twice. Leaving setup stops reading the streams and starts
@@ -20,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getEngineStatus, streamEngineInstall } from '../../services/transport/api/setup';
+import { getEngineStatus, repairEngine, streamEngineInstall } from '../../services/transport/api/setup';
 import type { EngineStatus, LlamaProgressEvent, RuntimeKind } from '../../types/setup';
 import { formatError } from '../../utils/errors';
 
@@ -36,7 +38,14 @@ export interface EngineView {
   installing: LlamaProgressEvent | 'starting' | null;
   /** Why the last install did not finish, in the daemon's words or the stream's end. */
   error: string | null;
+  /** Whether the daemon's repair of it runs. */
+  repairing: boolean;
+  /** What the last repair did, in the daemon's words, or why it could not be asked. */
+  repaired: string | null;
 }
+
+/** Whether `status`'s engine is there and works. */
+export const working = (status: EngineStatus | null): boolean => status?.state === 'installed';
 
 /**
  * Whether `status`'s engine is missing and the daemon's install is a
@@ -50,7 +59,7 @@ export const needsBuild = (status: EngineStatus | null): boolean =>
   status !== null && !status.installed && !status.pin.updateDownloads;
 
 
-const IDLE: EngineView = { status: null, installing: null, error: null };
+const IDLE: EngineView = { status: null, installing: null, error: null, repairing: false, repaired: null };
 
 export interface SetupEngines {
   llama: EngineView;
@@ -62,6 +71,12 @@ export interface SetupEngines {
   retry: (kind: RuntimeKind) => void;
   /** Read the engines again now. */
   recheck: () => void;
+  /**
+   * Make the repair `kind`'s status offers: its install again for a
+   * reinstall, the daemon's repair for the Visual C++ runtime, after which
+   * both engines are read again, since the runtime is both engines'.
+   */
+  repair: (kind: RuntimeKind) => void;
 }
 
 export function useEngines(): SetupEngines {
@@ -166,6 +181,29 @@ export function useEngines(): SetupEngines {
     else void read(['llama', 'stable_diffusion']);
   }, [begin, read, views]);
 
+  const repair = useCallback(
+    (kind: RuntimeKind) => {
+      const view = views[kind];
+      // A fix with no action is a person's to make: nothing is sent.
+      if (view.repairing || view.installing !== null || view.status?.fix?.action == null) return;
+      if (view.status.fix.fix === 'reinstall') {
+        void install(kind);
+        return;
+      }
+      patch(kind, { repairing: true, repaired: null });
+      void repairEngine(kind)
+        .then(
+          (report) => report.says,
+          (err: unknown) => formatError(err),
+        )
+        .then(async (said) => {
+          await read(['llama', 'stable_diffusion']);
+          patch(kind, { repairing: false, repaired: said });
+        });
+    },
+    [install, patch, read, views],
+  );
+
   // While only a terminal can build llama.cpp, look for it every few seconds.
   const waiting = started && needsBuild(views.llama.status);
   useEffect(() => {
@@ -174,5 +212,5 @@ export function useEngines(): SetupEngines {
     return () => clearInterval(timer);
   }, [waiting, read]);
 
-  return { llama: views.llama, sd: views.stable_diffusion, readError, start, retry, recheck };
+  return { llama: views.llama, sd: views.stable_diffusion, readError, start, retry, recheck, repair };
 }

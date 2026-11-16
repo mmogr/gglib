@@ -299,3 +299,38 @@ fn a_missing_path_is_an_error() {
     let dir = tempfile::tempdir().expect("tempdir");
     assert!(canonical(dir.path().join("absent")).is_err());
 }
+
+#[test]
+fn windows_and_macos_compare_names_without_case_and_linux_with_it() {
+    let rest = |os, path: &str, folder: &str| inside_on(os, Path::new(path), Path::new(folder));
+    assert_eq!(
+        rest(HostOs::Windows, r"C:\Windows\System32", r"C:\WINDOWS"),
+        Some(PathBuf::from("system32"))
+    );
+    assert_eq!(
+        rest(HostOs::Windows, r"\\?\UNC\NAS\Share\x", r"\\nas\share"),
+        Some(PathBuf::from("x"))
+    );
+    assert_eq!(
+        rest(HostOs::Windows, r"C:\WindowsApps", r"C:\Windows"),
+        None
+    );
+    assert_eq!(
+        rest(HostOs::MacOs, "/USR/local", "/usr"),
+        Some(PathBuf::from("local"))
+    );
+    assert_eq!(rest(HostOs::Linux, "/USR/local", "/usr"), None);
+    assert_eq!(
+        rest(HostOs::Linux, "/usr/local", "/usr"),
+        Some(PathBuf::from("local"))
+    );
+}
+
+#[test]
+fn a_drive_root_is_read_from_a_drive_path_in_either_form() {
+    let root = |path: &str| drive_root(Path::new(path));
+    assert_eq!(root(r"C:\Windows"), Some(PathBuf::from(r"C:\")));
+    assert_eq!(root(r"\\?\E:\WinNT"), Some(PathBuf::from(r"E:\")));
+    assert_eq!(root(r"\\nas\share\x"), None);
+    assert_eq!(root("/usr"), None);
+}

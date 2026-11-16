@@ -86,8 +86,10 @@ infrastructure concerns (database, filesystem, etc.).
   turn says and `ConversationSettings.thinking` remembers, and the one rule
   (`thinking::settle`) that reads a turn by it at the daemon's doors and in the CLI
 - `folder` - A chat's folder, where gglib's own file tools read in its runs:
-  `folder::launched` for `gglib chat`'s launch directory, never home or the
-  root, and `folder::chosen` for the page's pick (absolute, canonical, a
+  `folder::launched` for `gglib chat`'s and `gglib q`'s launch directory,
+  never home or a system folder (`folder::adopted`, the rule on values, and
+  `Places`, each OS's system folders and this machine's own from its
+  environment), and `folder::chosen` for the page's pick (absolute, canonical, a
   folder, else `FolderError`); `ConversationSettings.folder` remembers the pick
 - `inference` - Sampling configuration (`InferenceConfig`), the per-model
   rungs of the sampling ladder (`ModelRungs`) and where a model's defaults came

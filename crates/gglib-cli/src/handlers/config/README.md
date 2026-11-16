@@ -33,6 +33,12 @@ what is there is older. Only a terminal is asked: with no terminal and no
 refused. Whether there is anything to install, and whether it
 is a download or a source build, are `gglib_runtime::engine`'s to say.
 
+`repair` is the question `install`, `ensure_installed` and `gglib up` ask
+when an engine does not work for want of Microsoft's Visual C++ runtime,
+which gglib can install: asked in a terminal, answered ahead of time by
+`gglib up --yes` (`--force` is never a yes to it), and with nobody to ask
+nothing is installed and the line names what to run.
+
 What is each engine's own: `llama` routes llama.cpp's subcommands, and
 `llama_install` runs its download and its source build, with the build's
 own checks and question. `sd` routes stable-diffusion.cpp's and runs its

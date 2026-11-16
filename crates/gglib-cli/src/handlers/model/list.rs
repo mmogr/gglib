@@ -10,7 +10,8 @@
 //! linked to a projector, and the `Draws` column names an image model's family, and the components it still needs
 //! linked before it can draw. While this machine is paired, the list ends
 //! with one line on how the paired machine stands, which asks that machine
-//! nothing.
+//! nothing. In a terminal the table fits its width
+//! ([`crate::presentation::table_layout`]); piped, it is printed whole.
 
 use std::fmt::Write as _;
 
@@ -22,6 +23,8 @@ use gglib_core::download::format_size;
 
 use crate::bootstrap::CliContext;
 use crate::model_list_args::ListArgs;
+use crate::presentation::table_layout::{Column, Shorten, Table};
+use crate::presentation::terminal::stdout_width;
 use crate::presentation::{format_params, truncate_string};
 use crate::target::Target;
 
@@ -53,22 +56,23 @@ pub(crate) async fn execute(
 async fn list_here(ctx: &CliContext, ops: &ModelOps, args: ListArgs) -> Result<()> {
     let models = fetch_models(ops, &args).await?;
     let paired = list_far::summary(ctx).await;
-    print!("{}", listing(&models, paired.as_deref()));
+    print!("{}", listing(&models, paired.as_deref(), stdout_width()));
     Ok(())
 }
 
 /// What `gglib model list` prints: the table, or the line that stands in
 /// for an empty one, and then `paired`. An empty library still gets
 /// `paired`: a laptop with no models of its own, paired with a desktop that
-/// has them, is the case the line is for.
-fn listing(models: &[GuiModel], paired: Option<&str>) -> String {
+/// has them, is the case the line is for. The table fits `width`, the
+/// terminal's, or is whole when there is none.
+fn listing(models: &[GuiModel], paired: Option<&str>, width: Option<usize>) -> String {
     let mut out = if models.is_empty() {
         "No models found.\nUse 'gglib model add <file_path>' to add your first model.\n".to_owned()
     } else {
         format!(
             "Found {} model(s):\n\n{}",
             models.len(),
-            render_table(models)
+            render_table(models, width)
         )
     };
     if let Some(line) = paired {
@@ -129,143 +133,83 @@ fn latest_speed(model: &GuiModel) -> Option<f64> {
     model.benchmark_summary.as_ref()?.latest_tg_tps
 }
 
-/// The table, as text. The ID column is as wide as the widest id, so a
-/// four-digit id does not push its row out of line with the rest, and the
-/// `Draws` column is as wide as its widest entry, so the roles an image
-/// model needs are never cut.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one table in two layouts, with and without the speed column; the rows read whole"
-)]
-fn render_table(models: &[GuiModel]) -> String {
+/// The columns, in the order they are printed. When the terminal is too
+/// narrow the lowest priority goes first: what a model is called and the
+/// id every command takes are never dropped; then which file it is (its
+/// quantization and size), where that file is (the path, shortened to its
+/// file name before it goes), its parameters and context, the id a client
+/// sends (the name unless twins share it), what it draws and whether it
+/// reads images, its architecture, its speed, and last, when it was added.
+fn columns(show_speed: bool) -> Vec<Column> {
+    let mut columns = vec![
+        // A four-digit id does not push its row out of line with the rest.
+        Column::new("ID").pad(3),
+        Column::new("Name")
+            .pad(25)
+            .shorten(Shorten::End { min: 16 }),
+        Column::new("Model ID")
+            .droppable(5)
+            .shorten(Shorten::End { min: 12 }),
+        Column::new("Params").pad(8).droppable(7),
+    ];
+    if show_speed {
+        columns.push(Column::new("⚡ t/s").pad(10).droppable(1));
+    }
+    columns.extend([
+        Column::new("Arch").pad(12).droppable(2),
+        Column::new("Quant").pad(8).droppable(10),
+        Column::new("Size").pad(10).droppable(9),
+        Column::new("Context").pad(10).droppable(6),
+        Column::new("Images").pad(7).droppable(3),
+        // As wide as its widest entry: the roles an image model needs are
+        // never cut.
+        Column::new("Draws").droppable(4),
+        Column::new("Added").pad(20).droppable(0),
+        Column::new("File Path").shorten(Shorten::Path).droppable(8),
+    ]);
+    columns
+}
+
+/// The table, as text, fitted to `width` or whole when there is none.
+fn render_table(models: &[GuiModel], width: Option<usize>) -> String {
     // The column shows when a row has a speed to print, not merely a summary:
     // a library benchmarked only by compare runs has summaries without one.
     let show_speed = models.iter().any(|m| latest_speed(m).is_some());
-    let id_width = models
-        .iter()
-        .map(|m| m.id.to_string().len())
-        .max()
-        .unwrap_or(0)
-        .max(3);
-    // The id a client sends, which is the name unless twins share it.
-    let model_ids: Vec<&str> = models
-        .iter()
-        .map(|m| m.openai_id.as_deref().unwrap_or("--"))
-        .collect();
-    let model_id_width = model_ids
-        .iter()
-        .map(|id| id.chars().count())
-        .max()
-        .unwrap_or(0)
-        .max("Model ID".len());
-    let drawn: Vec<String> = models.iter().map(draws).collect();
-    let draws_width = drawn
-        .iter()
-        .map(|cell| cell.chars().count())
-        .max()
-        .unwrap_or(0)
-        .max("Draws".len());
-    let mut out = String::new();
-
-    if show_speed {
-        let _ = writeln!(
-            out,
-            "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<10} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} File Path",
-            "ID",
-            "Name",
-            "Model ID",
-            "Params",
-            "⚡ t/s",
-            "Arch",
-            "Quant",
-            "Size",
-            "Context",
-            "Images",
-            "Draws",
-            "Added"
-        );
-        let _ = writeln!(
-            out,
-            "{}",
-            "-".repeat(146 + id_width + model_id_width + draws_width)
-        );
-    } else {
-        let _ = writeln!(
-            out,
-            "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} File Path",
-            "ID",
-            "Name",
-            "Model ID",
-            "Params",
-            "Arch",
-            "Quant",
-            "Size",
-            "Context",
-            "Images",
-            "Draws",
-            "Added"
-        );
-        let _ = writeln!(
-            out,
-            "{}",
-            "-".repeat(133 + id_width + model_id_width + draws_width)
-        );
-    }
-
-    for ((model, draws), model_id) in models.iter().zip(&drawn).zip(&model_ids) {
-        let arch = model.architecture.as_deref().unwrap_or("--");
-        let quant = model.quantization.as_deref().unwrap_or("--");
+    let mut table = Table::new(columns(show_speed)).ruler('-');
+    for model in models {
         let context = model
             .context_length
             .map_or_else(|| "--".to_string(), |c| c.to_string());
-        // A model reads images exactly when it is linked to a projector.
-        let images = if model.image_input { "yes" } else { "--" };
         // What it takes on disk, all its files; `--` when none could be read.
         let size = if model.size_bytes == 0 {
             "--".to_owned()
         } else {
             format_size(model.size_bytes)
         };
-
+        let mut row = vec![
+            model.id.to_string(),
+            truncate_string(&model.name, 24),
+            model.openai_id.clone().unwrap_or_else(|| "--".to_owned()),
+            format_params(model.param_count_b),
+        ];
         if show_speed {
             let speed = latest_speed(model).map_or_else(|| "--".to_string(), |t| format!("{t:.1}"));
-            let _ = writeln!(
-                out,
-                "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<10} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} {}",
-                model.id,
-                truncate_string(&model.name, 24),
-                model_id,
-                format_params(model.param_count_b),
-                truncate_string(&speed, 9),
-                truncate_string(arch, 11),
-                truncate_string(quant, 7),
-                size,
-                truncate_string(&context, 9),
-                images,
-                draws,
-                model.added_at,
-                model.file_path,
-            );
-        } else {
-            let _ = writeln!(
-                out,
-                "{:<id_width$} {:<25} {:<model_id_width$} {:<8} {:<12} {:<8} {:<10} {:<10} {:<7} {:<draws_width$} {:<20} {}",
-                model.id,
-                truncate_string(&model.name, 24),
-                model_id,
-                format_params(model.param_count_b),
-                truncate_string(arch, 11),
-                truncate_string(quant, 7),
-                size,
-                truncate_string(&context, 9),
-                images,
-                draws,
-                model.added_at,
-                model.file_path,
-            );
+            row.push(truncate_string(&speed, 9));
         }
+        row.extend([
+            truncate_string(model.architecture.as_deref().unwrap_or("--"), 11),
+            truncate_string(model.quantization.as_deref().unwrap_or("--"), 7),
+            size,
+            truncate_string(&context, 9),
+            // A model reads images exactly when it is linked to a projector.
+            if model.image_input { "yes" } else { "--" }.to_owned(),
+            draws(model),
+            model.added_at.clone(),
+            model.file_path.clone(),
+        ]);
+        table.row(row);
     }
-    out
+    table.lay_out(width).text()
 }
 
 #[cfg(test)]
