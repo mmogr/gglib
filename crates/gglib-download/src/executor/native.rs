@@ -7,6 +7,7 @@
 
 use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use futures_util::StreamExt;
 use reqwest::header::{AUTHORIZATION, CONTENT_RANGE, HeaderMap, LOCATION, RANGE};
@@ -17,6 +18,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use super::progress::{RawCallback, RawProgress};
+use crate::cli_exec::NoticeCallback;
 use gglib_core::download::ProgressThrottle;
 
 /// Suffix for the in-progress file that sits beside the final destination.
@@ -48,6 +50,10 @@ const X_LINKED_ETAG: &str = "x-linked-etag";
 
 /// Redirect hops to follow before giving up.
 const MAX_REDIRECTS: usize = 10;
+
+/// How long a connection may send nothing before it is dropped and the
+/// transfer carries on over a new one.
+pub(crate) const STALL_AFTER: Duration = Duration::from_secs(30);
 
 /// Errors from the native download path.
 #[derive(Error, Debug)]
@@ -129,6 +135,13 @@ pub(crate) struct NativeDownload<'a> {
     /// Cancellation token. A cancelled transfer leaves its `.part` file behind
     /// so the next attempt resumes rather than restarting.
     pub cancel: Option<CancellationToken>,
+    /// Sink for notes that stand in for progress while there is none.
+    #[expect(dead_code, reason = "read by the fix that follows this test")]
+    pub notice: Option<NoticeCallback>,
+    /// How long a connection may send nothing before it is dropped:
+    /// [`STALL_AFTER`] in production, shorter in tests.
+    #[expect(dead_code, reason = "read by the fix that follows this test")]
+    pub stall_after: Duration,
 }
 
 /// Download one file, resuming if a previous attempt left bytes behind.
@@ -527,6 +540,8 @@ fn open_part(path: &Path, appending: bool) -> Result<std::fs::File, NativeError>
 /// digest but were never streamed through the hasher. Costs one extra read of
 /// the partial file, and only then.
 fn seed_hasher(path: &Path, len: u64, hasher: &mut Sha256) -> Result<(), NativeError> {
+    #[cfg(test)]
+    stall_tests::run_seed_probe(path);
     let file = std::fs::File::open(path).map_err(|e| NativeError::io("open", &e))?;
     std::io::copy(&mut file.take(len), hasher).map_err(|e| NativeError::io("read", &e))?;
     Ok(())
@@ -596,3 +611,7 @@ fn hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 #[path = "native_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "native_stall_tests.rs"]
+mod stall_tests;

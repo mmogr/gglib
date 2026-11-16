@@ -27,6 +27,7 @@ const transport = vi.hoisted(() => ({
   getDownloadQueue: vi.fn(),
   cancelDownload: vi.fn(async (_id: string) => {}),
   removeFromQueue: vi.fn(async (_id: string) => {}),
+  queueDownload: vi.fn(async (_p: { modelId: string; quantization?: string }) => ({ id: 'owner/zeta-GGUF:Q8_0' })),
   listPairedModels: vi.fn(),
 }));
 // The proxy's live dashboard: the test sends its frames.
@@ -348,6 +349,43 @@ describe('the library place', () => {
     // The queue moves on: a snapshot without them takes the rows away.
     act(() => handlers.get('download')?.({ type: 'download', event: { type: 'queue_snapshot', ...queueSnapshot({ revision: 9 }) } }));
     expect(screen.queryByRole('region', { name: 'Downloading' })).not.toBeInTheDocument();
+  });
+
+  it('says a note standing in for progress, such as a reconnect, in place of the time remaining', async () => {
+    const quiet = runningRow({
+      speed_bps: undefined,
+      eta_seconds: undefined,
+      text: { ...runningRow().text, status: 'no data for 30s, reconnecting (1 of 3)…', speed: '', eta: '' },
+    });
+    downloads.queue = queueSnapshot({ revision: 3, active: quiet });
+    renderLibrary();
+
+    const running = await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' });
+    expect(running).toHaveTextContent('25.0% · no data for 30s, reconnecting (1 of 3)…');
+    expect(within(running).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '25');
+    expect(running).not.toHaveTextContent('ETA');
+  });
+
+  it("keeps a download that failed in the daemon's words, with Retry, until it is dismissed", async () => {
+    const error = 'no data arrived for 2m 00s, so the download stopped; trying again carries on from the 3.85 GiB already downloaded';
+    const failed = {
+      id: 'owner/zeta-GGUF:Q8_0',
+      title: 'owner/zeta-GGUF:Q8_0',
+      outcome: { kind: 'failed' as const, error },
+      text: `owner/zeta-GGUF:Q8_0: download failed: ${error}`,
+    };
+    downloads.queue = queueSnapshot({ revision: 3, finished: [failed, { ...failed, id: 'owner/b:Q4_K_M', title: 'owner/b:Q4_K_M', text: 'owner/b:Q4_K_M: download failed: disk full', outcome: { kind: 'failed', error: 'disk full' } }] });
+    renderLibrary();
+    const user = userEvent.setup();
+
+    const row = await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' });
+    expect(within(row).getByRole('alert')).toHaveTextContent(error);
+    expect(row).not.toHaveTextContent('ETA');
+    await user.click(within(row).getByRole('button', { name: 'Retry' }));
+    expect(transport.queueDownload).toHaveBeenCalledWith({ modelId: 'owner/zeta-GGUF', quantization: 'Q8_0' });
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss owner/b:Q4_K_M' }));
+    expect(screen.queryByRole('group', { name: 'owner/b:Q4_K_M' })).not.toBeInTheDocument();
   });
 
   it('picks a row by the address, changing only its fill, and opens the inspector beside it', async () => {

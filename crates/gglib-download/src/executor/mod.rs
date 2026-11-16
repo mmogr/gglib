@@ -188,6 +188,8 @@ async fn run_native(
         expected_size: known_size(plan.expected_size),
         progress: Some(counter.raw_callback()),
         cancel: plan.cancel.clone(),
+        notice: plan.notice.clone(),
+        stall_after: native::STALL_AFTER,
     };
 
     native::download_file(http_client(), &request)

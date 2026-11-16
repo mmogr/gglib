@@ -50,6 +50,9 @@ pub(crate) enum Reply {
     /// Read the request, then keep the connection open and never answer. The
     /// client stays waiting for headers until it gives up.
     NeverAnswers,
+    /// Honour `Range`, send the next `chunk` bytes from where it starts, then
+    /// keep the connection open and send nothing more.
+    StallsFrom { body: Vec<u8>, chunk: usize },
 }
 
 pub(crate) struct TestServer {
@@ -93,11 +96,11 @@ impl TestServer {
         format!("{}/model.gguf", self.base_url)
     }
 
-    fn ranges(&self) -> Vec<Option<String>> {
+    pub(crate) fn ranges(&self) -> Vec<Option<String>> {
         self.ranges.lock().unwrap().clone()
     }
 
-    fn request_count(&self) -> usize {
+    pub(crate) fn request_count(&self) -> usize {
         self.requests.load(Ordering::SeqCst)
     }
 }
@@ -233,9 +236,40 @@ async fn handle_one(
         Reply::NeverAnswers => {
             std::future::pending::<()>().await;
         }
+        Reply::StallsFrom { body, chunk } => stall_from(socket, &body, start, chunk).await?,
     }
 
     socket.flush().await?;
+    Ok(())
+}
+
+/// Honour a `Range` from `start`, send `chunk` bytes from there, then hold
+/// the connection open and send nothing more.
+async fn stall_from(
+    socket: &mut tokio::net::TcpStream,
+    body: &[u8],
+    start: usize,
+    chunk: usize,
+) -> std::io::Result<()> {
+    let end = (start + chunk).min(body.len());
+    let head = if start > 0 {
+        format!(
+            "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-{}/{}\r\nConnection: close\r\n\r\n",
+            body.len() - start,
+            start,
+            body.len() - 1,
+            body.len()
+        )
+    } else {
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        )
+    };
+    socket.write_all(head.as_bytes()).await?;
+    socket.write_all(&body[start..end]).await?;
+    socket.flush().await?;
+    std::future::pending::<()>().await;
     Ok(())
 }
 
@@ -276,7 +310,7 @@ fn len_of(body: &[u8]) -> u64 {
     body.len() as u64
 }
 
-fn sha256_of(bytes: &[u8]) -> String {
+pub(crate) fn sha256_of(bytes: &[u8]) -> String {
     hex(&Sha256::digest(bytes))
 }
 
@@ -305,7 +339,7 @@ impl Fixture {
     }
 }
 
-fn request<'a>(
+pub(crate) fn request<'a>(
     url: &'a str,
     dest: &'a Path,
     expected_size: Option<u64>,
@@ -318,6 +352,8 @@ fn request<'a>(
         expected_size,
         progress,
         cancel: None,
+        notice: None,
+        stall_after: STALL_AFTER,
     }
 }
 
@@ -760,6 +796,8 @@ async fn a_download_cancelled_before_it_starts_asks_the_server_nothing() {
             expected_size: None,
             progress: None,
             cancel: Some(cancel),
+            notice: None,
+            stall_after: STALL_AFTER,
         },
     )
     .await
@@ -788,6 +826,8 @@ async fn a_cancel_while_the_server_is_silent_ends_the_transfer_at_once() {
         expected_size: None,
         progress: None,
         cancel: Some(cancel.clone()),
+        notice: None,
+        stall_after: STALL_AFTER,
     };
     let transfer = download_file(&client, &request);
     let cancelled_shortly = async {

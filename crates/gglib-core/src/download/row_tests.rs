@@ -154,13 +154,36 @@ fn a_waiting_row_reads_its_size() {
     assert!(rest.iter().all(|text| text.is_empty()), "{rest:?}");
 }
 
-/// A note stands in for the status while it lasts, and an unmeasured speed
-/// is a dash, not a zero.
+/// A note stands in for the status while it lasts, and for the speed and
+/// the time remaining too: a note is up while nothing arrives, when the
+/// last speed is only decaying and the time remaining it gives is nonsense
+/// (`199 B/s · ETA 99h 59m` on a connection gone quiet).
 #[test]
-fn a_notice_is_the_status_and_an_unknown_rate_is_a_dash() {
+fn a_notice_stands_in_for_the_status_the_speed_and_the_time_remaining() {
     let id = id();
     let facts = RowFacts {
-        notice: Some("preparing fast downloader…"),
+        notice: Some("no data for 30s, reconnecting (1 of 3)…"),
+        speed_bps: Some(199.0),
+        eta_seconds: Some(359_999.0),
+        ..downloading(&id, 4 * GIB, Some(6 * GIB))
+    };
+
+    let row = row(&facts);
+
+    assert_eq!(row.text.status, "no data for 30s, reconnecting (1 of 3)…");
+    assert_eq!((row.speed_bps, row.eta_seconds), (None, None));
+    assert_eq!((row.text.speed.as_str(), row.text.eta.as_str()), ("", ""));
+    assert_eq!(
+        row.text.bytes, "4.00 GiB / 6.00 GiB",
+        "the bytes still show"
+    );
+}
+
+/// An unmeasured speed is a dash, not a zero.
+#[test]
+fn an_unknown_rate_is_a_dash() {
+    let id = id();
+    let facts = RowFacts {
         speed_bps: None,
         eta_seconds: None,
         ..downloading(&id, 0, Some(GIB))
@@ -168,7 +191,6 @@ fn a_notice_is_the_status_and_an_unknown_rate_is_a_dash() {
 
     let text = DownloadRowText::of(&facts);
 
-    assert_eq!(text.status, "preparing fast downloader…");
     assert_eq!(text.speed, "—");
     assert_eq!(text.eta, "ETA —");
 }

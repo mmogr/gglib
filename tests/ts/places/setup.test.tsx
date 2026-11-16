@@ -232,6 +232,24 @@ describe('setup', () => {
     expect(within(region).getByRole('button', { name: 'Continue' })).toBeEnabled();
   });
 
+  it('says a note standing in for progress, such as a reconnect, in place of a speed and a time remaining', async () => {
+    const { user } = start();
+    await reach(user, 'First model');
+    const region = await step('First model');
+    await user.click(within(region).getByRole('button', { name: 'Get it' }));
+    const quiet = runningRow({
+      ...ROW,
+      speed_bps: undefined,
+      eta_seconds: undefined,
+      text: { ...ROW.text, status: 'no data for 30s, reconnecting (1 of 3)…', speed: '', eta: '' },
+    });
+    act(() => takeQueueSnapshot(queueSnapshot({ revision: 5, active: quiet })));
+
+    expect(await within(region).findByText('no data for 30s, reconnecting (1 of 3)… · 1.25 GiB / 5.00 GiB')).toBeInTheDocument();
+    expect(within(region).getByRole('progressbar', { name: 'Qwen3-8B downloaded' })).toHaveAttribute('aria-valuenow', '25');
+    expect(region).not.toHaveTextContent('ETA');
+  });
+
   it("says a download that failed in the daemon's words, and Retry queues it again", async () => {
     const { user } = start();
     await reach(user, 'First model');

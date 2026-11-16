@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use super::RawProgress;
 use super::native::tests::{Fixture, Reply, TestServer, body_of};
-use super::native::{NativeDownload, build_client, download_file};
+use super::native::{NativeDownload, STALL_AFTER, build_client, download_file};
 
 /// Download `body` from a server answering `reply`, onto `on_disk` bytes of
 /// partial file, and return every reading the downloader reported.
@@ -25,6 +25,8 @@ async fn readings(reply: Reply, on_disk: &[u8], size: usize) -> Vec<RawProgress>
         expected_size: Some(size as u64),
         progress: Some(Arc::new(move |raw| sink.lock().unwrap().push(raw))),
         cancel: None,
+        notice: None,
+        stall_after: STALL_AFTER,
     };
     download_file(&client, &request)
         .await
