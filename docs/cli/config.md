@@ -180,9 +180,21 @@ The image runtime has its own page:
 
 ## `check-deps`
 
-What a source build needs on this platform, what is missing, and the exact
-install commands. It installs nothing unless asked, and exits with an error
-while a required dependency is missing.
+What this gglib uses and what building it needs, in three groups: running
+gglib (its engines, which it installs itself, python3 for the optional
+accelerator, and the GPU runtime it found), building gglib from source
+(cargo, rustc, node, npm, and on Linux the libraries the desktop app links),
+and building an engine from source (git, cmake, a C++ compiler, and on macOS
+and Linux make, pkg-config and OpenSSL). Each tool is looked for under the
+name it has on this OS, such as `npm.cmd` on Windows.
+
+An installed gglib needs neither build group and says so; their tools read
+`not installed`, not `missing`. A build from a checkout needs both, and so
+does the engine build wherever llama.cpp's next install is a source build:
+a machine with no ready-built llama.cpp to download, or a llama.cpp that
+was built from source. It installs nothing, and exits with an error, after the install
+commands, while something this gglib needs is missing. The desktop app's
+diagnostics show the same report.
 
 ## `fast-downloads`
 

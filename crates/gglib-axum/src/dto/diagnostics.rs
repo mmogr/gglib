@@ -9,7 +9,7 @@
 
 use gglib_app_services::setup::{AccelerationInfo, FastDownloadsInfo};
 use gglib_core::paths::{ModelsDirSource, ResolvedPaths};
-use gglib_core::utils::system::{Dependency, DependencyStatus};
+use gglib_core::utils::system::{Dependency, DependencyGroup, DependencyReport, DependencyStatus};
 use serde::Serialize;
 
 /// One dependency's state.
@@ -26,6 +26,9 @@ pub(crate) struct DependencyDto {
     pub status: String,
     /// Present only when `status` is `"present"`.
     pub version: Option<String>,
+    /// The state in the words `check-deps` prints: `v3.28.1`, `available`,
+    /// `missing`, `not installed`, `optional`.
+    pub status_word: String,
     pub description: String,
     pub required: bool,
     pub install_hint: Option<String>,
@@ -43,9 +46,58 @@ impl From<&Dependency> for DependencyDto {
             name: dep.name.clone(),
             status: status.to_string(),
             version,
+            status_word: dep.status_word(),
             description: dep.description.clone(),
             required: dep.required,
             install_hint: dep.install_hint.clone(),
+        }
+    }
+}
+
+/// The dependencies that serve one purpose, as `gglib config check-deps`
+/// prints them: its heading, what it says about this gglib, and its rows.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyGroupDto {
+    pub title: String,
+    pub explanation: String,
+    /// Whether this gglib needs the group. A member of a group it does not
+    /// need is never `required`.
+    pub needed: bool,
+    pub dependencies: Vec<DependencyDto>,
+}
+
+impl From<&DependencyGroup> for DependencyGroupDto {
+    fn from(group: &DependencyGroup) -> Self {
+        Self {
+            title: group.title.clone(),
+            explanation: group.explanation.clone(),
+            needed: group.needed,
+            dependencies: group.dependencies.iter().map(Into::into).collect(),
+        }
+    }
+}
+
+/// The dependency report: running gglib, building it from source, building
+/// an engine from source, and the conclusion `check-deps` prints.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyReportDto {
+    pub groups: Vec<DependencyGroupDto>,
+    /// The conclusion, in one sentence.
+    pub verdict: String,
+    /// Whether nothing this gglib needs is missing.
+    pub complete: bool,
+}
+
+impl From<&DependencyReport> for DependencyReportDto {
+    fn from(report: &DependencyReport) -> Self {
+        Self {
+            groups: report.groups.iter().map(Into::into).collect(),
+            verdict: report.verdict(),
+            complete: report.missing().is_empty(),
         }
     }
 }
@@ -94,7 +146,7 @@ impl From<ResolvedPaths> for ResolvedPathsDto {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DiagnosticsDto {
-    pub dependencies: Vec<DependencyDto>,
+    pub dependencies: DependencyReportDto,
     pub paths: ResolvedPathsDto,
     pub acceleration: AccelerationInfo,
     pub fast_downloads: FastDownloadsInfo,
@@ -187,6 +239,44 @@ mod tests {
         let json = serde_json::to_value(DependencyDto::from(&dep)).unwrap();
         assert_eq!(json["status"], "missing");
         assert!(json["version"].is_null());
+    }
+
+    /// The app reads the report's groups and conclusion as `check-deps`
+    /// prints them, and an installed copy's build tools go out unrequired.
+    #[test]
+    fn the_report_goes_out_with_the_words_check_deps_prints() {
+        use gglib_core::utils::system::{
+            BuildOrigin, EngineInstall, Found, HostOs, LinuxDistro, dependency_report,
+        };
+
+        let report = dependency_report(
+            HostOs::Windows,
+            BuildOrigin::Installed,
+            LinuxDistro::Unknown,
+            &Found {
+                llama_install: EngineInstall::Download,
+                ..Found::default()
+            },
+        );
+        let json = serde_json::to_value(DependencyReportDto::from(&report)).unwrap();
+
+        assert_eq!(json["verdict"], report.verdict());
+        assert_eq!(json["complete"], true);
+        let groups = json["groups"].as_array().unwrap();
+        assert_eq!(groups.len(), report.groups.len());
+        for (wire, group) in groups.iter().zip(&report.groups) {
+            assert_eq!(wire["title"], group.title.as_str());
+            assert_eq!(wire["explanation"], group.explanation.as_str());
+            assert_eq!(wire["needed"], group.needed);
+        }
+        let npm = groups
+            .iter()
+            .flat_map(|group| group["dependencies"].as_array().unwrap())
+            .find(|dep| dep["name"] == "npm")
+            .unwrap();
+        assert_eq!(npm["required"], false);
+        assert_eq!(npm["status"], "missing");
+        assert_eq!(npm["statusWord"], "not installed");
     }
 
     #[test]

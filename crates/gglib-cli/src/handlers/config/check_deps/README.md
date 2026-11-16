@@ -6,7 +6,10 @@ System dependency checking module for the CLI.
 
 ## Purpose
 
-This module handles the `check-deps` command, which verifies that all required system dependencies for gglib are installed and properly configured. It provides platform-specific installation instructions when dependencies are missing.
+This module handles the `check-deps` command. It prints the dependency
+report, grouped by what each dependency is for, and fails while something
+this gglib needs is missing, after printing platform-specific installation
+instructions for it.
 
 ## Architecture
 
@@ -16,135 +19,87 @@ This module handles the `check-deps` command, which verifies that all required s
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │  User Command → Handler → Probe → Display → Instructions    │
-│    (execute)    (mod.rs)  (core)  (display) (instructions)  │
+│    (execute)    (mod.rs)  (runtime) (display) (instructions)│
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 ## Components
 
-### Core Handler
-- **`mod.rs`** - Main execution logic
-  - Coordinates dependency checking
-  - Formats output table
-  - Determines exit code based on required dependencies
+- **`mod.rs`** - `execute()`: asks the probe for the report, prints it, and
+  decides the exit code from what this gglib needs.
+- **`display.rs`** - `render_report()` lays the report out as text: each
+  group's heading and sentence, its rows, the verdict. `print_gpu_status()`
+  shows GPU detection. Every word comes from the report.
+- **`instructions/`** - Platform-specific install commands for what is
+  missing (Homebrew, apt, dnf, pacman, zypper, winget).
+- **`platform.rs`** - The Linux distribution, re-exported from
+  `gglib_runtime`. The OS is `gglib_core::utils::system::HostOs`.
 
-### Display Layer
-- **`display.rs`** - Output formatting
-  - `print_dependency()` - Formats individual dependency status
-  - `print_gpu_status()` - Shows GPU acceleration information
-  - Color-coded status indicators (green = OK, red = missing)
+## The report
 
-### Installation Instructions
-- **`instructions/`** - Platform-specific guidance
-  - `common.rs` - Cross-platform instructions
-  - `macos.rs` - macOS-specific commands (Homebrew)
-  - `linux.rs` - Linux-specific commands (apt, dnf, pacman)
-  - `windows.rs` - Windows-specific commands (winget, Chocolatey)
+The report is `gglib_core::utils::system::dependency_report`, a pure function
+of the OS, whether this gglib is an installed copy or a build from a checkout
+that is still on the machine, and what the probe found. The table of
+dependencies, with the names each is looked for under on each OS, is
+`gglib_core::utils::system::NEEDS`. It has three groups:
 
-### Platform Detection
-- **`platform.rs`** - OS and architecture detection
-  - Identifies current platform
-  - Routes to appropriate instruction set
+- **Running gglib** - the llama.cpp and stable-diffusion.cpp engines, which
+  gglib installs itself; python3, for the optional `hf_xet` accelerator; and
+  the GPU runtime found (Metal, CUDA, Vulkan). Nothing here fails the check.
+- **Building gglib from source** - cargo, rustc, node, npm (`npm.cmd` on
+  Windows), and on Linux the libraries the desktop app links. Needed by a
+  checkout build only.
+- **Building an engine from source** - git, cmake, a C++ compiler, and on
+  macOS and Linux make, pkg-config and OpenSSL (with libcurl on Linux); with
+  a Vulkan GPU, Vulkan's headers, glslc and the SPIR-V headers. Needed by a
+  checkout build, and by an installed copy whose next llama.cpp install is
+  a source build (no pre-built llama.cpp for the machine, or one already
+  built from source), as the engine's own install plan decides.
 
-## Checked Dependencies
-
-The list is `DefaultSystemProbe::check_all_dependencies`, in `gglib-runtime`'s
-`system/` module.
-
-### Required
-- **cargo**, **rustc** - The Rust toolchain
-- **node**, **npm** - For building the web UI and the Tauri app
-- **git** - For llama.cpp installation
-- **make**, **cmake** - For the llama.cpp build
-- **gcc**, **g++** - For llama.cpp compilation
-- **pkg-config** - For building with system libraries
-- **libssl-dev** - For llama.cpp's HTTPS support
-- **Linux only:** patchelf, webkit2gtk-4.1, librsvg, libappindicator-gtk3,
-  libasound2-dev, libcurl-dev, libsqlite3-dev, libclang-dev (the Tauri app,
-  audio, llama.cpp's HTTP support, the database and bindgen)
-
-### Optional
-- **python3** - Enables the `hf_xet` download accelerator
-- **gtk-layer-shell** (Linux) - Anchors the tray panel beside the system tray on Wayland
-
-### GPU Acceleration
-- **Metal** - Listed as available when detected (built-in on Apple GPUs)
-- **CUDA** - Listed with its version when installed, or as optional when an NVIDIA GPU is detected without it
-- **Vulkan runtime** - Listed when present, and then **Vulkan headers**, **glslc** and **SPIR-V headers** are required, since the build picks Vulkan
-- **Vulkan** - Suggested as optional when neither Metal nor a Vulkan runtime is found (not on macOS)
+A row marked `*` is needed here; one not needed that is absent reads
+`not installed` rather than `missing`. The desktop app's diagnostics show the
+same groups, sentences and state words.
 
 ## Output Format
+
+An installed copy on Windows with none of the build tools:
 
 ```text
 Checking system dependencies...
 
 DEPENDENCY           STATUS          NOTES
 =====================================================================================
-git                  ✓ Installed     version 2.39.0
-cmake                ✓ Installed     version 3.28.1
-C++ Compiler         ✓ Installed     clang 15.0.0
-make                 ✓ Installed     GNU Make 4.3
-CUDA Toolkit         ✗ Missing       Optional - for NVIDIA GPU acceleration
-Metal                ✓ Available     Apple Silicon GPU detected
 
-GPU Acceleration: Metal available
-All required dependencies are installed!
+Running gglib
+What gglib uses as it runs. It installs its engines itself; the rest is optional.
+ llama.cpp           ✓ installed      Runs chat models. gglib installs it when a model is first served
+ ...
+
+Building gglib from source
+These build gglib from its source code. An installed gglib needs none of them.
+ cargo               ○ not installed  Builds gglib's Rust code
+ ...
+
+=====================================================================================
+✓ Nothing this gglib needs is missing.
 ```
 
 ## Error Handling
 
 The command returns:
-- **Exit code 0** - All required dependencies present
-- **Exit code 1** - One or more required dependencies missing
+- **Exit code 0** - Nothing this gglib needs is missing
+- **Exit code 1** - Something it needs is missing; install instructions are printed
 
-Missing dependencies trigger platform-specific installation instructions.
-
-## Usage Pattern
-
-```rust,ignore
-use crate::handlers::check_deps;
-use gglib_core::ports::SystemProbePort;
-
-pub async fn handle_check_deps_command(
-    probe: &dyn SystemProbePort
-) -> Result<()> {
-    check_deps::execute(probe)
-}
-```
+`make check-deps` (and so `make setup`) ends with this command's status once
+a gglib is built, and a checkout build needs its build tools, so a missing
+one still stops the setup there.
 
 ## Testing
 
-Tests focus on:
-- Dependency detection accuracy
-- Installation instruction correctness
-- Platform identification
-- Output formatting
-
-Mock `SystemProbePort` for unit testing:
-```rust,ignore
-#[tokio::test]
-async fn test_all_deps_installed() {
-    let mut mock_probe = MockSystemProbe::new();
-    mock_probe.expect_check_all_dependencies()
-        .returning(|| vec![
-            Dependency {
-                name: "git",
-                status: DependencyStatus::Installed,
-                ..Default::default()
-            },
-        ]);
-    
-    let result = check_deps::execute(&mock_probe);
-    assert!(result.is_ok());
-}
-```
-
-## Design Notes
-
-1. **Separation of Concerns** - Display logic separated from detection logic
-2. **Platform Abstraction** - Instructions module handles platform differences
-3. **User-Friendly Output** - Color-coded, table-formatted results
-4. **Actionable Guidance** - Provides copy-paste installation commands
+`gglib_core::utils::system::report`'s tests run every OS's report, installed
+and checkout, on every OS. `display_tests.rs` checks the printed text; the
+crate's `tests/check_deps_fixture.rs` runs the command against a fixture
+`PATH` (a checkout build, since a test binary is one).
 
 <!-- module-docs:end -->

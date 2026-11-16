@@ -15,13 +15,14 @@ use super::error::PathError;
 ///
 /// This says nothing about where data lives: every build keeps its state in
 /// [`data_root`], whatever it was built from. It answers two narrower
-/// questions a build from source has: whether to build llama.cpp from source
-/// as well, and where `gglib gui` finds an app built in the same checkout.
+/// questions a build from source has: whether `gglib config check-deps`
+/// holds it to what building gglib and its engines needs, and where
+/// `gglib gui` finds an app built in the same checkout.
 ///
 /// `GGLIB_REPO_ROOT` is the workspace root of whoever compiled this binary.
 /// For a release built in CI that is a runner path no user machine has, so
-/// the answer there is `None`. A wrong answer is harmless: llama.cpp is built
-/// rather than downloaded, or `gglib gui` looks in one more place.
+/// the answer there is `None`. A wrong answer is harmless: `check-deps` marks
+/// the build tools needed, or `gglib gui` looks in one more place.
 #[must_use]
 pub fn source_checkout() -> Option<PathBuf> {
     let repo_root = PathBuf::from(env!("GGLIB_REPO_ROOT"));

@@ -64,11 +64,33 @@ impl Dependency {
         self.status = status;
         self
     }
+
+    /// What the report says of this dependency's state, as `check-deps`
+    /// prints it and the app shows it: its version (`v3.28.1`), a word where
+    /// a version would be (`available`, `installed`), `missing` when it is
+    /// required, `not installed` when it is not, or `optional`.
+    #[must_use]
+    pub fn status_word(&self) -> String {
+        match &self.status {
+            DependencyStatus::Present { version } if version.is_empty() => "installed".to_owned(),
+            DependencyStatus::Present { version }
+                if version.starts_with(|c: char| c.is_ascii_digit()) =>
+            {
+                format!("v{version}")
+            }
+            DependencyStatus::Present { version } => version.clone(),
+            DependencyStatus::Missing if self.required => "missing".to_owned(),
+            DependencyStatus::Missing => "not installed".to_owned(),
+            DependencyStatus::Optional => "optional".to_owned(),
+        }
+    }
 }
 
 /// GPU hardware detection result.
+///
+/// The default is a machine with no GPU gglib can use.
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GpuInfo {
     /// NVIDIA GPU hardware detected (via nvidia-smi, lspci, etc.).
     pub has_nvidia_gpu: bool,

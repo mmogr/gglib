@@ -79,8 +79,8 @@ impl PackageNames {
     }
 }
 
-/// Dependency name → package names, keyed by the names used in
-/// `SystemProbePort::check_all_dependencies`.
+/// Dependency name → package names, keyed by the names the dependency report
+/// uses (`super::needs::NEEDS`, and the Vulkan rows of `super::report`).
 ///
 /// Several toolchain entries deliberately share a row: `make`, `gcc` and `g++`
 /// all arrive with `build-essential` on Debian and `base-devel` on Arch, so
@@ -118,6 +118,17 @@ const PACKAGES: &[(&str, PackageNames)] = &[
     ),
     (
         "g++",
+        PackageNames {
+            debian: "build-essential",
+            fedora: "gcc gcc-c++ make",
+            arch: "base-devel",
+            suse: "gcc gcc-c++ make",
+            generic: "a C/C++ toolchain (make, gcc, g++)",
+        },
+    ),
+    (
+        // What `check-deps` calls the compiler an engine build needs.
+        "C++ compiler",
         PackageNames {
             debian: "build-essential",
             fedora: "gcc gcc-c++ make",

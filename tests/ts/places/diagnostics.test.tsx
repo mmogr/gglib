@@ -639,7 +639,18 @@ describe('the diagnostics place', () => {
 });
 
 const DIAGNOSTICS = {
-  dependencies: [{ name: 'cmake', status: 'present', version: '3.28.1', description: 'Build', required: true, installHint: null }],
+  dependencies: {
+    groups: [
+      {
+        title: 'Building an engine from source',
+        explanation: 'These build an engine.',
+        needed: true,
+        dependencies: [{ name: 'cmake', status: 'present', version: '3.28.1', statusWord: 'v3.28.1', description: 'Build', required: true, installHint: null }],
+      },
+    ],
+    verdict: 'Nothing this gglib needs is missing.',
+    complete: true,
+  },
   paths: {
     dataRoot: '/home/u/.local/share/gglib',
     resourceRoot: '/home/u/.local/share/gglib',

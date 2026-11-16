@@ -14,7 +14,10 @@ use gglib_core::ports::{
     ModelRuntimePort, ProcessHandle, RunningTarget, SystemProbePort,
 };
 use gglib_core::services::AppCore;
-use gglib_core::utils::system::{Dependency, GpuInfo, SystemMemoryInfo};
+use gglib_core::utils::system::{
+    BuildOrigin, DependencyReport, GpuInfo, HostOs, LinuxDistro, SystemMemoryInfo,
+    dependency_report,
+};
 use gglib_db::{CoreFactory, setup_test_database};
 
 pub(crate) use crate::test_support_hf::MockHfClient;
@@ -183,8 +186,13 @@ impl Default for MockSystemProbePort {
 }
 
 impl SystemProbePort for MockSystemProbePort {
-    fn check_all_dependencies(&self) -> Vec<Dependency> {
-        vec![]
+    fn dependency_report(&self) -> DependencyReport {
+        dependency_report(
+            HostOs::this(),
+            BuildOrigin::Installed,
+            LinuxDistro::Unknown,
+            &gglib_core::utils::system::Found::default(),
+        )
     }
 
     fn detect_gpu_info(&self) -> GpuInfo {

@@ -1,23 +1,8 @@
 //! Platform detection utilities.
-
-/// Operating system detection result.
-#[derive(Debug, Clone, PartialEq)]
-pub(super) enum Os {
-    MacOS,
-    Windows,
-    Linux,
-}
-
-/// Detect the current operating system.
-pub(super) fn detect_os() -> Os {
-    if cfg!(target_os = "macos") {
-        Os::MacOS
-    } else if cfg!(target_os = "windows") {
-        Os::Windows
-    } else {
-        Os::Linux
-    }
-}
+//!
+//! The OS is `gglib_core::utils::system::HostOs`, the value the dependency
+//! report itself is made for, so the instructions and the report cannot name
+//! different platforms.
 
 /// Detect the Linux distribution family.
 ///
@@ -29,13 +14,6 @@ pub(super) use gglib_runtime::system::detect_linux_distro;
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_detect_os_returns_valid() {
-        let os = detect_os();
-        // Just verify it returns one of the expected values
-        matches!(os, Os::MacOS | Os::Windows | Os::Linux);
-    }
 
     /// Detection itself is tested against real `/etc/os-release` fixtures in
     /// `gglib_core::utils::system::packages`, where it is a pure function.

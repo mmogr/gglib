@@ -252,9 +252,9 @@ impl SetupOps {
     /// "why isn't this working" surface, and someone comparing a missing
     /// dependency against a resolved path should not be watching four
     /// spinners. Individually cheap: no network, and no subprocess beyond the
-    /// version probes `check_all_dependencies` already runs.
+    /// version probes `dependency_report` already runs.
     pub fn diagnostics(&self) -> Result<Diagnostics, GuiError> {
-        let dependencies = self.deps.system_probe.check_all_dependencies();
+        let dependencies = self.deps.system_probe.dependency_report();
 
         let paths = gglib_core::paths::ResolvedPaths::resolve()
             .map_err(|e| GuiError::Internal(format!("Failed to resolve paths: {e}")))?;
@@ -342,7 +342,7 @@ pub struct FastDownloadsInfo {
 /// `fast-downloads status` as one value.
 #[derive(Debug, Clone)]
 pub struct Diagnostics {
-    pub dependencies: Vec<gglib_core::utils::system::Dependency>,
+    pub dependencies: gglib_core::utils::system::DependencyReport,
     pub paths: gglib_core::paths::ResolvedPaths,
     pub acceleration: AccelerationInfo,
     pub fast_downloads: FastDownloadsInfo,

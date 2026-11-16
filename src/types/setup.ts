@@ -4,6 +4,8 @@
  */
 
 import type { DependencyDto } from './generated/DependencyDto';
+import type { DependencyGroupDto } from './generated/DependencyGroupDto';
+import type { DependencyReportDto } from './generated/DependencyReportDto';
 import type { DiagnosticsDto } from './generated/DiagnosticsDto';
 import type { FastDownloadsState } from './generated/FastDownloadsState';
 import type { ModelsDirectoryInfo } from './generated/ModelsDirectoryInfo';
@@ -132,6 +134,21 @@ export type DependencyInfo = DependencyDto & {
   status: 'present' | 'missing' | 'optional';
 };
 
+/**
+ * One purpose's dependencies — running gglib, building it from source,
+ * building an engine — with the heading and sentence `check-deps` prints.
+ * `dependencies` is replaced rather than intersected, for the reason given on
+ * `Diagnostics` below.
+ */
+export type DependencyGroup = Omit<DependencyGroupDto, 'dependencies'> & {
+  dependencies: DependencyInfo[];
+};
+
+/** The whole dependency report, with the conclusion `check-deps` prints. */
+export type DependencyReport = Omit<DependencyReportDto, 'groups'> & {
+  groups: DependencyGroup[];
+};
+
 /** Where everything resolves to — `gglib config paths`. */
 export type ResolvedPaths = ResolvedPathsDto & {
   modelsSource: 'explicit' | 'envVar' | 'default';
@@ -140,16 +157,16 @@ export type ResolvedPaths = ResolvedPathsDto & {
 /**
  * The full diagnostics bundle behind the System tab.
  *
- * `dependencies` is replaced rather than intersected: in
+ * `dependencies` is replaced rather than intersected, down to its rows: in
  * `DependencyDto[] & DependencyInfo[]`, `.map` and `.filter` type their
  * callback's element from the first constituent, so the panel's rows would see
  * the generated `status` and lose the union. `src/types/README.md` allows
- * `Omit` here because `DiagnosticsDto` is a plain object type, not a union of
- * arms. `paths` needs no such treatment — it is not an array, so intersecting
- * it narrows `modelsSource` correctly.
+ * `Omit` here because these are plain object types, not unions of arms.
+ * `paths` needs no such treatment — it is not an array, so intersecting it
+ * narrows `modelsSource` correctly.
  */
 export type Diagnostics = Omit<DiagnosticsDto, 'dependencies'> & {
-  dependencies: DependencyInfo[];
+  dependencies: DependencyReport;
   paths: ResolvedPaths;
 };
 
@@ -171,4 +188,8 @@ type AssertNoUnlistedFields<T extends never> = T;
 export type DiagnosticsKeysAreComplete = AssertNoUnlistedFields<
   | Exclude<keyof Diagnostics, keyof DiagnosticsDto>
   | Exclude<keyof DiagnosticsDto, keyof Diagnostics>
+  | Exclude<keyof DependencyReport, keyof DependencyReportDto>
+  | Exclude<keyof DependencyReportDto, keyof DependencyReport>
+  | Exclude<keyof DependencyGroup, keyof DependencyGroupDto>
+  | Exclude<keyof DependencyGroupDto, keyof DependencyGroup>
 >;

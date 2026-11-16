@@ -27,8 +27,10 @@ llama.cpp and sd-server installs alone. A build with a folder of its own also
 wants a daemon of its own, on the port `GGLIB_DAEMON_PORT` names.
 
 `source_checkout` says whether this binary was built from a checkout that is
-still there. It decides nothing about data: only whether llama.cpp is built
-from source too, and where `gglib gui` looks for an app built beside it.
+still there. It decides nothing about data: only whether
+`gglib config check-deps` holds this gglib to what building it needs (an
+installed copy needs none of it), and where `gglib gui` looks for an app
+built beside it.
 
 The database records a schema generation, and a build refuses a file a newer
 build has written (`gglib-db`'s `setup_generation.rs`), so sharing one library

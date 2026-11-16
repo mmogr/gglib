@@ -2,9 +2,10 @@
  * Tests for the diagnostics panel — the GUI face of `gglib config
  * check-deps` / `paths` / `fast-downloads status`.
  *
- * The load-bearing behaviours: missing *required* dependencies are called out
- * with their install command, an optional one is not treated as a failure,
- * and the accelerator reads as a speed setting rather than a requirement.
+ * The load-bearing behaviours: what this gglib needs and lacks is called out
+ * with its install command, in the report's own words; a dependency it does
+ * not need is not treated as a failure; and the accelerator reads as a speed
+ * setting rather than a requirement.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -16,7 +17,11 @@ import {
   disableFastDownloads,
   enableFastDownloads,
 } from '../../../src/services/transport/api/setup';
-import type { Diagnostics } from '../../../src/types/setup';
+import type {
+  DependencyInfo,
+  DependencyReport,
+  Diagnostics,
+} from '../../../src/types/setup';
 
 vi.mock('../../../src/services/transport/api/setup', () => ({
   getDiagnostics: vi.fn(),
@@ -24,33 +29,53 @@ vi.mock('../../../src/services/transport/api/setup', () => ({
   disableFastDownloads: vi.fn().mockResolvedValue({ removed: true }),
 }));
 
-const base: Diagnostics = {
-  dependencies: [
+/** A report as Rust words it; the panel adds no words of its own. */
+const report = (
+  dependencies: DependencyInfo[],
+  verdict = '1 dependency this gglib needs is missing.',
+): DependencyReport => ({
+  groups: [
     {
-      name: 'cmake',
-      status: 'present',
-      version: '3.28.1',
-      description: 'Build',
-      required: true,
-      installHint: null,
-    },
-    {
-      name: 'git',
-      status: 'missing',
-      version: null,
-      description: 'Version control',
-      required: true,
-      installHint: 'brew install git',
-    },
-    {
-      name: 'python3',
-      status: 'missing',
-      version: null,
-      description: 'Optional helper',
-      required: false,
-      installHint: null,
+      title: 'Building an engine from source',
+      explanation: 'These build llama.cpp or stable-diffusion.cpp from source.',
+      needed: true,
+      dependencies,
     },
   ],
+  verdict,
+  complete: !dependencies.some((d) => d.required && d.status === 'missing'),
+});
+
+const cmake: DependencyInfo = {
+  name: 'cmake',
+  status: 'present',
+  version: '3.28.1',
+  statusWord: 'v3.28.1',
+  description: 'Build',
+  required: true,
+  installHint: null,
+};
+const git: DependencyInfo = {
+  name: 'git',
+  status: 'missing',
+  version: null,
+  statusWord: 'missing',
+  description: 'Version control',
+  required: true,
+  installHint: 'brew install git',
+};
+const python3: DependencyInfo = {
+  name: 'python3',
+  status: 'missing',
+  version: null,
+  statusWord: 'not installed',
+  description: 'Optional helper',
+  required: false,
+  installHint: null,
+};
+
+const base: Diagnostics = {
+  dependencies: report([cmake, git, python3]),
   paths: {
     dataRoot: '/home/u/.local/share/gglib',
     resourceRoot: '/home/u/.local/share/gglib',
@@ -80,34 +105,23 @@ describe('DiagnosticsPanel', () => {
     mockGet.mockResolvedValue(base);
   });
 
-  it('calls out missing required dependencies with their install command', async () => {
+  it("calls out what this gglib needs with the install command, in the report's words", async () => {
     render(<DiagnosticsPanel />);
 
-    expect(await screen.findByText(/1 required dependency is missing/)).toBeInTheDocument();
+    expect(
+      await screen.findByText('1 dependency this gglib needs is missing.'),
+    ).toBeInTheDocument();
     expect(screen.getByText('brew install git')).toBeInTheDocument();
   });
 
   it('prints a shared install command once, not once per dependency', async () => {
+    const shared = { ...git, installHint: 'apt install build-essential' };
     mockGet.mockResolvedValue({
       ...base,
-      dependencies: [
-        {
-          name: 'git',
-          status: 'missing',
-          version: null,
-          description: 'a',
-          required: true,
-          installHint: 'apt install build-essential',
-        },
-        {
-          name: 'cmake',
-          status: 'missing',
-          version: null,
-          description: 'b',
-          required: true,
-          installHint: 'apt install build-essential',
-        },
-      ],
+      dependencies: report(
+        [shared, { ...shared, name: 'cmake' }],
+        '2 dependencies this gglib needs are missing.',
+      ),
     });
 
     render(<DiagnosticsPanel />);
@@ -115,27 +129,38 @@ describe('DiagnosticsPanel', () => {
     expect(await screen.findAllByText('apt install build-essential')).toHaveLength(1);
   });
 
-  it('attributes missing dependencies to building gglib, not to llama.cpp', async () => {
+  it('shows each group under its heading with what it says about this gglib', async () => {
     render(<DiagnosticsPanel />);
-    expect(await screen.findByText(/build gglib itself from source/)).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Building an engine from source' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('These build llama.cpp or stable-diffusion.cpp from source.'),
+    ).toBeInTheDocument();
   });
 
-  it('does not count an optional dependency as missing', async () => {
+  it("shows a row's state in the word the report gives it", async () => {
     render(<DiagnosticsPanel />);
-    // python3 is also absent, but only `git` is required.
-    expect(await screen.findByText(/1 required dependency is missing/)).toBeInTheDocument();
+    // python3 is absent but not needed: "not installed", not "missing".
+    expect(await screen.findByText('not installed')).toBeInTheDocument();
+    expect(screen.getByText('v3.28.1')).toBeInTheDocument();
   });
 
   it('reports a clean run without a warning banner', async () => {
+    // An installed copy: its build tools are absent and not needed.
     mockGet.mockResolvedValue({
       ...base,
-      dependencies: [base.dependencies[0], base.dependencies[2]],
+      dependencies: report(
+        [cmake, { ...git, required: false, statusWord: 'not installed' }],
+        'Nothing this gglib needs is missing.',
+      ),
     });
 
     render(<DiagnosticsPanel />);
 
     await screen.findByText('cmake');
-    expect(screen.queryByText(/required.*missing/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Nothing this gglib needs is missing.')).not.toBeInTheDocument();
+    expect(screen.queryByText('brew install git')).not.toBeInTheDocument();
   });
 
   it('names where the models directory came from', async () => {

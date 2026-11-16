@@ -55,7 +55,7 @@ pub(crate) async fn diagnostics(
     let d = state.setup.diagnostics()?;
 
     Ok(Json(DiagnosticsDto {
-        dependencies: d.dependencies.iter().map(Into::into).collect(),
+        dependencies: (&d.dependencies).into(),
         paths: ResolvedPathsDto::from(d.paths),
         acceleration: d.acceleration,
         fast_downloads: d.fast_downloads,

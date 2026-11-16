@@ -3,8 +3,10 @@
  * status` as one panel in the System tab.
  *
  * This is the "why isn't this working" surface, so it leads with what is
- * wrong: missing required dependencies first, with their install commands,
- * then the resolved paths that answer "which directory is it actually using".
+ * wrong: what this gglib needs and does not have, with the install commands,
+ * then the report's groups, then the resolved paths that answer "which
+ * directory is it actually using". Every heading, sentence and state word in
+ * the dependency section is the report's own, as `check-deps` prints it.
  */
 
 import { FC } from 'react';
@@ -13,7 +15,7 @@ import { Banner } from '../../components/ui/Banner';
 import { Stack } from '../../components/primitives';
 import { FAST_DOWNLOADS_WORDS } from '../../components/status/words';
 import { useDiagnostics } from './useDiagnostics';
-import type { DependencyInfo, ResolvedPaths } from '../../types/setup';
+import type { DependencyGroup, DependencyInfo, ResolvedPaths } from '../../types/setup';
 
 /** Status dot plus name; the dot carries no meaning on its own, so the word stays. */
 const DependencyRow: FC<{ dep: DependencyInfo }> = ({ dep }) => {
@@ -31,15 +33,28 @@ const DependencyRow: FC<{ dep: DependencyInfo }> = ({ dep }) => {
           className={`inline-block w-2 h-2 rounded-full shrink-0 ${dot}`}
           aria-hidden="true"
         />
-        <span className="text-xs text-text font-mono">{dep.name}</span>
-        {!dep.required && <span className="text-xs text-text-muted">optional</span>}
+        <span className="text-xs text-text font-mono shrink-0">{dep.name}</span>
+        <span className="text-xs text-text-muted truncate">{dep.description}</span>
       </div>
-      <span className="text-xs text-text-secondary font-mono tabular-nums text-right">
-        {dep.status === 'present' ? (dep.version ?? 'present') : dep.status}
+      <span className="text-xs text-text-secondary font-mono tabular-nums text-right shrink-0">
+        {dep.statusWord}
       </span>
     </div>
   );
 };
+
+/** One purpose's heading, what it says about this gglib, and its rows. */
+const DependencyGroupSection: FC<{ group: DependencyGroup }> = ({ group }) => (
+  <section aria-label={group.title}>
+    <h4 className="m-0 text-xs font-semibold text-text">{group.title}</h4>
+    <p className="m-0 mb-2xs text-xs text-text-muted">{group.explanation}</p>
+    <div className="flex flex-col">
+      {group.dependencies.map((dep) => (
+        <DependencyRow key={dep.name} dep={dep} />
+      ))}
+    </div>
+  </section>
+);
 
 const PATH_LABELS: [keyof ResolvedPaths, string][] = [
   ['modelsDir', 'Models'],
@@ -81,8 +96,10 @@ export const DiagnosticsPanel: FC = () => {
 
   if (!diagnostics) return null;
 
-  const { dependencies, paths, acceleration, fastDownloads } = diagnostics;
-  const missingRequired = dependencies.filter((d) => d.required && d.status !== 'present');
+  const { dependencies: report, paths, acceleration, fastDownloads } = diagnostics;
+  const missingRequired = report.groups
+    .flatMap((group) => group.dependencies)
+    .filter((d) => d.required && d.status === 'missing');
   // Several dependencies share an install command (one apt line covering
   // three packages, say); printing it once per dependency is just noise.
   const installHints = [
@@ -99,16 +116,10 @@ export const DiagnosticsPanel: FC = () => {
           </Button>
         </div>
 
-        {missingRequired.length > 0 && (
+        {!report.complete && (
           <Banner variant="warning" className="mb-base">
             <Stack gap="xs">
-              <span>
-                {missingRequired.length} required{' '}
-                {missingRequired.length === 1 ? 'dependency is' : 'dependencies are'} missing.
-                These are the tools needed to build gglib itself from source; a downloaded
-                build does not need them, and they are listed here because
-                <code className="font-mono"> gglib config check-deps</code> reports them.
-              </span>
+              <span>{report.verdict}</span>
               {installHints.map((hint) => (
                 <code key={hint} className="text-xs font-mono break-all">
                   {hint}
@@ -118,11 +129,11 @@ export const DiagnosticsPanel: FC = () => {
           </Banner>
         )}
 
-        <div className="flex flex-col">
-          {dependencies.map((dep) => (
-            <DependencyRow key={dep.name} dep={dep} />
+        <Stack gap="base">
+          {report.groups.map((group) => (
+            <DependencyGroupSection key={group.title} group={group} />
           ))}
-        </div>
+        </Stack>
       </section>
 
       <section>
