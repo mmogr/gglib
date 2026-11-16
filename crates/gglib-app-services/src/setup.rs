@@ -241,8 +241,7 @@ impl SetupOps {
     /// a machine too small for the smallest candidate has to be told so, not
     /// handed a recommendation it cannot run.
     pub fn recommend_model(&self) -> Option<gglib_core::domain::recommendation::Recommendation> {
-        let memory = self.deps.system_probe.get_system_memory_info();
-        gglib_core::domain::recommendation::recommend(&memory)
+        gglib_runtime::system::recommend_here()
     }
 
     /// Everything the diagnostics panel shows: dependency matrix, resolved

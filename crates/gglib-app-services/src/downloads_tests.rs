@@ -119,25 +119,6 @@ fn the_queue_answer_is_the_id_alone() {
     assert_eq!(back, answer);
 }
 
-/// The device's memory is the budget when it can be read, and the system's
-/// RAM is not read.
-#[test]
-fn the_device_memory_is_the_download_budget() {
-    let budget = super::device_or_ram(Some(24 << 30), || panic!("RAM was read"));
-    assert_eq!(budget, Some(24 << 30));
-}
-
-/// A machine whose device memory cannot be read runs from its RAM; with
-/// neither, there is no budget and the smallest variant is taken.
-#[test]
-fn without_device_memory_the_system_ram_is_the_budget() {
-    assert_eq!(
-        super::device_or_ram(None, || Some(64 << 30)),
-        Some(64 << 30)
-    );
-    assert_eq!(super::device_or_ram(None, || None), None);
-}
-
 /// A Hub repo's tool answer is core's guess from its template and repo id,
 /// and the answer carries that yes/no alone. The mock Hub serves no
 /// template, so the repo id decides.

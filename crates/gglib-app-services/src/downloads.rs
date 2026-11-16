@@ -38,31 +38,16 @@ pub struct DownloadDeps {
 
 /// The memory a download that names no variant must fit.
 ///
-/// The GPU's ([`gglib_runtime::system::total_device_memory_bytes`]). A
-/// machine whose GPU memory cannot be read, or that has no GPU, runs a model
-/// from its RAM, so then the system's whole RAM
-/// ([`crate::settings::system_memory`]); a launch on a machine with no GPU
-/// fits its context against a share of that RAM
-/// ([`gglib_runtime::system::fit_memory`]).
-/// `None` when neither can be read, and the download then takes the smallest
-/// variant.
+/// The size picker's verdicts are judged against it too
+/// ([`gglib_runtime::system::download_budget`]). `None` when it cannot be
+/// read, and the download then takes the smallest variant.
 ///
 /// Read off the async runtime: the first reading probes the hardware.
 pub async fn download_budget() -> Option<u64> {
-    tokio::task::spawn_blocking(|| {
-        device_or_ram(gglib_runtime::system::total_device_memory_bytes(), || {
-            crate::settings::system_memory(&gglib_runtime::system::DefaultSystemProbe::new())
-                .map(|memory| memory.total_ram_bytes)
-        })
-    })
-    .await
-    .ok()
-    .flatten()
-}
-
-/// `device`, or else what `ram` reads.
-fn device_or_ram(device: Option<u64>, ram: impl FnOnce() -> Option<u64>) -> Option<u64> {
-    device.or_else(ram)
+    tokio::task::spawn_blocking(gglib_runtime::system::download_budget)
+        .await
+        .ok()
+        .flatten()
 }
 
 /// Download and `HuggingFace` operations handler.
