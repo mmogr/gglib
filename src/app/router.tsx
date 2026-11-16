@@ -14,7 +14,9 @@
  * The router instance is module-scoped so the native menu can navigate from
  * outside React (`app/menuBridge`). It is created after `takeDaemonToken()`
  * has taken the daemon's token out of the address, so the first location the
- * router reads carries no token. Tests create a memory router over the same
+ * router reads carries no token. A page that throws is replaced by
+ * `app/Crashed` inside the layout, and a layout that throws by the same
+ * screen in place of the window. Tests create a memory router over the same
  * routes (`tests/ts/places/harness.tsx`).
  *
  * @module app/router
@@ -30,6 +32,7 @@ import SettingsPlace from '../places/settings/SettingsPlace';
 import DiagnosticsPlace from '../places/diagnostics/DiagnosticsPlace';
 import { takeDaemonToken } from '../services/transport/api/daemonToken';
 import { ChatRoute } from './ChatRoute';
+import { Crashed } from './Crashed';
 import { FarChatRoute } from './FarChatRoute';
 import { paths } from './paths';
 
@@ -67,7 +70,11 @@ export function createAppRouter(layout: ReactNode, memory?: string[]): AppRouter
   if (memory === undefined && current?.kind === 'browser') return current.router;
   // Out of the address bar before the router reads it.
   takeDaemonToken();
-  const tree: RouteObject[] = [{ path: '/', element: layout, children: routes }];
+  // A page that throws gets gglib's screen inside the layout, so the sidebar
+  // stays; a layout that throws gets it in place of the window (`app/Crashed`).
+  const tree: RouteObject[] = [
+    { path: '/', element: layout, errorElement: <Crashed />, children: [{ errorElement: <Crashed />, children: routes }] },
+  ];
   if (current?.kind === 'memory') current.router.dispose();
   current = memory
     ? { router: createMemoryRouter(tree, { initialEntries: memory }), kind: 'memory' }

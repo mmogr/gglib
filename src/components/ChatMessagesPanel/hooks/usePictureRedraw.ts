@@ -68,13 +68,12 @@ export function usePictureRedraw(
     setState({ phase: 'idle' });
   }, []);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    return () => {
       asked.current += 1;
       stopRender.current?.();
-    },
-    [],
-  );
+    };
+  }, []);
 
   const start = useCallback(
     (ask: RedrawAsk) => {

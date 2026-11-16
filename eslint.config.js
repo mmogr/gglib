@@ -22,6 +22,20 @@ const baseRestrictedSyntax = [
     message: 'Use the Button primitive from src/components/ui/Button.tsx instead of legacy .btn classes',
   },
 
+  // ── Effects ───────────────────────────────────────────────────────
+  // React takes whatever an effect returns as its cleanup and calls it, and
+  // throws when that is not a function. An expression body returns its
+  // value without saying so, and a call's value can differ by engine:
+  // scrollIntoView() returns a Promise in Chromium and Edge and undefined in
+  // WebKit (tests/ts/browser/PickASize.test.tsx). A block body says what it
+  // returns.
+  {
+    selector:
+      'CallExpression:matches([callee.name=/^use(Layout|Insertion)?Effect$/], [callee.property.name=/^use(Layout|Insertion)?Effect$/]) > ArrowFunctionExpression[body.type!="BlockStatement"]',
+    message:
+      'Give an effect callback a block body: `() => { f(); }`, or `() => { return cleanup; }` when it returns a cleanup. React calls what an effect returns.',
+  },
+
   // ── Iconography ───────────────────────────────────────────────────
   // Emoji and dingbat glyphs render as full-colour, double-width
   // system glyphs that clash with lucide's thin monochrome strokes,
