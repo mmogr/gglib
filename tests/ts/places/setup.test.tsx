@@ -241,7 +241,7 @@ describe('setup', () => {
       ...ROW,
       speed_bps: undefined,
       eta_seconds: undefined,
-      text: { ...ROW.text, status: 'no data for 30s, reconnecting (1 of 3)…', speed: '', eta: '' },
+      text: { ...ROW.text, status: 'no data for 30s, reconnecting (1 of 3)…', notice: 'no data for 30s, reconnecting (1 of 3)…', speed: '', eta: '' },
     });
     act(() => takeQueueSnapshot(queueSnapshot({ revision: 5, active: quiet })));
 
@@ -257,7 +257,7 @@ describe('setup', () => {
     await user.click(within(region).getByRole('button', { name: 'Get it' }));
     act(() =>
       takeQueueSnapshot(
-        queueSnapshot({ revision: 6, finished: [{ id: REC.repo, title: 'Qwen3-8B', outcome: { kind: 'failed', error: 'disk full' }, text: 'Qwen3-8B failed: disk full' }] }),
+        queueSnapshot({ revision: 6, finished: [{ id: REC.repo, title: 'Qwen3-8B', outcome: { kind: 'failed', error: 'disk full' }, text: 'Qwen3-8B failed: disk full', model_id: REC.repo }] }),
       ),
     );
 

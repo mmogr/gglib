@@ -43,7 +43,8 @@ total_bytes?: number,
 percent?: number, 
 /**
  * Bytes per second off the network. Absent until there is enough to go
- * on, and whenever the download is not transferring.
+ * on, whenever the download is not transferring, and while a note
+ * stands in for its progress.
  */
 speed_bps?: number, 
 /**

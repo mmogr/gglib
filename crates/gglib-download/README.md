@@ -109,8 +109,16 @@ This crate is in the **Infrastructure Layer** — it orchestrates downloads usin
   reader's reason
 - **Resume Support** — A native transfer cut off part-way leaves its `.part`
   file, and the next download of that file asks only for the bytes that are
-  missing. A failed download is not retried: it ends as failed, and is
-  fetched again when it is queued again.
+  missing. An upgrade's part is its commit's own (`<file>.<commit>.part`), so
+  the same upgrade tried again carries on from it and no other revision's
+  bytes are taken for its start. A connection that sends nothing for 30 s is
+  dropped and the transfer carries on over a new one, saying so on the row
+  (`no data for 30s, reconnecting (1 of 3)…`); after three reconnects in a
+  row with nothing arriving it gives up with a sentence that says trying
+  again carries on from the part (or, with nothing downloaded, that nothing
+  arrived). Any other failure is not retried: it ends as failed. Queued
+  again, a download that was cut off carries on from its `.part`; one whose
+  bytes failed their check starts over, its `.part` having been removed.
 - **Shard Handling** — Automatic detection and download of sharded models
 - **Projectors** — A download from a repository that has projectors fetches
   one with the model, as one more file of its group after the weights: the

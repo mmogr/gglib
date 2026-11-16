@@ -21,6 +21,7 @@ async fn readings(reply: Reply, on_disk: &[u8], size: usize) -> Vec<RawProgress>
     let request = NativeDownload {
         url: &url,
         dest: &fx.dest,
+        commit: None,
         token: None,
         expected_size: Some(size as u64),
         progress: Some(Arc::new(move |raw| sink.lock().unwrap().push(raw))),

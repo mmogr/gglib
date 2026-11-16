@@ -294,3 +294,31 @@ fn write(path: &Path, bytes: &[u8]) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, bytes).unwrap();
 }
+
+/// An upgrade that fails says it was the upgrade of its model, so trying it
+/// again upgrades that model again rather than queueing its repository,
+/// which would find the old copy on disk and fetch nothing. A download
+/// that adds a model says nothing of the kind.
+#[tokio::test]
+async fn a_failed_upgrade_ends_naming_the_model_it_was_upgrading() {
+    let f = upgrade_queued().await;
+    super::test_support::run_next(&f.manager, super::test_support::End::Failed).await;
+    let snapshot = f.manager.get_queue_snapshot().await.unwrap();
+    let ended = snapshot.finished.last().expect("the upgrade ended");
+    assert!(matches!(ended.outcome, DownloadOutcome::Failed { .. }));
+    assert_eq!(ended.upgrade_of, Some(MODEL));
+    let id = DownloadId::from(ended.id.as_str());
+    assert_eq!(
+        (ended.model_id.as_str(), ended.quantization.as_deref()),
+        (REPO, id.quantization())
+    );
+
+    let f = manager();
+    f.manager
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
+        .await
+        .unwrap();
+    super::test_support::run_next(&f.manager, super::test_support::End::Failed).await;
+    let snapshot = f.manager.get_queue_snapshot().await.unwrap();
+    assert_eq!(snapshot.finished.last().unwrap().upgrade_of, None);
+}

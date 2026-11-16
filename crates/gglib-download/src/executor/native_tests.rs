@@ -53,6 +53,16 @@ pub(crate) enum Reply {
     /// Honour `Range`, send the next `chunk` bytes from where it starts, then
     /// keep the connection open and send nothing more.
     StallsFrom { body: Vec<u8>, chunk: usize },
+    /// Answer any request with a 206 of the whole body that says it starts
+    /// at byte 0, whatever `Range` asked for.
+    PartialFromStart { body: Vec<u8> },
+    /// Answer a ranged request with a 206 of the rest of the body that does
+    /// not say where it starts: no `Content-Range`.
+    PartialWithoutRange { body: Vec<u8> },
+    /// Honour `Range`, with the body's digest, and hang up when the answer
+    /// is not read within `within`, as a server does with a connection
+    /// nobody reads from.
+    DropsIfUnread { body: Vec<u8>, within: Duration },
 }
 
 pub(crate) struct TestServer {
@@ -237,10 +247,64 @@ async fn handle_one(
             std::future::pending::<()>().await;
         }
         Reply::StallsFrom { body, chunk } => stall_from(socket, &body, start, chunk).await?,
+        reply @ (Reply::PartialFromStart { .. }
+        | Reply::PartialWithoutRange { .. }
+        | Reply::DropsIfUnread { .. }) => partial(socket, reply, start).await?,
     }
 
     socket.flush().await?;
     Ok(())
+}
+
+/// The 206 answers that cannot be placed, or are not read in time.
+async fn partial(
+    socket: &mut tokio::net::TcpStream,
+    reply: Reply,
+    start: usize,
+) -> std::io::Result<()> {
+    match reply {
+        Reply::PartialFromStart { body } => {
+            let head = format!(
+                "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes 0-{}/{}\r\nConnection: close\r\n\r\n",
+                body.len(),
+                body.len() - 1,
+                body.len()
+            );
+            socket.write_all(head.as_bytes()).await?;
+            socket.write_all(&body).await?;
+        }
+        Reply::PartialWithoutRange { body } => {
+            let slice = &body[start..];
+            let head = format!(
+                "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                slice.len()
+            );
+            socket.write_all(head.as_bytes()).await?;
+            socket.write_all(slice).await?;
+        }
+        Reply::DropsIfUnread { body, within } => {
+            let slice = &body[start..];
+            let head = format!(
+                "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-{}/{}\r\n{}Connection: close\r\n\r\n",
+                slice.len(),
+                start,
+                body.len() - 1,
+                body.len(),
+                etag_header(Some(&sha256_of(&body)))
+            );
+            let answer = async {
+                socket.write_all(head.as_bytes()).await?;
+                socket.write_all(slice).await?;
+                socket.flush().await
+            };
+            // Unread in time: hang up with the rest unsent.
+            if tokio::time::timeout(within, answer).await.is_err() {
+                return Ok(());
+            }
+        }
+        _ => unreachable!("only the partial answers come here"),
+    }
+    socket.flush().await
 }
 
 /// Honour a `Range` from `start`, send `chunk` bytes from there, then hold
@@ -335,7 +399,7 @@ impl Fixture {
     }
 
     pub(in crate::executor) fn part(&self) -> PathBuf {
-        part_path_for(&self.dest)
+        part_path_for(&self.dest, None)
     }
 }
 
@@ -348,6 +412,7 @@ pub(crate) fn request<'a>(
     NativeDownload {
         url,
         dest,
+        commit: None,
         token: None,
         expected_size,
         progress,
@@ -792,6 +857,7 @@ async fn a_download_cancelled_before_it_starts_asks_the_server_nothing() {
         &NativeDownload {
             url: &url,
             dest: &fx.dest,
+            commit: None,
             token: None,
             expected_size: None,
             progress: None,
@@ -822,6 +888,7 @@ async fn a_cancel_while_the_server_is_silent_ends_the_transfer_at_once() {
     let request = NativeDownload {
         url: &url,
         dest: &fx.dest,
+        commit: None,
         token: None,
         expected_size: None,
         progress: None,
@@ -935,7 +1002,12 @@ fn an_unknown_content_range_total_is_not_invented() {
 fn part_paths_sit_beside_their_destination() {
     let dest = Path::new("/models/repo/model.gguf");
     assert_eq!(
-        part_path_for(dest),
+        part_path_for(dest, None),
         PathBuf::from("/models/repo/model.gguf.part")
+    );
+    assert_eq!(
+        part_path_for(dest, Some("2222abcd")),
+        PathBuf::from("/models/repo/model.gguf.2222abcd.part"),
+        "a fetch pinned to a commit keeps its bytes under that commit's name"
     );
 }

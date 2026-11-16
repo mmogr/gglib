@@ -31,10 +31,19 @@ bytes: string,
  */
 percent: string, 
 /**
- * `118.4 MB/s`, or a dash while it is not yet known.
+ * `118.4 MB/s`, or a dash while it is not yet known. Empty while a note
+ * stands in for progress.
  */
 speed: string, 
 /**
- * `ETA 2m 40s`, or `ETA` and a dash while it is not yet known.
+ * `ETA 2m 40s`, or `ETA` and a dash while it is not yet known. Empty
+ * while a note stands in for progress.
  */
-eta: string, };
+eta: string, 
+/**
+ * The note standing in for progress while the download is under way
+ * and nothing arrives (`no data for 30s, reconnecting (1 of 3)…`, a
+ * part being checked). It is the status too; a renderer that leaves a
+ * plain transfer's status out shows this. Absent otherwise.
+ */
+notice?: string, };

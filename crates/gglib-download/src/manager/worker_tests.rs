@@ -8,7 +8,7 @@ use gglib_core::ports::huggingface::fake_hub::FakeHub;
 use gglib_core::ports::{HfFileInfo, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult};
 
 use super::*;
-use crate::executor::native::tests::{Reply, TestServer, body_of};
+use crate::executor::native::tests::{Reply, TestServer, body_of, sha256_of};
 
 const fn at(bytes: u64, wire: u64) -> FileProgress {
     FileProgress {
@@ -212,4 +212,115 @@ async fn a_cancel_is_answered_once_the_part_holds_what_arrived() {
         kept, sent as u64,
         "the .part holds what arrived when the cancel is answered"
     );
+}
+
+/// A download that ended with its `.part` on disk (it gave up on a quiet
+/// connection, or failed, or was cancelled) is queued again: its job asks
+/// only for what is missing, so trying again carries on rather than
+/// starting over.
+#[tokio::test]
+async fn a_job_run_again_carries_on_from_the_part() {
+    gglib_core::paths::isolate_data_root();
+    let body = body_of(8192);
+    let kept = 3000;
+    let server = TestServer::start(vec![Reply::File {
+        body: body.clone(),
+        etag: Some(sha256_of(&body)),
+    }])
+    .await;
+    let models = tempfile::tempdir().unwrap();
+
+    let (progress_tx, _progress_rx) = watch::channel(ProgressUpdate::default());
+    let job = DownloadJob {
+        id: DownloadId::new("tester/again-GGUF", Some("Q4_0")),
+        repo: "tester/again-GGUF".to_string(),
+        destination: DownloadDestination::plan(
+            models.path(),
+            "tester/again-GGUF",
+            vec!["again.gguf".to_string()],
+        ),
+        revision: None,
+        cancel: CancellationToken::new(),
+        progress_tx,
+        expected_size: Some(body.len() as u64),
+        upgrade: None,
+    };
+    job.destination.ensure_dir().unwrap();
+    let part = job.destination.model_dir.join("again.gguf.part");
+    std::fs::write(&part, &body[..kept]).unwrap();
+    let deps = WorkerDeps {
+        config: DownloadManagerConfig::default(),
+        hub: Arc::new(ServedAt(server.url())),
+    };
+
+    tokio::time::timeout(Duration::from_secs(10), execute_download(&job, &deps))
+        .await
+        .expect("the fetch ends")
+        .expect("the fetch completes");
+
+    assert_eq!(server.ranges(), [Some(format!("bytes={kept}-"))]);
+    assert_eq!(
+        std::fs::read(job.destination.model_dir.join("again.gguf")).unwrap(),
+        body
+    );
+}
+
+/// An upgrade's file is fetched again over the copy on disk, pinned to its
+/// commit. An upgrade tried again at the same commit carries on from the
+/// part that commit's earlier run left; a part of any other revision goes,
+/// and the old copy stays until the new one replaces it.
+#[tokio::test]
+async fn an_upgrade_run_again_carries_on_from_its_own_commits_part() {
+    gglib_core::paths::isolate_data_root();
+    let body = body_of(8192);
+    let kept = 3000;
+    let commit = "2222222222222222222222222222222222222222";
+    let server = TestServer::start(vec![Reply::File {
+        body: body.clone(),
+        etag: Some(sha256_of(&body)),
+    }])
+    .await;
+    let models = tempfile::tempdir().unwrap();
+
+    let (progress_tx, _progress_rx) = watch::channel(ProgressUpdate::default());
+    let job = DownloadJob {
+        id: DownloadId::new("tester/upgrade-GGUF", Some("Q4_0")),
+        repo: "tester/upgrade-GGUF".to_string(),
+        destination: DownloadDestination::plan(
+            models.path(),
+            "tester/upgrade-GGUF",
+            vec!["up.gguf".to_string()],
+        ),
+        revision: None,
+        cancel: CancellationToken::new(),
+        progress_tx,
+        expected_size: Some(body.len() as u64),
+        upgrade: Some(crate::queue::Upgrade {
+            model_id: 7,
+            commit: commit.to_string(),
+        }),
+    };
+    job.destination.ensure_dir().unwrap();
+    let dir = job.destination.model_dir.clone();
+    std::fs::write(dir.join("up.gguf"), b"the old revision").unwrap();
+    std::fs::write(dir.join(format!("up.gguf.{commit}.part")), &body[..kept]).unwrap();
+    std::fs::write(dir.join("up.gguf.part"), b"another revision's start").unwrap();
+    std::fs::write(dir.join("up.gguf.1111.part"), b"an older upgrade's start").unwrap();
+    let deps = WorkerDeps {
+        config: DownloadManagerConfig::default(),
+        hub: Arc::new(ServedAt(server.url())),
+    };
+
+    tokio::time::timeout(Duration::from_secs(10), execute_download(&job, &deps))
+        .await
+        .expect("the fetch ends")
+        .expect("the fetch completes");
+
+    assert_eq!(server.ranges(), [Some(format!("bytes={kept}-"))]);
+    assert_eq!(std::fs::read(dir.join("up.gguf")).unwrap(), body);
+    let left: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(left, ["up.gguf"], "no part of any revision is left");
 }

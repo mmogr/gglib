@@ -51,6 +51,7 @@ fn a_downloading_row_reads_its_bytes_speed_and_time() {
             percent: "25.0%".to_string(),
             speed: "118.4 MB/s".to_string(),
             eta: "ETA 2m 40s".to_string(),
+            notice: None,
         }
     );
 }
@@ -177,6 +178,24 @@ fn a_notice_stands_in_for_the_status_the_speed_and_the_time_remaining() {
         row.text.bytes, "4.00 GiB / 6.00 GiB",
         "the bytes still show"
     );
+    assert_eq!(
+        row.text.notice.as_deref(),
+        Some("no data for 30s, reconnecting (1 of 3)…"),
+        "the note is a field of its own, so no renderer tells it from the status by its words"
+    );
+}
+
+/// A note is carried only while the download is under way.
+#[test]
+fn a_note_is_not_carried_once_the_bytes_are_in() {
+    let id = id();
+    let facts = RowFacts {
+        phase: DownloadPhase::Finalizing,
+        notice: Some("no data for 30s, reconnecting (1 of 3)…"),
+        ..downloading(&id, 6 * GIB, Some(6 * GIB))
+    };
+
+    assert_eq!(row(&facts).text.notice, None);
 }
 
 /// An unmeasured speed is a dash, not a zero.
