@@ -251,6 +251,19 @@ describe('the menu bridge', () => {
     stop();
   });
 
+  it('a Load that left the endpoint off is a success, with why said beside it in the daemon’s words', async () => {
+    const off = 'The endpoint is off: port 8080 is in use by another program. Stop it, or choose another port.';
+    const answer = { port: 9007, message: 'Server started on port 9007', endpoint_off: off };
+    transport.serveModel.mockResolvedValueOnce(answer);
+    const { fire, stop } = await bridged('/models/7');
+    await waitFor(() => expect(transport.listModels).toHaveBeenCalled());
+    await fire(MENU_EVENTS.LOAD_MODEL);
+    expect(notify).toHaveBeenCalledWith(off, 'warning');
+    expect(notify).not.toHaveBeenCalledWith(expect.stringContaining("Didn't load"), 'error');
+    expect(menu.syncMenuStateSilent).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
   it('Load with Options… opens the sheet beside the place that shows the model', async () => {
     const { at, router, fire, stop } = await bridged('/library');
     await fire(MENU_EVENTS.LOAD_WITH_OPTIONS);

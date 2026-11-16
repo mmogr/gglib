@@ -361,3 +361,6 @@ async fn stopping_an_image_model_in_the_second_slot_stops_it_by_id() {
 
 #[path = "servers_proxy_events_tests.rs"]
 mod proxy_events;
+
+#[path = "servers_port_taken_tests.rs"]
+mod port_taken;

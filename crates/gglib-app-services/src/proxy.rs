@@ -415,24 +415,35 @@ impl ProxyOps {
         // Under the lock every start and stop takes, so it cannot land
         // between a switch's stop and its start.
         let _one = self.switching.lock().await;
+        self.ensure_running_unlocked()
+            .await?
+            .map_err(Self::map_start_error)
+    }
+
+    /// [`Self::ensure_running`], with `switching` already held, and the
+    /// start's own failure untranslated, so a caller can tell a port another
+    /// program holds from the rest (`proxy_or_off.rs`). The outer error is
+    /// the settings that could not be read.
+    async fn ensure_running_unlocked(
+        &self,
+    ) -> Result<Result<SocketAddr, SupervisorError>, GuiError> {
         if let ProxyStatus::Running { address } = self.supervisor.status().await {
-            return Ok(address);
+            return Ok(Ok(address));
         }
 
         let settings = self.core.settings().get().await?;
         // The stored answers, as every start that names nothing gets them.
         let config = crate::proxy_settings::proxy_config_from_settings(&settings);
 
-        match self.start_raw(config).await {
-            Ok(address) => Ok(address),
+        Ok(match self.start_raw(config).await {
             Err(SupervisorError::AlreadyRunning(_)) => match self.supervisor.status().await {
                 ProxyStatus::Running { address } => Ok(address),
-                other => Err(GuiError::Internal(format!(
+                other => Err(SupervisorError::Internal(format!(
                     "proxy reported as already running but status is {other}"
                 ))),
             },
-            Err(e) => Err(Self::map_start_error(e)),
-        }
+            started => started,
+        })
     }
 
     /// The shared model runtime backing this proxy.
@@ -639,6 +650,10 @@ impl ProxyOps {
 }
 #[path = "proxy_start_as.rs"]
 mod start_as;
+
+#[path = "proxy_or_off.rs"]
+mod or_off;
+pub(crate) use or_off::Endpoint;
 
 #[cfg(test)]
 #[path = "proxy_tests.rs"]

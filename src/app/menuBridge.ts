@@ -36,6 +36,7 @@ import {
   syncMenuStateSilent,
   type MenuPlace,
 } from '../services/platform';
+import { sayEndpointOff } from '../services/server/endpointOff';
 import { safeStopServer } from '../services/server/safeActions';
 import { isServerRunning } from '../services/serverRegistry';
 import { getTransport } from '../services/transport';
@@ -101,7 +102,7 @@ async function loadSelected(notify: Notify): Promise<void> {
   const selected = selectedModelId();
   if (selected === null || isServerRunning(selected)) return;
   try {
-    await getTransport().serveModel({ id: selected });
+    sayEndpointOff(await getTransport().serveModel({ id: selected }), notify);
   } catch (error) {
     notify(loadFailed(error), 'error');
     return;
