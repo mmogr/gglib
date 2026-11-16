@@ -10,29 +10,39 @@
 use std::path::PathBuf;
 
 use gglib_core::domain::RuntimeKind;
+use tokio::sync::{Mutex, MutexGuard};
+
+/// Held by the test that has the engines. A tokio lock, so an async test
+/// can hold it across its awaits, and a test that panics leaves it free.
+static ENGINES: Mutex<()> = Mutex::const_new(());
 
 /// This binary's engines, held by one test at a time.
 pub(crate) struct Engines {
-    _held: (),
+    _held: MutexGuard<'static, ()>,
 }
 
 impl Engines {
     /// Hold the engines, once no other test does.
     pub(crate) async fn hold() -> Self {
         gglib_core::paths::isolate_data_root();
-        Self { _held: () }
+        Self {
+            _held: ENGINES.lock().await,
+        }
     }
 
     /// [`Self::hold`], from a thread outside any runtime.
     pub(crate) fn hold_blocking() -> Self {
         gglib_core::paths::isolate_data_root();
-        Self { _held: () }
+        Self {
+            _held: ENGINES.blocking_lock(),
+        }
     }
 
-    /// A file where `kind`'s server goes under this binary's data root, as an
-    /// install leaves one as far as a status or a removal can tell, and its
-    /// path. It is not a program: nothing these tests ask needs it to run.
-    pub(crate) fn stand_in(&self, kind: RuntimeKind) -> PathBuf {
+    /// Write a file where `kind`'s server goes under this binary's data root,
+    /// as an install leaves one as far as a status or a removal can tell, and
+    /// give the engines back with its path. It is not a program: nothing
+    /// these tests ask needs it to run.
+    pub(crate) fn stand_in(self, kind: RuntimeKind) -> (Self, PathBuf) {
         let root = gglib_core::paths::isolate_data_root();
         let binary = match kind {
             RuntimeKind::Llama => gglib_core::paths::llama_server_path(),
@@ -43,6 +53,6 @@ impl Engines {
         std::fs::create_dir_all(binary.parent().expect("a bin folder"))
             .expect("the engine's bin folder");
         std::fs::write(&binary, b"not a program\n").expect("the stand-in is written");
-        binary
+        (self, binary)
     }
 }

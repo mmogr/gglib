@@ -548,8 +548,7 @@ async fn removal_is_not_refused_for_a_chat_model() {
 /// nothing: the `sd-server` installed under this binary's data root stays.
 #[tokio::test]
 async fn uninstall_refuses_while_an_image_model_runs_and_removes_nothing() {
-    let engines = Engines::hold().await;
-    let binary = engines.stand_in(RuntimeKind::StableDiffusion);
+    let (_engines, binary) = Engines::hold().await.stand_in(RuntimeKind::StableDiffusion);
     let setup = SetupOps::new(SetupDeps {
         core: test_core().await,
         system_probe: Arc::new(MockSystemProbePort::default()),
@@ -641,8 +640,7 @@ async fn an_install_is_refused_while_a_model_runs_on_its_engine() {
 /// does under an image model, and removes nothing.
 #[tokio::test]
 async fn llama_uninstall_refuses_while_a_chat_model_runs() {
-    let engines = Engines::hold().await;
-    let binary = engines.stand_in(RuntimeKind::Llama);
+    let (_engines, binary) = Engines::hold().await.stand_in(RuntimeKind::Llama);
     let setup = SetupOps::new(SetupDeps {
         core: test_core().await,
         system_probe: Arc::new(MockSystemProbePort::default()),
@@ -668,8 +666,7 @@ async fn llama_uninstall_refuses_while_a_chat_model_runs() {
 /// and downloading over it is not the daemon's to choose.
 #[tokio::test]
 async fn an_install_over_a_source_build_of_a_release_is_left_to_the_terminal() {
-    let engines = Engines::hold().await;
-    engines.stand_in(RuntimeKind::StableDiffusion);
+    let (_engines, _) = Engines::hold().await.stand_in(RuntimeKind::StableDiffusion);
     std::fs::write(
         gglib_core::paths::sd_config_path().unwrap(),
         format!(
@@ -719,35 +716,6 @@ fn the_engines_are_held_by_one_test_at_a_time() {
     }
 
     assert_eq!(most.load(Ordering::SeqCst), 1, "tests held them at once");
-}
-
-/// A test that writes the stand-in `sd-server` and a status that runs it,
-/// each over and over beside the other for up to two seconds, as two tests
-/// of this binary run: no write fails. On Windows one did, when the status
-/// had the file open to run it (#2045).
-#[test]
-fn a_stand_in_is_never_written_while_a_status_runs_it() {
-    const ROUNDS: usize = 300;
-    let until = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    let writer = std::thread::spawn(move || {
-        for _ in 0..ROUNDS {
-            if std::time::Instant::now() > until {
-                break;
-            }
-            Engines::hold_blocking().stand_in(RuntimeKind::StableDiffusion);
-        }
-    });
-    for _ in 0..ROUNDS {
-        if std::time::Instant::now() > until {
-            break;
-        }
-        let _engines = Engines::hold_blocking();
-        // What a status asks: its `--version`. The stand-in is no program,
-        // so it never answers; that it was run is all that matters here.
-        let _ = gglib_runtime::engine::validate_engine(RuntimeKind::StableDiffusion);
-    }
-
-    writer.join().expect("every write of the stand-in succeeds");
 }
 
 /// The state an engine status is on the wire as.
