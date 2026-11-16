@@ -13,6 +13,8 @@ pub use vulkan::{MissingPackage, VulkanStatus, vulkan_status};
 
 use anyhow::{Result, anyhow};
 
+use crate::system::vulkan_devices::{vulkan_devices, vulkan_gpu_present};
+
 /// Acceleration type for llama.cpp build.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Acceleration {
@@ -71,10 +73,9 @@ pub fn detect_optimal_acceleration() -> Result<Acceleration> {
     } else if cuda::has_cuda_toolkit() {
         Ok(Acceleration::Cuda)
     } else {
-        without_metal_or_cuda(
-            &vulkan_status(),
-            crate::system::gpu::vulkan_device_present(),
-        )
+        let vulkan = vulkan_status();
+        let device = vulkan_gpu_present(std::env::consts::OS, vulkan.has_loader, &vulkan_devices());
+        without_metal_or_cuda(&vulkan, device)
     }
 }
 

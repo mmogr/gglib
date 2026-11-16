@@ -76,8 +76,8 @@ pub struct GpuInfo {
     pub cuda_version: Option<String>,
     /// On macOS (Metal always available).
     pub has_metal: bool,
-    /// A Vulkan GPU available: the loader, and on Linux a GPU device for it
-    /// to drive (AMD, Intel, NVIDIA via Mesa/drivers).
+    /// A Vulkan GPU available: the loader, and a GPU for it to drive, not a
+    /// software rasteriser (AMD, Intel, NVIDIA via Mesa/drivers).
     pub has_vulkan: bool,
     /// Vulkan development headers installed (`vulkan/vulkan.h`).
     pub vulkan_headers: bool,

@@ -10,6 +10,7 @@ use gglib_core::utils::process::cmd;
 use gglib_core::utils::system::{GpuInfo, SystemMemoryInfo};
 use sysinfo::System;
 
+use super::vulkan_devices::{vulkan_devices, vulkan_gpu_present};
 use crate::llama::vulkan_status;
 
 #[path = "device_memory.rs"]
@@ -31,7 +32,7 @@ pub(crate) fn detect_gpu_info() -> GpuInfo {
         // The loader is installed with many desktop systems that have no GPU
         // for it to drive, where a Vulkan build would run on the CPU and say
         // nothing; a device must be there too.
-        has_vulkan: vk.has_loader && vulkan_device_present(),
+        has_vulkan: vulkan_gpu_present(std::env::consts::OS, vk.has_loader, &vulkan_devices()),
         vulkan_headers: vk.has_headers,
         vulkan_glslc: vk.has_glslc,
         vulkan_spirv_headers: vk.has_spirv_headers,
@@ -55,59 +56,6 @@ pub(crate) fn gpu_for_downloads() -> GpuInfo {
             vulkan_spirv_headers: false,
         }
     }
-}
-
-/// Whether this machine has a GPU a Vulkan build can run on, as far as the
-/// loader alone cannot tell. On Linux, a GPU device: a DRM render node
-/// (`/dev/dri/renderD*`, which an AMD, Intel or NVIDIA driver makes),
-/// NVIDIA's own device node, or WSL2's GPU (`/dev/dxg`); and a Vulkan driver
-/// for it, an ICD manifest, since the loader library is often installed by
-/// other packages with no driver at all. Elsewhere the loader comes with a
-/// GPU's driver, so it counts.
-pub(crate) fn vulkan_device_present() -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        gpu_device_under(std::path::Path::new("/dev"))
-            && vulkan_driver_under(&[
-                std::path::Path::new("/usr/share/vulkan/icd.d"),
-                std::path::Path::new("/etc/vulkan/icd.d"),
-            ])
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        true
-    }
-}
-
-/// Whether one of the ICD directories `dirs` holds a Vulkan driver's
-/// manifest, a `.json` file.
-#[cfg_attr(
-    not(target_os = "linux"),
-    allow(dead_code, reason = "Linux's driver manifests")
-)]
-fn vulkan_driver_under(dirs: &[&std::path::Path]) -> bool {
-    dirs.iter().any(|dir| {
-        std::fs::read_dir(dir).is_ok_and(|entries| {
-            entries
-                .flatten()
-                .any(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
-        })
-    })
-}
-
-/// Whether the device directory `dev` holds a GPU's device node: a DRM
-/// render node, NVIDIA's, or WSL2's.
-#[cfg_attr(
-    not(target_os = "linux"),
-    allow(dead_code, reason = "Linux's device nodes")
-)]
-fn gpu_device_under(dev: &std::path::Path) -> bool {
-    let render_node = std::fs::read_dir(dev.join("dri")).is_ok_and(|entries| {
-        entries
-            .flatten()
-            .any(|entry| entry.file_name().to_string_lossy().starts_with("renderD"))
-    });
-    render_node || dev.join("nvidia0").exists() || dev.join("dxg").exists()
 }
 
 /// Detect if NVIDIA GPU hardware is present (regardless of CUDA installation).
@@ -278,55 +226,5 @@ mod tests {
         assert!(info.has_metal);
         #[cfg(not(target_os = "macos"))]
         assert!(!info.has_metal);
-    }
-}
-
-#[cfg(test)]
-mod device_tests {
-    use super::{gpu_device_under, vulkan_driver_under};
-
-    #[test]
-    fn a_vulkan_driver_is_an_icd_manifest() {
-        let share = tempfile::tempdir().unwrap();
-        let etc = tempfile::tempdir().unwrap();
-        assert!(
-            !vulkan_driver_under(&[share.path(), etc.path()]),
-            "no manifests"
-        );
-        std::fs::write(share.path().join("README"), "").unwrap();
-        assert!(
-            !vulkan_driver_under(&[share.path(), etc.path()]),
-            "not a manifest"
-        );
-        std::fs::write(etc.path().join("radeon_icd.x86_64.json"), "{}").unwrap();
-        assert!(vulkan_driver_under(&[share.path(), etc.path()]));
-        assert!(
-            !vulkan_driver_under(&[&share.path().join("gone")]),
-            "a missing directory"
-        );
-    }
-
-    #[test]
-    fn a_gpu_is_a_render_node_or_nvidias_or_wsl2s_device_node() {
-        let dev = tempfile::tempdir().unwrap();
-        assert!(!gpu_device_under(dev.path()), "an empty /dev");
-
-        std::fs::create_dir_all(dev.path().join("dri")).unwrap();
-        std::fs::write(dev.path().join("dri/card0"), "").unwrap();
-        assert!(
-            !gpu_device_under(dev.path()),
-            "a display card alone renders nothing"
-        );
-
-        std::fs::write(dev.path().join("dri/renderD128"), "").unwrap();
-        assert!(gpu_device_under(dev.path()));
-
-        let nvidia = tempfile::tempdir().unwrap();
-        std::fs::write(nvidia.path().join("nvidia0"), "").unwrap();
-        assert!(gpu_device_under(nvidia.path()));
-
-        let wsl = tempfile::tempdir().unwrap();
-        std::fs::write(wsl.path().join("dxg"), "").unwrap();
-        assert!(gpu_device_under(wsl.path()), "WSL2's GPU");
     }
 }
