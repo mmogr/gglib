@@ -273,6 +273,29 @@ mod tests {
         assert_eq!(from_gui.into_response().status(), StatusCode::CONFLICT);
     }
 
+    /// A failed load reaches the app as its own sentence, coded, with no
+    /// wrapping (#1959 C5): the inspector places `error` as it stands.
+    #[test]
+    fn a_failed_load_reaches_the_client_coded_in_its_own_words() {
+        let said = "llama-server stopped while loading qwen: it exited with status 1";
+        let HttpError::Coded {
+            status,
+            code,
+            message,
+        } = GuiError::LoadFailed(said.to_owned()).into()
+        else {
+            panic!("a failed load is a coded refusal");
+        };
+        assert_eq!(
+            (status, code, message.as_str()),
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                gglib_core::ports::LoadFailure::CODE,
+                said
+            )
+        );
+    }
+
     /// The neighbouring repository errors must not also become 409 — a
     /// conflict has to mean something.
     #[test]

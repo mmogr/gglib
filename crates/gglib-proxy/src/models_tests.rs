@@ -133,6 +133,28 @@ fn from_health_check_failed_error() {
     assert_eq!(err.error.code.as_deref(), Some("upstream_error"));
 }
 
+/// A failed load is its own sentence over HTTP, with nothing wrapped round
+/// it, and a code of its own (#1959 C5).
+#[test]
+fn from_load_failed_error() {
+    use gglib_core::domain::RuntimeKind;
+    use gglib_core::ports::{LoadCause, LoadFailure};
+
+    let failure = LoadFailure {
+        model: "qwen".to_owned(),
+        runtime: RuntimeKind::Llama,
+        cause: LoadCause::NotReady {
+            waited_secs: 120,
+            said: Some("load_tensors: loading model tensors".to_owned()),
+        },
+        fitted_context: None,
+    };
+    let err: ErrorResponse = ModelRuntimeError::LoadFailed(Box::new(failure.clone())).into();
+    assert_eq!(err.error.message, failure.to_string());
+    assert_eq!(err.error.code.as_deref(), Some("model_load_failed"));
+    assert_eq!(err.error.r#type, "server_error");
+}
+
 #[test]
 fn from_model_file_not_found_error() {
     let err: ErrorResponse =

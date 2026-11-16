@@ -43,8 +43,9 @@ async fn frames(state: &AppState, name: &str, id: &str) -> Vec<String> {
 /// A model that cannot be loaded no longer refuses the `PUT`: the run is
 /// made, says it waits for the load, and ends `failed`, `model_not_found`
 /// naming a model deleted since the chat stored it, and `model_unavailable`
-/// for one that is here and cannot load. Nothing was written, the chat is
-/// free again, and so is the slot.
+/// for one that is here and cannot load, with the runtime's reason (#1959
+/// C5): here its file is not there. Nothing was written, the chat is free
+/// again, and so is the slot.
 #[tokio::test]
 async fn a_load_that_fails_ends_the_run_failed_and_writes_nothing() {
     let (_dir, state) = state().await;
@@ -59,7 +60,7 @@ async fn a_load_that_fails_ends_the_run_failed_and_writes_nothing() {
         (
             chat(&state, None).await,
             "model_unavailable",
-            "the chat's model could not be loaded on the hub",
+            "Model file not found: ",
         ),
     ];
     for (run, (id, code, message)) in ["d1", "d2"].into_iter().zip(cases) {
@@ -71,7 +72,8 @@ async fn a_load_that_fails_ends_the_run_failed_and_writes_nothing() {
         assert_eq!(created.info.conversation_id, Some(id));
         assert_eq!(failed_with(&state, "phone", run).await, code);
         let run_info = state.runs.existing(&device("phone"), run).unwrap();
-        assert_eq!(run_info.unwrap().error.unwrap().message, message);
+        let said = run_info.unwrap().error.unwrap().message;
+        assert!(said.starts_with(message), "{said}");
         assert_eq!(frames(&state, "phone", run).await, ["waiting"]);
         assert_eq!(saved(&state, id).await.len(), 2, "no row was written");
         assert_eq!(state.agent_semaphore.available_permits(), 1);

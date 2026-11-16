@@ -46,6 +46,10 @@ pub(crate) mod system_probe;
 pub(crate) mod tool_executor_filter;
 pub(crate) mod usage_sink;
 
+#[cfg(test)]
+#[path = "load_failure_tests.rs"]
+mod load_failure_tests;
+
 use std::sync::Arc;
 use thiserror::Error;
 

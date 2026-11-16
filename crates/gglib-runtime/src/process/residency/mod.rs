@@ -835,6 +835,9 @@ mod announce_tests;
 #[path = "launch_sd_tests.rs"]
 mod launch_sd_tests;
 #[cfg(test)]
+#[path = "load_failure_tests.rs"]
+mod load_failure_tests;
+#[cfg(test)]
 #[path = "observe_tests.rs"]
 mod observe_tests;
 #[cfg(test)]

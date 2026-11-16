@@ -394,6 +394,66 @@ mod tests {
         );
     }
 
+    /// A load that failed reaches the app as the runtime said it, typed,
+    /// with nothing wrapped round it (#1959 C5).
+    #[test]
+    fn a_failed_load_reaches_the_app_in_the_runtimes_words() {
+        use gglib_core::domain::RuntimeKind;
+        use gglib_core::ports::{LoadCause, LoadFailure};
+        use gglib_core::utils::process::bounded::Failure;
+
+        let failure = LoadFailure {
+            model: "qwen".to_owned(),
+            runtime: RuntimeKind::Llama,
+            cause: LoadCause::Stopped {
+                failure: Some(Failure::Failed { code: 1 }),
+                said: Some("gguf_init_from_reader: invalid magic characters".to_owned()),
+            },
+            fitted_context: None,
+        };
+
+        let err = map_runtime_error(&ModelRuntimeError::LoadFailed(Box::new(failure.clone())));
+
+        match err {
+            GuiError::LoadFailed(said) => assert_eq!(said, failure.to_string()),
+            other => panic!("expected LoadFailed, got {other:?}"),
+        }
+    }
+
+    /// An engine its check found missing still brings up the install
+    /// prompt, from the check's typed answer rather than its words.
+    #[test]
+    fn a_load_refused_for_a_missing_engine_maps_to_the_install_hint() {
+        use gglib_core::domain::RuntimeKind;
+        use gglib_core::ports::{LoadCause, LoadFailure};
+        use gglib_core::utils::process::bounded::Failure;
+
+        let refused = |failure| {
+            map_runtime_error(&ModelRuntimeError::LoadFailed(Box::new(LoadFailure {
+                model: "qwen".to_owned(),
+                runtime: RuntimeKind::Llama,
+                cause: LoadCause::EngineNotWorking {
+                    failure,
+                    reason: "llama-server not found at: /x".to_owned(),
+                },
+                fitted_context: None,
+            })))
+        };
+
+        assert_eq!(
+            install_hint_reason(&refused(Failure::NotFound)),
+            "not found"
+        );
+        assert_eq!(
+            install_hint_reason(&refused(Failure::NotExecutable)),
+            "not executable"
+        );
+        assert!(matches!(
+            refused(Failure::MissingLibrary { name: None }),
+            GuiError::LoadFailed(_)
+        ));
+    }
+
     #[test]
     fn model_not_found_maps_to_not_found() {
         let err = map_runtime_error(&ModelRuntimeError::ModelNotFound("qwen2.5".to_string()));
