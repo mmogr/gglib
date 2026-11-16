@@ -51,14 +51,49 @@ fn pinned() -> ReleaseSelector {
     ReleaseSelector::Tag("v1".to_owned())
 }
 
-/// A zip holding `names`, each a few bytes.
+/// The server the target names, as a member of a release archive.
+const SERVER: &str = "widget-server";
+
+/// The bytes of a program that answers `--version` and exits 0: the
+/// stand-in program, which does that with no instruction file beside it.
+fn a_working_server() -> Vec<u8> {
+    static BYTES: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+    BYTES
+        .get_or_init(|| {
+            let dir = tempfile::tempdir().expect("a temp dir");
+            let program = gglib_test_proc::install(dir.path(), SERVER, "");
+            std::fs::remove_file(gglib_test_proc::instructions_path(&program))
+                .expect("no instructions");
+            std::fs::read(program).expect("the stand-in's bytes")
+        })
+        .clone()
+}
+
+/// A zip holding `names`, each a few bytes, except the server, which is a
+/// program that runs.
 fn zip_of(names: &[&str]) -> Vec<u8> {
+    let members: Vec<(&str, Vec<u8>)> = names
+        .iter()
+        .map(|name| {
+            let bytes = if *name == SERVER {
+                a_working_server()
+            } else {
+                b"fixture".to_vec()
+            };
+            (*name, bytes)
+        })
+        .collect();
+    zip_with(&members)
+}
+
+/// A zip holding each member with its bytes.
+fn zip_with(members: &[(&str, Vec<u8>)]) -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let options =
         zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-    for name in names {
+    for (name, bytes) in members {
         zip.start_file(*name, options).expect("a member");
-        zip.write_all(b"fixture").expect("its bytes");
+        zip.write_all(bytes).expect("its bytes");
     }
     zip.finish().expect("finish the zip").into_inner()
 }
@@ -379,6 +414,37 @@ async fn an_archive_missing_a_required_member_records_nothing_and_leaves_no_arch
     assert_eq!(
         frames(&run.events).last().map(String::as_str),
         Some(phase("started", "extract").as_str())
+    );
+}
+
+/// An install whose server cannot start fails at its Verify phase, saying
+/// why, instead of being called done (#1959 A1). The server here prints what
+/// glibc's loader prints for a missing library and exits 127, as it does.
+#[tokio::test]
+async fn an_install_whose_server_cannot_start_fails_its_verify_saying_why() {
+    let dirs = dirs();
+    let instructions = "eprint ./widget-server: error while loading shared libraries: \
+        libwidget.so: cannot open shared object file: No such file or directory\nexit 127";
+    let zip = zip_with(&[
+        (SERVER, a_working_server()),
+        ("widget-server.proc", instructions.as_bytes().to_vec()),
+        ("libwidget.so", b"fixture".to_vec()),
+    ]);
+    let fake = serve(&["w-v1-bin-Linux-Ubuntu-24.04-x86_64.zip"], &zip).await;
+
+    let run = run(&fake, &spec(AssetChoice::First), target(&dirs, LINUX)).await;
+
+    let refusal = run
+        .result
+        .expect_err("a server that cannot start")
+        .to_string();
+    assert!(
+        refusal.contains("the library libwidget.so it needs is missing"),
+        "{refusal}"
+    );
+    assert_eq!(
+        frames(&run.events).last().map(String::as_str),
+        Some(phase("started", "verify").as_str())
     );
 }
 

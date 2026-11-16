@@ -166,6 +166,30 @@ mod tests {
         assert!(refusal.contains("did not answer"), "{refusal}");
     }
 
+    /// An engine the loader cannot start for want of a library is said to be
+    /// missing that library, not to be corrupted (#1959 A1). The stand-in
+    /// prints what glibc's loader prints and exits 127, as it does.
+    #[test]
+    fn an_engine_missing_a_library_says_which() {
+        let dir = tempdir().unwrap();
+        let engine = gglib_test_proc::install(
+            dir.path(),
+            "llama-server",
+            "eprint ./llama-server: error while loading shared libraries: libvulkan.so.1: \
+             cannot open shared object file: No such file or directory\nexit 127",
+        );
+
+        let refusal = validate_llama_binary(&engine)
+            .expect_err("an engine that cannot start is not working")
+            .to_string();
+
+        assert!(
+            refusal.contains("the library libvulkan.so.1 it needs is missing"),
+            "{refusal}"
+        );
+        assert!(!refusal.contains("corrupted"), "{refusal}");
+    }
+
     #[test]
     fn test_validate_nonexistent() {
         let path = Path::new("/nonexistent/llama-server");

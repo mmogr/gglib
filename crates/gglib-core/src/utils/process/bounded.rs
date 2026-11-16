@@ -87,3 +87,7 @@ fn read_on_a_thread(stream: Option<impl Read + Send + 'static>) -> mpsc::Receive
 #[cfg(test)]
 #[path = "bounded_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "bounded_failure_tests.rs"]
+mod failure_tests;

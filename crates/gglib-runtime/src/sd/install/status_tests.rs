@@ -133,6 +133,38 @@ fn the_status_reads_the_record_and_the_binarys_own_version() {
     );
 }
 
+/// An sd-server the loader cannot start is installed and not working, with
+/// the reason, as llama-server's status says it (#1959 B3). The stand-in
+/// prints what glibc's loader prints and exits 127, as it does; Windows'
+/// status code is read the same way in `failure_kind`'s own tests.
+#[test]
+fn an_sd_server_missing_a_library_is_not_working_and_says_why() {
+    let tmp = tempfile::tempdir().expect("a temp dir");
+    let binary = gglib_test_proc::install(
+        tmp.path(),
+        "sd-server",
+        "eprint ./sd-server: error while loading shared libraries: libvulkan.so.1: \
+         cannot open shared object file: No such file or directory\nexit 127",
+    );
+
+    let status = sd_status_at(
+        &binary,
+        &tmp.path().join("sd-config.json"),
+        &tmp.path().join("stable-diffusion.cpp"),
+        &pin(),
+    );
+
+    assert!(status.installed);
+    assert_eq!(status.version_line, None);
+    let shown = serde_json::to_value(&status).expect("the status serialises");
+    let reason = shown["healthError"].as_str().unwrap_or_default();
+    assert!(
+        reason.contains("the library libvulkan.so.1 it needs is missing"),
+        "healthError: {}",
+        shown["healthError"]
+    );
+}
+
 #[test]
 fn an_unreadable_record_is_reported_not_raised() {
     let tmp = tempfile::tempdir().expect("a temp dir");
