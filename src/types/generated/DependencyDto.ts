@@ -15,4 +15,9 @@ status: string,
 /**
  * Present only when `status` is `"present"`.
  */
-version: string | null, description: string, required: boolean, installHint: string | null, };
+version: string | null, 
+/**
+ * The state in the words `check-deps` prints: `v3.28.1`, `available`,
+ * `missing`, `not installed`, `optional`.
+ */
+statusWord: string, description: string, required: boolean, installHint: string | null, };

@@ -10,7 +10,7 @@ const EVERY_OS: [HostOs; 3] = [HostOs::Linux, HostOs::MacOs, HostOs::Windows];
 /// and Windows all do.
 fn bare_machine() -> Found {
     Found {
-        llama_download: true,
+        llama_install: EngineInstall::Download,
         ..Found::default()
     }
 }
@@ -212,7 +212,7 @@ fn a_checkout_still_needs_its_build_tools() {
 #[test]
 fn an_installed_gglib_with_no_engine_download_needs_the_engine_build() {
     let found = Found {
-        llama_download: false,
+        llama_install: EngineInstall::NoDownload,
         ..Found::default()
     };
     let report = dependency_report(
@@ -269,4 +269,32 @@ fn a_row_found_carries_its_version() {
     );
     let rustc = report.dependencies().find(|d| d.name == "rustc").unwrap();
     assert_eq!(rustc.status, DependencyStatus::Missing);
+}
+
+/// An installed gglib whose llama.cpp was built from source (a CUDA build on
+/// Linux, say) builds its updates from source too, download or not, so it
+/// needs the engine build and is told why.
+#[test]
+fn an_installed_gglib_with_an_engine_built_from_source_needs_the_engine_build() {
+    let found = Found {
+        llama_installed: true,
+        llama_install: EngineInstall::Rebuild,
+        ..Found::default()
+    };
+    let report = dependency_report(
+        HostOs::Linux,
+        BuildOrigin::Installed,
+        LinuxDistro::Debian,
+        &found,
+    );
+    let engine = group(&report, Purpose::BuildEngine);
+    assert!(engine.needed);
+    assert!(
+        engine.explanation.contains("built from source"),
+        "{}",
+        engine.explanation
+    );
+    let missing = names(&report.missing());
+    assert!(missing.contains(&"cmake".to_owned()), "{missing:?}");
+    assert!(!group(&report, Purpose::BuildGglib).needed);
 }

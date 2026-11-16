@@ -81,7 +81,7 @@ pub enum ConfigCommand {
         #[command(subcommand)]
         command: SdCommand,
     },
-    /// Check system dependencies required for gglib
+    /// Check what this gglib needs, and what building gglib or an engine from source needs
     CheckDeps,
     /// Enable or inspect the optional `hf_xet` download accelerator
     FastDownloads {

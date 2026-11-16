@@ -1,41 +1,38 @@
-//! Library and dependency-specific checks.
+//! How a row of the dependency table is looked for on this machine.
 //!
-//! These functions check for specific system libraries using pkg-config.
+//! The table (`gglib_core::utils::system::NEEDS`) says what each row is
+//! called on each OS and how its version is read; this runs that, through the
+//! time-limited helpers in `llama::detect::tools` and `pkg-config`.
 
 use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
-
 use gglib_core::utils::process::cmd;
+use gglib_core::utils::system::{HostOs, Need, Probe};
 
-/// Check if libssl-dev is installed by checking for OpenSSL with pkg-config.
-pub(super) fn check_libssl() -> Option<String> {
-    check_pkg_config_lib("openssl")
-}
+use crate::llama::detect::tools::{compiler_version, version_line, version_word};
 
-/// Check if libsqlite3-dev is installed
-#[cfg(target_os = "linux")]
-pub(super) fn check_libsqlite3() -> Option<String> {
-    check_pkg_config_lib("sqlite3")
-}
-
-/// Check if libasound2-dev is installed (ALSA for audio support)
-#[cfg(target_os = "linux")]
-pub(super) fn check_libasound() -> Option<String> {
-    check_pkg_config_lib("alsa")
-}
-
-/// Check if libcurl-dev is installed
-#[cfg(target_os = "linux")]
-pub(super) fn check_libcurl() -> Option<String> {
-    check_pkg_config_lib("libcurl")
+/// The version `need` reports on `os`, from the first of its names that
+/// answers, or `None` when none does.
+pub(super) fn version_of(need: &Need, os: HostOs) -> Option<String> {
+    need.names(os).iter().find_map(|name| match need.probe {
+        Probe::Word(index) => version_word(name, index),
+        Probe::Line => version_line(name),
+        Probe::LineLessV => version_line(name).map(|line| line.trim_start_matches('v').to_owned()),
+        Probe::Compiler => compiler_version(name),
+        // `python` is Python 3 on some systems and Python 2 on others; on
+        // Windows either name may be the Store's stand-in, which fails.
+        Probe::Python3 => version_word(name, 1).filter(|version| version.starts_with('3')),
+        Probe::PkgConfig => check_pkg_config_lib(name),
+        Probe::LibClang => check_libclang(),
+    })
 }
 
 /// Check if libclang-dev is installed (needed by bindgen for FFI bindings).
 ///
 /// libclang doesn't have a pkg-config file, so we check for the shared library
 /// directly: where llvm-config says it is, then the standard library paths,
-/// then the per-version LLVM directories.
-#[cfg(target_os = "linux")]
-pub(super) fn check_libclang() -> Option<String> {
+/// then the per-version LLVM directories. Asked on Linux alone, as the table
+/// says.
+fn check_libclang() -> Option<String> {
     use std::path::Path;
 
     if let Ok(output) = run_bounded(cmd("llvm-config").arg("--libdir"), PROBE_WAIT)
@@ -69,7 +66,6 @@ pub(super) fn check_libclang() -> Option<String> {
 }
 
 /// Whether `dir` holds a libclang shared library.
-#[cfg(any(target_os = "linux", test))]
 fn dir_has_libclang(dir: &std::path::Path) -> bool {
     std::fs::read_dir(dir).is_ok_and(|entries| {
         entries.flatten().any(|entry| {
@@ -98,44 +94,6 @@ pub(super) fn check_pkg_config_lib(lib_name: &str) -> Option<String> {
         .into()
 }
 
-/// Check if webkit2gtk is installed (tries 4.1 then falls back to 4.0).
-#[cfg(target_os = "linux")]
-pub(super) fn check_webkit2gtk() -> Option<String> {
-    // Try webkit2gtk-4.1 first (Ubuntu 24.04+)
-    if let Some(version) = check_pkg_config_lib("webkit2gtk-4.1") {
-        return Some(version);
-    }
-    // Fall back to webkit2gtk-4.0 (older versions)
-    check_pkg_config_lib("webkit2gtk-4.0")
-}
-
-/// Check if librsvg is installed.
-#[cfg(target_os = "linux")]
-pub(super) fn check_librsvg() -> Option<String> {
-    check_pkg_config_lib("librsvg-2.0")
-}
-
-/// Check if libappindicator-gtk3 is installed.
-#[cfg(target_os = "linux")]
-pub(super) fn check_libappindicator() -> Option<String> {
-    // Try ayatana-appindicator first (newer Ubuntu/Debian)
-    if let Some(version) = check_pkg_config_lib("ayatana-appindicator3-0.1") {
-        return Some(version);
-    }
-    // Fall back to older appindicator
-    check_pkg_config_lib("appindicator3-0.1")
-}
-
-/// Check if gtk-layer-shell is installed.
-///
-/// Optional, unlike the rest of this module: without it the tray panel opens
-/// wherever the compositor puts it instead of beside the system tray, which is
-/// a worse panel rather than a broken build.
-#[cfg(target_os = "linux")]
-pub(super) fn check_gtk_layer_shell() -> Option<String> {
-    check_pkg_config_lib("gtk-layer-shell-0")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,5 +118,12 @@ mod tests {
     fn test_check_pkg_config_lib_nonexistent() {
         // A library that definitely doesn't exist
         assert!(check_pkg_config_lib("nonexistent-library-12345").is_none());
+    }
+
+    /// A row with no name on an OS is not looked for there at all.
+    #[test]
+    fn a_row_with_no_name_on_an_os_is_not_asked() {
+        let patchelf = gglib_core::utils::system::need("patchelf").unwrap();
+        assert_eq!(version_of(patchelf, HostOs::Windows), None);
     }
 }

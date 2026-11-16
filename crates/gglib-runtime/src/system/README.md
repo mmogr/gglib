@@ -8,6 +8,14 @@ This module provides the `DefaultSystemProbe` which implements
 `SystemProbePort` from gglib-core. It performs active system probing
 via command execution and hardware detection.
 
+`dependency_report()` looks for each row of gglib-core's dependency table
+(`utils::system::NEEDS`) under the names that row has on this OS, through the
+time-limited helpers in `llama::detect::tools` (`deps.rs`), adds the GPU,
+the installed engines and how llama.cpp's next install would be made (the
+engine's own `plan_install`), and hands that to the pure `dependency_report` in gglib-core. This
+is an installed copy unless `gglib_core::paths::source_checkout` finds the
+checkout it was built from.
+
 `host.rs` reads this machine's name and the free space on a disk with
 sysinfo. `host_facts()` hands both readers to the proxy, which has no host
 probe of its own, and `this_machine_name()` is also what a pairing tells the

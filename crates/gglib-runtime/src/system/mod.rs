@@ -5,17 +5,10 @@ mod host;
 
 use gglib_core::ports::SystemProbePort;
 use gglib_core::utils::system::{
-    Dependency, DependencyStatus, GpuInfo, LinuxDistro, SystemMemoryInfo, install_hint,
-    packages_for, parse_os_release,
+    BuildOrigin, DependencyReport, EngineInstall, Found, GpuInfo, HostOs, LinuxDistro,
+    SystemMemoryInfo, dependency_report, needs_on, parse_os_release,
 };
 
-use crate::llama::detect::tools::{compiler_version, python3_version, version_line, version_word};
-use deps::check_libssl;
-#[cfg(target_os = "linux")]
-use deps::{
-    check_gtk_layer_shell, check_libappindicator, check_libasound, check_libclang, check_libcurl,
-    check_librsvg, check_libsqlite3, check_webkit2gtk,
-};
 use gpu::{detect_gpu_info, get_system_memory_info};
 pub use host::{free_disk_bytes, host_facts, this_machine_name};
 
@@ -32,7 +25,7 @@ pub use host::{free_disk_bytes, host_facts, this_machine_name};
 /// use gglib_core::ports::SystemProbePort;
 ///
 /// let probe = DefaultSystemProbe::new();
-/// let deps = probe.check_all_dependencies();
+/// let report = probe.dependency_report();
 /// ```
 /// Total physical system RAM in bytes.
 ///
@@ -174,86 +167,6 @@ pub fn detect_linux_distro() -> LinuxDistro {
         .map_or(LinuxDistro::Unknown, |contents| parse_os_release(&contents))
 }
 
-/// The install hint for a dependency on this machine.
-///
-/// Falls back to prose when there is no command to give — an unidentified
-/// distribution, or a dependency like `cargo` that does not come from the
-/// system package manager at all. Prose is deliberately preferred over a
-/// plausible-looking guess: a wrong command gets run and fails, whereas
-/// "OpenSSL development headers" gets looked up.
-fn hint_for(dependency: &str, distro: LinuxDistro) -> String {
-    install_hint(dependency, distro).unwrap_or_else(|| {
-        packages_for(dependency).map_or_else(
-            || format!("install {dependency}"),
-            |names| format!("install {}", names.generic),
-        )
-    })
-}
-
-/// A dependency installed through the system package manager.
-///
-/// Collapses the builder chain that was repeated for all twenty-odd entries
-/// below, so a dependency is one line and its install hint comes from the
-/// shared package table rather than a hardcoded `apt` string.
-fn system_dep(
-    name: &'static str,
-    description: &'static str,
-    distro: LinuxDistro,
-    version: Option<String>,
-) -> Dependency {
-    Dependency::required(name, description)
-        .with_hint(hint_for(name, distro))
-        .with_status(version.map_or(DependencyStatus::Missing, |version| {
-            DependencyStatus::Present { version }
-        }))
-}
-
-/// A dependency with its own installer, pointed at rather than packaged.
-fn hosted_dep(
-    name: &'static str,
-    description: &'static str,
-    url: &'static str,
-    version: Option<String>,
-) -> Dependency {
-    Dependency::required(name, description)
-        .with_hint(url)
-        .with_status(version.map_or(DependencyStatus::Missing, |version| {
-            DependencyStatus::Present { version }
-        }))
-}
-
-/// A dependency whose absence degrades a feature rather than breaking the build.
-///
-/// Reported so `check-deps` can name it and give the right install command, but
-/// marked optional so a missing one is not a failure.
-fn optional_dep(
-    name: &'static str,
-    description: &'static str,
-    distro: LinuxDistro,
-    version: Option<String>,
-) -> Dependency {
-    Dependency::optional(name, description)
-        .with_hint(hint_for(name, distro))
-        .with_status(version.map_or(DependencyStatus::Missing, |version| {
-            DependencyStatus::Present { version }
-        }))
-}
-
-/// A dependency detected by probe rather than by version string.
-fn probed_dep(
-    name: &'static str,
-    description: &'static str,
-    distro: LinuxDistro,
-    present: bool,
-) -> Dependency {
-    system_dep(
-        name,
-        description,
-        distro,
-        present.then(|| "available".to_owned()),
-    )
-}
-
 pub struct DefaultSystemProbe;
 
 impl DefaultSystemProbe {
@@ -269,236 +182,53 @@ impl Default for DefaultSystemProbe {
     }
 }
 
+/// How llama.cpp's next install here would be made, with nobody asking for
+/// a build: the engine's own plan, as `gglib config llama install` and the
+/// daemon's install route read it. Where its install cannot be located, only
+/// whether this machine has a download is left to go on.
+fn llama_install() -> EngineInstall {
+    use crate::engine::{InstallPlan, download, pin_state, plan_install};
+    use gglib_core::domain::RuntimeKind;
+
+    let Ok(state) = pin_state(RuntimeKind::Llama) else {
+        return if download(RuntimeKind::Llama).is_ok() {
+            EngineInstall::Download
+        } else {
+            EngineInstall::NoDownload
+        };
+    };
+    match plan_install(RuntimeKind::Llama, &state, false, false) {
+        InstallPlan::Download { .. } => EngineInstall::Download,
+        InstallPlan::Build {
+            no_download: Some(_),
+        } => EngineInstall::NoDownload,
+        InstallPlan::Build { no_download: None } => EngineInstall::Rebuild,
+    }
+}
+
 impl SystemProbePort for DefaultSystemProbe {
-    #[expect(
-        clippy::too_many_lines,
-        reason = "the dependency list, one entry per tool with its install hint; long because the list is"
-    )]
-    fn check_all_dependencies(&self) -> Vec<Dependency> {
-        let gpu_info = self.detect_gpu_info();
-
-        // Read once and thread it through: every install hint below keys off
-        // the same answer, and re-reading the file per dependency would be
-        // twenty syscalls to learn the same thing.
-        let distro = detect_linux_distro();
-
-        let mut deps = vec![
-            // Core Rust toolchain (required)
-            hosted_dep(
-                "cargo",
-                "Required for building Rust code",
-                "https://rustup.rs",
-                version_word("cargo", 1),
-            ),
-            hosted_dep(
-                "rustc",
-                "Rust compiler",
-                "https://rustup.rs",
-                version_word("rustc", 1),
-            ),
-            // Node.js ecosystem (required for GUI)
-            hosted_dep(
-                "node",
-                "Required for building web UI and Tauri",
-                "https://nodejs.org",
-                version_line("node").map(|v| v.trim_start_matches('v').to_string()),
-            ),
-            hosted_dep(
-                "npm",
-                "Node package manager",
-                "https://nodejs.org",
-                version_line("npm"),
-            ),
-            // Build tools (required)
-            system_dep(
-                "git",
-                "Required for llama.cpp installation",
-                distro,
-                version_word("git", 2),
-            ),
-            system_dep(
-                "make",
-                "Required for llama.cpp build",
-                distro,
-                version_word("make", 2),
-            ),
-            system_dep(
-                "gcc",
-                "Required for llama.cpp compilation",
-                distro,
-                compiler_version("gcc"),
-            ),
-            system_dep(
-                "g++",
-                "Required for llama.cpp compilation",
-                distro,
-                compiler_version("g++"),
-            ),
-            system_dep(
-                "pkg-config",
-                "Required for building with system libraries",
-                distro,
-                version_line("pkg-config"),
-            ),
-            system_dep(
-                "libssl-dev",
-                "Required for llama.cpp's HTTPS support",
-                distro,
-                check_libssl(),
-            ),
-            system_dep(
-                "cmake",
-                "Required for llama.cpp build",
-                distro,
-                version_word("cmake", 2),
-            ),
-            // Optional, not required: downloads run natively over HTTP. Python
-            // only enables the hf_xet accelerator, and only if the user opts in
-            // to provisioning it.
-            optional_dep(
-                "python3",
-                "Optional: enables the hf_xet download accelerator",
-                distro,
-                python3_version(),
-            ),
-        ];
-
-        // Add GTK/Tauri dependencies for Linux only
-        #[cfg(target_os = "linux")]
-        {
-            deps.extend(vec![
-                system_dep(
-                    "patchelf",
-                    "Required for Tauri AppImage bundling",
-                    distro,
-                    version_word("patchelf", 1),
-                ),
-                system_dep(
-                    "webkit2gtk-4.1",
-                    "Required for Tauri desktop app (WebView)",
-                    distro,
-                    check_webkit2gtk(),
-                ),
-                system_dep(
-                    "librsvg",
-                    "Required for Tauri desktop app (SVG rendering)",
-                    distro,
-                    check_librsvg(),
-                ),
-                system_dep(
-                    "libappindicator-gtk3",
-                    "Required for Tauri system tray support",
-                    distro,
-                    check_libappindicator(),
-                ),
-                optional_dep(
-                    "gtk-layer-shell",
-                    "Anchors the tray panel beside the system tray on Wayland",
-                    distro,
-                    check_gtk_layer_shell(),
-                ),
-                system_dep(
-                    "libasound2-dev",
-                    "Required for audio support (ALSA)",
-                    distro,
-                    check_libasound(),
-                ),
-                system_dep(
-                    "libcurl-dev",
-                    "Required for llama.cpp HTTP/HTTPS support",
-                    distro,
-                    check_libcurl(),
-                ),
-                system_dep(
-                    "libsqlite3-dev",
-                    "Required for database support",
-                    distro,
-                    check_libsqlite3(),
-                ),
-                system_dep(
-                    "libclang-dev",
-                    "Required for Rust FFI bindings (bindgen)",
-                    distro,
-                    check_libclang(),
-                ),
-            ]);
-        }
-
-        // Add GPU acceleration info based on detection
-        if gpu_info.has_metal {
-            deps.push(
-                Dependency::optional("Metal", "Apple GPU acceleration (built-in)").with_status(
-                    DependencyStatus::Present {
-                        version: "available".to_string(),
-                    },
-                ),
-            );
-        } else if let Some(cuda_version) = gpu_info.cuda_version.clone() {
-            deps.push(
-                Dependency::optional("CUDA", "NVIDIA GPU acceleration for faster inference")
-                    .with_hint("https://developer.nvidia.com/cuda-downloads")
-                    .with_status(DependencyStatus::Present {
-                        version: cuda_version,
-                    }),
-            );
-        } else if gpu_info.has_nvidia_gpu {
-            // GPU hardware present but CUDA not installed
-            deps.push(
-                Dependency::optional(
-                    "CUDA",
-                    "NVIDIA GPU detected - install CUDA for GPU acceleration",
-                )
-                .with_hint("https://developer.nvidia.com/cuda-downloads")
-                .with_status(DependencyStatus::Optional),
-            );
-        }
-
-        if gpu_info.has_vulkan {
-            deps.push(
-                Dependency::optional(
-                    "Vulkan runtime",
-                    "GPU acceleration via Vulkan (AMD, Intel, NVIDIA)",
-                )
-                .with_status(DependencyStatus::Present {
-                    version: "available".to_string(),
-                }),
-            );
-
-            // When the runtime is present, the build-time deps below
-            // are *required* — auto-detect picks Vulkan and the build
-            // would fail without them, so flag them as hard misses
-            // rather than silently degrading to a CPU build.
-            deps.push(probed_dep(
-                "Vulkan headers",
-                "Development headers required to build with -DGGML_VULKAN=ON",
-                distro,
-                gpu_info.vulkan_headers,
-            ));
-
-            deps.push(probed_dep(
-                "glslc",
-                "SPIR-V shader compiler required for Vulkan builds",
-                distro,
-                gpu_info.vulkan_glslc,
-            ));
-
-            deps.push(probed_dep(
-                "SPIR-V headers",
-                "spirv/unified1/spirv.hpp required to build with -DGGML_VULKAN=ON",
-                distro,
-                gpu_info.vulkan_spirv_headers,
-            ));
-        } else if !gpu_info.has_metal {
-            // Only suggest Vulkan on non-macOS (macOS uses Metal)
-            #[cfg(not(target_os = "macos"))]
-            deps.push(
-                Dependency::optional("Vulkan", "Install Vulkan drivers for GPU acceleration")
-                    .with_hint(hint_for("Vulkan", distro))
-                    .with_status(DependencyStatus::Optional),
-            );
-        }
-
-        deps
+    /// Each row of the dependency table is looked for under its names on
+    /// this OS, and the report is made from what answered.
+    ///
+    /// This is an installed copy unless the checkout it was built from is
+    /// still here ([`gglib_core::paths::source_checkout`]).
+    fn dependency_report(&self) -> DependencyReport {
+        let os = HostOs::this();
+        let found = Found {
+            versions: needs_on(os)
+                .filter_map(|need| deps::version_of(need, os).map(|version| (need.name, version)))
+                .collect(),
+            gpu: self.detect_gpu_info(),
+            llama_installed: crate::llama::check_llama_installed(),
+            sd_installed: gglib_core::paths::sd_server_path().is_ok_and(|path| path.is_file()),
+            llama_install: llama_install(),
+        };
+        let origin = if gglib_core::paths::source_checkout().is_some() {
+            BuildOrigin::Checkout
+        } else {
+            BuildOrigin::Installed
+        };
+        dependency_report(os, origin, detect_linux_distro(), &found)
     }
 
     fn detect_gpu_info(&self) -> GpuInfo {
@@ -591,13 +321,13 @@ mod tests {
     fn test_default_system_probe_creation() {
         let probe = DefaultSystemProbe::new();
         // Just verify it can be created
-        let _deps = probe.check_all_dependencies();
+        let _report = probe.dependency_report();
     }
 
     #[test]
     fn test_default_system_probe_default_trait() {
         let probe = DefaultSystemProbe;
-        let _deps = probe.check_all_dependencies();
+        let _report = probe.dependency_report();
     }
 
     #[test]

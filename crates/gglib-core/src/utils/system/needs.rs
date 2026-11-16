@@ -100,10 +100,43 @@ impl Need {
             HostOs::Windows => self.windows,
         }
     }
+
+    /// The row, wanted but not required by its purpose.
+    const fn optional(self) -> Self {
+        Self {
+            required: false,
+            ..self
+        }
+    }
+
+    /// The row, not looked for on Windows: no build there runs it.
+    const fn not_on_windows(self) -> Self {
+        Self {
+            windows: &[],
+            ..self
+        }
+    }
+
+    /// The row, looked for on Linux alone.
+    const fn only_on_linux(self) -> Self {
+        Self {
+            macos: &[],
+            windows: &[],
+            ..self
+        }
+    }
+
+    /// The row, looked for on Windows under `names` instead.
+    const fn on_windows_as(self, names: &'static [&'static str]) -> Self {
+        Self {
+            windows: names,
+            ..self
+        }
+    }
 }
 
 /// A required row looked for under the same names on every OS.
-const fn on_every_os(
+const fn everywhere(
     name: &'static str,
     purpose: Purpose,
     description: &'static str,
@@ -126,186 +159,194 @@ const fn on_every_os(
 
 /// A required row for building gglib, looked for on Linux alone: the
 /// libraries the desktop app links there.
-const fn on_linux(
+const fn linux_library(
     name: &'static str,
     description: &'static str,
     probe: Probe,
     names: &'static [&'static str],
 ) -> Need {
-    Need {
+    everywhere(
         name,
-        purpose: Purpose::BuildGglib,
-        required: true,
+        Purpose::BuildGglib,
         description,
         probe,
-        source: Source::Package,
-        linux: names,
-        macos: &[],
-        windows: &[],
-    }
+        Source::Package,
+        names,
+    )
+    .only_on_linux()
 }
 
-/// The dependencies a report lists, in its order.
+const RUSTUP: Source = Source::Url("https://rustup.rs");
+const NODEJS: Source = Source::Url("https://nodejs.org");
+
+/// The dependencies a report lists, in its order within each purpose.
+///
+/// Windows looks for fewer: its builds use cmake's Visual Studio generator
+/// rather than make, and find their libraries without pkg-config, so neither
+/// they nor what pkg-config is asked about are part of one. npm there is a
+/// `.cmd` script, which a program is not started as under its bare name.
 pub const NEEDS: &[Need] = &[
-    on_every_os(
+    // Running gglib.
+    everywhere(
+        "python3",
+        Purpose::Run,
+        "Turns on the optional hf_xet download accelerator",
+        Probe::Python3,
+        Source::Package,
+        &["python3", "python"],
+    )
+    .optional(),
+    // Building gglib from source.
+    everywhere(
         "cargo",
         Purpose::BuildGglib,
-        "Required for building Rust code",
+        "Builds gglib's Rust code",
         Probe::Word(1),
-        Source::Url("https://rustup.rs"),
+        RUSTUP,
         &["cargo"],
     ),
-    on_every_os(
+    everywhere(
         "rustc",
         Purpose::BuildGglib,
-        "Rust compiler",
+        "The Rust compiler",
         Probe::Word(1),
-        Source::Url("https://rustup.rs"),
+        RUSTUP,
         &["rustc"],
     ),
-    on_every_os(
+    everywhere(
         "node",
         Purpose::BuildGglib,
-        "Required for building web UI and Tauri",
+        "Builds the web UI and the desktop app",
         Probe::LineLessV,
-        Source::Url("https://nodejs.org"),
+        NODEJS,
         &["node"],
     ),
-    on_every_os(
+    everywhere(
         "npm",
         Purpose::BuildGglib,
-        "Node package manager",
+        "Installs the web UI's packages",
         Probe::Line,
-        Source::Url("https://nodejs.org"),
+        NODEJS,
         &["npm"],
+    )
+    .on_windows_as(&["npm.cmd"]),
+    linux_library(
+        "patchelf",
+        "Bundles the desktop app as an AppImage",
+        Probe::Word(1),
+        &["patchelf"],
     ),
-    on_every_os(
+    linux_library(
+        "webkit2gtk-4.1",
+        "The desktop app's web view (development files)",
+        Probe::PkgConfig,
+        &["webkit2gtk-4.1", "webkit2gtk-4.0"],
+    ),
+    linux_library(
+        "librsvg",
+        "The desktop app's SVG rendering (development files)",
+        Probe::PkgConfig,
+        &["librsvg-2.0"],
+    ),
+    linux_library(
+        "libappindicator-gtk3",
+        "The desktop app's tray icon (development files)",
+        Probe::PkgConfig,
+        &["ayatana-appindicator3-0.1", "appindicator3-0.1"],
+    ),
+    linux_library(
+        "gtk-layer-shell",
+        "Anchors the tray panel beside the system tray on Wayland",
+        Probe::PkgConfig,
+        &["gtk-layer-shell-0"],
+    )
+    .optional(),
+    linux_library(
+        "libasound2-dev",
+        "Audio support, ALSA (development files)",
+        Probe::PkgConfig,
+        &["alsa"],
+    ),
+    linux_library(
+        "libsqlite3-dev",
+        "Database support (development files)",
+        Probe::PkgConfig,
+        &["sqlite3"],
+    ),
+    linux_library(
+        "libclang-dev",
+        "Rust FFI bindings, made by bindgen",
+        Probe::LibClang,
+        &["libclang"],
+    ),
+    // Building an engine from source.
+    everywhere(
         "git",
         Purpose::BuildEngine,
-        "Required for llama.cpp installation",
+        "Fetches an engine's source",
         Probe::Word(2),
         Source::Package,
         &["git"],
     ),
-    on_every_os(
-        "make",
-        Purpose::BuildEngine,
-        "Required for llama.cpp build",
-        Probe::Word(2),
-        Source::Package,
-        &["make"],
-    ),
-    on_every_os(
-        "gcc",
-        Purpose::BuildEngine,
-        "Required for llama.cpp compilation",
-        Probe::Compiler,
-        Source::Package,
-        &["gcc"],
-    ),
-    on_every_os(
-        "g++",
-        Purpose::BuildEngine,
-        "Required for llama.cpp compilation",
-        Probe::Compiler,
-        Source::Package,
-        &["g++"],
-    ),
-    on_every_os(
-        "pkg-config",
-        Purpose::BuildEngine,
-        "Required for building with system libraries",
-        Probe::Line,
-        Source::Package,
-        &["pkg-config"],
-    ),
-    on_every_os(
-        "libssl-dev",
-        Purpose::BuildEngine,
-        "Required for llama.cpp's HTTPS support",
-        Probe::PkgConfig,
-        Source::Package,
-        &["openssl"],
-    ),
-    on_every_os(
+    everywhere(
         "cmake",
         Purpose::BuildEngine,
-        "Required for llama.cpp build",
+        "Configures an engine's build",
         Probe::Word(2),
         Source::Package,
         &["cmake"],
     ),
+    everywhere(
+        "make",
+        Purpose::BuildEngine,
+        "Runs the build cmake writes",
+        Probe::Word(2),
+        Source::Package,
+        &["make"],
+    )
+    .not_on_windows(),
+    // In the order a build prefers them on each OS; the llama.cpp build's
+    // own check asks the same list.
     Need {
-        required: false,
-        ..on_every_os(
-            "python3",
-            Purpose::Run,
-            "Optional: enables the hf_xet download accelerator",
-            Probe::Python3,
+        linux: &["g++", "clang++"],
+        macos: &["clang++", "g++"],
+        windows: &["cl", "g++", "clang++"],
+        ..everywhere(
+            "C++ compiler",
+            Purpose::BuildEngine,
+            "Compiles an engine",
+            Probe::Compiler,
             Source::Package,
-            &["python3", "python"],
+            &[],
         )
     },
-    on_linux(
-        "patchelf",
-        "Required for Tauri AppImage bundling",
-        Probe::Word(1),
-        &["patchelf"],
-    ),
-    on_linux(
-        "webkit2gtk-4.1",
-        "Required for Tauri desktop app (WebView)",
+    everywhere(
+        "pkg-config",
+        Purpose::BuildEngine,
+        "Finds the system libraries an engine links",
+        Probe::Line,
+        Source::Package,
+        &["pkg-config"],
+    )
+    .not_on_windows(),
+    everywhere(
+        "libssl-dev",
+        Purpose::BuildEngine,
+        "llama.cpp's HTTPS support (development files)",
         Probe::PkgConfig,
-        &["webkit2gtk-4.1", "webkit2gtk-4.0"],
-    ),
-    on_linux(
-        "librsvg",
-        "Required for Tauri desktop app (SVG rendering)",
+        Source::Package,
+        &["openssl"],
+    )
+    .not_on_windows(),
+    everywhere(
+        "libcurl-dev",
+        Purpose::BuildEngine,
+        "llama.cpp's HTTP support (development files)",
         Probe::PkgConfig,
-        &["librsvg-2.0"],
-    ),
-    on_linux(
-        "libappindicator-gtk3",
-        "Required for Tauri system tray support",
-        Probe::PkgConfig,
-        &["ayatana-appindicator3-0.1", "appindicator3-0.1"],
-    ),
-    Need {
-        required: false,
-        ..on_linux(
-            "gtk-layer-shell",
-            "Anchors the tray panel beside the system tray on Wayland",
-            Probe::PkgConfig,
-            &["gtk-layer-shell-0"],
-        )
-    },
-    on_linux(
-        "libasound2-dev",
-        "Required for audio support (ALSA)",
-        Probe::PkgConfig,
-        &["alsa"],
-    ),
-    Need {
-        purpose: Purpose::BuildEngine,
-        ..on_linux(
-            "libcurl-dev",
-            "Required for llama.cpp HTTP/HTTPS support",
-            Probe::PkgConfig,
-            &["libcurl"],
-        )
-    },
-    on_linux(
-        "libsqlite3-dev",
-        "Required for database support",
-        Probe::PkgConfig,
-        &["sqlite3"],
-    ),
-    on_linux(
-        "libclang-dev",
-        "Required for Rust FFI bindings (bindgen)",
-        Probe::LibClang,
-        &["libclang"],
-    ),
+        Source::Package,
+        &["libcurl"],
+    )
+    .only_on_linux(),
 ];
 
 /// The rows looked for on `os`, in the report's order.

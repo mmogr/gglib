@@ -9,7 +9,7 @@
 //! - Runtime owns the implementation (active probing via `Command::new`)
 //! - CLI injects the probe via main.rs
 
-use crate::utils::system::{Dependency, GpuInfo, SystemMemoryInfo};
+use crate::utils::system::{DependencyReport, GpuInfo, SystemMemoryInfo};
 
 /// Port for probing system dependencies and hardware.
 ///
@@ -23,17 +23,16 @@ use crate::utils::system::{Dependency, GpuInfo, SystemMemoryInfo};
 /// use gglib_core::ports::SystemProbePort;
 ///
 /// fn check_system(probe: &dyn SystemProbePort) {
-///     let deps = probe.check_all_dependencies();
+///     let report = probe.dependency_report();
 ///     let gpu = probe.detect_gpu_info();
 ///     // ...
 /// }
 /// ```
 pub trait SystemProbePort: Send + Sync {
-    /// Check all system dependencies and return their status.
-    ///
-    /// Returns a list of dependencies with their installation status,
-    /// version information, and hints for installation.
-    fn check_all_dependencies(&self) -> Vec<Dependency>;
+    /// What this gglib needs on this machine and what it has, grouped by
+    /// what each dependency is for: running gglib, building it from source,
+    /// building an engine from source.
+    fn dependency_report(&self) -> DependencyReport;
 
     /// Detect GPU hardware and acceleration software.
     ///
@@ -51,7 +50,9 @@ pub trait SystemProbePort: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::system::DependencyStatus;
+    use crate::utils::system::{
+        BuildOrigin, Dependency, DependencyGroup, DependencyStatus, Purpose,
+    };
 
     /// Mock implementation for testing.
     struct MockSystemProbe {
@@ -61,8 +62,17 @@ mod tests {
     }
 
     impl SystemProbePort for MockSystemProbe {
-        fn check_all_dependencies(&self) -> Vec<Dependency> {
-            self.deps.clone()
+        fn dependency_report(&self) -> DependencyReport {
+            DependencyReport {
+                origin: BuildOrigin::Checkout,
+                groups: vec![DependencyGroup {
+                    purpose: Purpose::BuildGglib,
+                    title: "Building gglib from source".to_owned(),
+                    explanation: String::new(),
+                    needed: true,
+                    dependencies: self.deps.clone(),
+                }],
+            }
         }
 
         fn detect_gpu_info(&self) -> GpuInfo {
@@ -101,7 +111,8 @@ mod tests {
             },
         };
 
-        let deps = probe.check_all_dependencies();
+        let report = probe.dependency_report();
+        let deps: Vec<_> = report.dependencies().collect();
         assert_eq!(deps.len(), 1);
         assert_eq!(deps[0].name, "cargo");
 

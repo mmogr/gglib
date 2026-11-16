@@ -134,15 +134,6 @@ fn compiler_version_in(line: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-/// The version of Python 3, asked of `python3` and then of `python`, which
-/// is Python 3 on some systems.
-pub(crate) fn python3_version() -> Option<String> {
-    ["python3", "python"]
-        .into_iter()
-        .filter_map(|program| version_word(program, 1))
-        .find(|version| version.starts_with('3'))
-}
-
 /// Get the number of CPU cores available for parallel compilation.
 pub(crate) fn get_num_cores() -> usize {
     num_cpus::get()

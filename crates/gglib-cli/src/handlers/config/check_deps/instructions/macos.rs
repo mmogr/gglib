@@ -64,10 +64,10 @@ pub(super) fn print_instructions(missing: &[&Dependency]) {
         print_command("nvm install --lts");
     }
 
-    // Xcode Command Line Tools (for make, cc)
+    // Xcode Command Line Tools (make and the C++ compiler)
     if missing
         .iter()
-        .any(|d| matches!(d.name.as_str(), "make" | "gcc" | "g++" | "cc"))
+        .any(|d| matches!(d.name.as_str(), "make" | "C++ compiler"))
     {
         print_subsection("Install Xcode Command Line Tools");
         print_command("xcode-select --install");

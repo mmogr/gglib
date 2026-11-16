@@ -57,18 +57,13 @@ pub fn missing_build_tools(tools: &[BuildTool]) -> Vec<&'static str> {
 
 /// The first C++ compiler on `PATH`, as `name (its banner)`.
 ///
-/// Tried in the order the platform prefers:
-/// - **Windows**: `cl`, `g++`, `clang++`
-/// - **macOS**: `clang++`, `g++`
-/// - **Linux**: `g++`, `clang++`
+/// Tried in the order the platform prefers, which the dependency table's
+/// `C++ compiler` row holds for each OS, so `gglib config check-deps` asks
+/// the same compilers.
 fn cpp_compiler() -> Option<String> {
-    let compilers: &[&str] = if cfg!(target_os = "windows") {
-        &["cl", "g++", "clang++"]
-    } else if cfg!(target_os = "macos") {
-        &["clang++", "g++"]
-    } else {
-        &["g++", "clang++"]
-    };
+    let compilers = gglib_core::utils::system::need("C++ compiler").map_or(&[][..], |row| {
+        row.names(gglib_core::utils::system::HostOs::this())
+    });
 
     compilers
         .iter()

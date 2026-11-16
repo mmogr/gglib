@@ -6,92 +6,43 @@ mod platform;
 
 use anyhow::Result;
 use gglib_core::ports::SystemProbePort;
-use gglib_core::utils::system::{Dependency, DependencyStatus};
+use gglib_core::utils::system::{BuildOrigin, Purpose};
 use gglib_download::cli_exec::fast_helper_provisioned;
 
-use display::{print_dependency, print_gpu_status};
+use display::{print_gpu_status, render_report};
 use instructions::print_installation_instructions;
 
-use crate::presentation::style::{BOLD, DANGER, INFO, RESET, SUCCESS};
+use crate::presentation::style::{BOLD, INFO, RESET};
 
 /// Execute the check-deps command.
 ///
-/// Checks for all required and optional dependencies,
-/// displays them in a formatted table, and returns an appropriate
-/// exit code based on whether all required dependencies are present.
-///
-/// # Arguments
-///
-/// * `probe` - System probe implementation for dependency detection
-///
-/// # Returns
-///
-/// Returns `Ok(())` if all required dependencies are present.
-/// Returns an error if any required dependencies are missing.
+/// Prints the dependency report, group by group: running gglib, building it
+/// from source, building an engine from source. Fails while something this
+/// gglib needs is missing, after saying how to install it. An installed copy
+/// does not need the build groups, so their tools never fail it.
 pub(crate) fn execute(probe: &dyn SystemProbePort) -> Result<()> {
     println!("{BOLD}{INFO}Checking system dependencies...{RESET}\n");
 
-    let dependencies = probe.check_all_dependencies();
+    let report = probe.dependency_report();
+    print!("{}", render_report(&report));
 
-    println!(
-        "{}{:<20} {:<15} {:<50}{}",
-        BOLD, "DEPENDENCY", "STATUS", "NOTES", RESET
-    );
-    println!("{}", "=".repeat(85));
-
-    for dep in &dependencies {
-        print_dependency(dep);
+    let missing = report.missing();
+    if !missing.is_empty() {
+        print_installation_instructions(&missing);
+        anyhow::bail!("{}", report.verdict())
     }
 
-    println!();
-
-    let missing_required: Vec<&Dependency> = dependencies
-        .iter()
-        .filter(|d| d.required && matches!(d.status, DependencyStatus::Missing))
-        .collect();
-
-    let present_required = dependencies
-        .iter()
-        .filter(|d| d.required && matches!(d.status, DependencyStatus::Present { .. }))
-        .count();
-    let total_required = dependencies.iter().filter(|d| d.required).count();
-
-    println!("{}", "=".repeat(85));
-    if missing_required.is_empty() {
+    if !fast_helper_provisioned() {
         println!(
-            "{SUCCESS}✓ All required dependencies are installed!{RESET} ({present_required}/{total_required})"
+            "{INFO}Downloads run natively over HTTP. To enable the optional hf_xet \
+             accelerator, run:{RESET} gglib config fast-downloads enable"
         );
+    }
 
-        if !fast_helper_provisioned() {
-            println!(
-                "{INFO}Downloads run natively over HTTP. To enable the optional hf_xet \
-                 accelerator, run:{RESET} gglib config fast-downloads enable"
-            );
-        }
+    print_gpu_status(probe, report.needs(Purpose::BuildEngine));
 
-        print_gpu_status(probe);
-
+    if report.origin == BuildOrigin::Checkout {
         println!("\n{BOLD}You can now run: {INFO}make setup{RESET}");
-        Ok(())
-    } else {
-        println!(
-            "{}✗ {} required dependencies are missing.{} ({}/{})",
-            DANGER,
-            missing_required.len(),
-            RESET,
-            present_required,
-            total_required
-        );
-        println!();
-        print_installation_instructions(&missing_required);
-        anyhow::bail!("Missing required dependencies")
     }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_handler_exists() {
-        // Placeholder test to ensure module compiles
-    }
+    Ok(())
 }

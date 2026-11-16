@@ -62,8 +62,8 @@ pub(super) fn print_instructions(missing: &[&Dependency]) {
         println!("  Or download from: https://nodejs.org/");
     }
 
-    // Visual Studio Build Tools (for make, cc)
-    if missing.iter().any(|d| d.name == "make" || d.name == "cc") {
+    // Visual Studio Build Tools (the C++ compiler an engine build needs)
+    if missing.iter().any(|d| d.name == "C++ compiler") {
         print_subsection("Install Visual Studio Build Tools");
         println!("  Download Visual Studio Build Tools from:");
         println!("  https://visualstudio.microsoft.com/visual-cpp-build-tools/");

@@ -1,10 +1,12 @@
 //! `gglib config check-deps` on a fixture machine: a `PATH` of stand-ins that
 //! answer `--version` with banners the real tools print.
 //!
-//! The rows asserted are the ones every platform lists, in the order the
-//! command lists them, as it printed them before the version probes behind
-//! them became one family. A platform's own rows (the libraries Linux links,
-//! the GPU) follow these and are not compared: they depend on the machine.
+//! The binary a test runs is a build from this checkout, so the report is a
+//! checkout's: the build tools are marked as needed. An installed copy's
+//! report is tested as a pure function in `gglib_core::utils::system`, on
+//! every OS. The rows asserted are the ones macOS and Linux both list; a
+//! platform's own rows (the libraries Linux links, the GPU) depend on the
+//! machine and are not compared.
 
 #![cfg(unix)]
 
@@ -30,7 +32,7 @@ fn plain(text: &str) -> String {
 }
 
 #[test]
-fn check_deps_prints_each_tool_as_it_always_has() {
+fn check_deps_prints_each_tool_under_what_it_is_for() {
     let _guard = one_at_a_time();
     let machine = Machine::bare()
         .with_tool("cargo", "cargo 1.97.1 (1d8b05cdd 2026-07-20)")
@@ -83,30 +85,46 @@ fn check_deps_prints_each_tool_as_it_always_has() {
     }
 
     let stdout = plain(&String::from_utf8_lossy(&out.stdout));
-    let rows: Vec<&str> = stdout
-        .lines()
-        .skip_while(|line| !line.starts_with("===="))
-        .skip(1)
-        .take(12)
-        .collect();
-    assert_eq!(
-        rows,
-        [
-            "*cargo               ✓ v1.97.1        Required for building Rust code",
-            "*rustc               ✓ v1.97.1        Rust compiler",
-            "*node                ✓ v22.12.0       Required for building web UI and Tauri",
-            "*npm                 ✓ v10.9.0        Node package manager",
-            "*git                 ✓ v2.39.5        Required for llama.cpp installation",
-            "*make                ✓ v4.4.1         Required for llama.cpp build",
-            "*gcc                 ✓ v15.0.0        Required for llama.cpp compilation",
-            "*g++                 ✓ v18.1.3        Required for llama.cpp compilation",
-            "*pkg-config          ✓ v0.29.2        Required for building with system libraries",
-            "*libssl-dev          ✓ v3.0.13        Required for llama.cpp's HTTPS support",
-            "*cmake               ✓ v3.28.1        Required for llama.cpp build",
-            " python3             ✓ v3.12.1        Optional: enables the hf_xet download accelerator",
-        ],
+    let rows_under = |title: &str, count: usize| -> Vec<String> {
+        stdout
+            .lines()
+            .skip_while(|line| *line != title)
+            .skip(2)
+            .take(count)
+            .map(str::to_owned)
+            .collect()
+    };
+    let explain = format!(
         "stdout: {stdout}\nstderr: {}",
         String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        rows_under("Building gglib from source", 4),
+        [
+            "*cargo               ✓ v1.97.1        Builds gglib's Rust code",
+            "*rustc               ✓ v1.97.1        The Rust compiler",
+            "*node                ✓ v22.12.0       Builds the web UI and the desktop app",
+            "*npm                 ✓ v10.9.0        Installs the web UI's packages",
+        ],
+        "{explain}"
+    );
+    assert_eq!(
+        rows_under("Building an engine from source", 6),
+        [
+            "*git                 ✓ v2.39.5        Fetches an engine's source",
+            "*cmake               ✓ v3.28.1        Configures an engine's build",
+            "*make                ✓ v4.4.1         Runs the build cmake writes",
+            "*C++ compiler        ✓ v18.1.3        Compiles an engine",
+            "*pkg-config          ✓ v0.29.2        Finds the system libraries an engine links",
+            "*libssl-dev          ✓ v3.0.13        llama.cpp's HTTPS support (development files)",
+        ],
+        "{explain}"
+    );
+    assert!(
+        stdout.contains(
+            " python3             ✓ v3.12.1        Turns on the optional hf_xet download accelerator"
+        ),
+        "{explain}"
     );
 }
 
@@ -136,7 +154,7 @@ fn check_deps_reports_a_tool_that_is_absent_or_broken_as_missing() {
     let stdout = plain(&String::from_utf8_lossy(&out.stdout));
     assert!(!out.status.success(), "{stdout}");
     assert!(
-        stdout.contains("*cargo               ✓ v1.97.1        Required for building Rust code"),
+        stdout.contains("*cargo               ✓ v1.97.1        Builds gglib's Rust code"),
         "{stdout}"
     );
     for missing in ["*rustc ", "*git ", "*cmake "] {
