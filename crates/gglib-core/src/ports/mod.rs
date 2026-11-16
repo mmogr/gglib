@@ -19,6 +19,7 @@ pub mod huggingface;
 pub(crate) mod image_generation;
 mod jinja_mode;
 pub(crate) mod llm_completion;
+pub(crate) mod load_failure;
 pub(crate) mod loop_guard_trips;
 pub(crate) mod mcp_dto;
 pub(crate) mod mcp_error;
@@ -94,6 +95,7 @@ pub use image_generation::{
     MAX_IMAGES_PER_REQUEST, UnreadableSize,
 };
 pub use jinja_mode::JinjaMode;
+pub use load_failure::{LoadCause, LoadFailure};
 pub use mcp_dto::{ResolutionAttempt, ResolutionStatus};
 pub use mcp_error::McpServiceError;
 pub use mcp_repository::{McpRepositoryError, McpServerRepository};

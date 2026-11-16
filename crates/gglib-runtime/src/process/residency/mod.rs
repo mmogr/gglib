@@ -8,14 +8,16 @@ mod resident_match;
 mod spawned_child;
 mod vram;
 
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::{ContextFit, RuntimeKind};
 use gglib_core::ports::{
-    Admission, AdmitObserver, CatalogError, GenerationTurn, LaunchOverrides, ModelCatalogPort,
-    ModelLaunchSpec, ModelRuntimeError, PinnedSpec, ResidencyObserver, RunningTarget,
+    Admission, AdmitObserver, CatalogError, GenerationTurn, LaunchOverrides, LoadFailure,
+    ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, PinnedSpec, ResidencyObserver,
+    RunningTarget,
 };
 use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use tokio::sync::RwLock;
@@ -79,6 +81,11 @@ pub struct ResidentSet {
     /// no lock held: the daemon's announcement to its clients. See
     /// [`ResidencyObserver`].
     observer: Arc<dyn ResidencyObserver>,
+    /// The last load of each model that failed, and when, by catalog id.
+    /// The endpoint tells its clients the short form of a failed load; a
+    /// caller in this process that made one through it reads the whole
+    /// sentence here, for the model it asked for and no other.
+    load_failures: std::sync::Mutex<HashMap<u32, (Instant, LoadFailure)>>,
 }
 
 /// Removes a ticket from the queue on every exit path.
@@ -112,6 +119,7 @@ impl ResidentSet {
             cache_ram,
             pinned: std::sync::RwLock::new(None),
             observer,
+            load_failures: std::sync::Mutex::default(),
         }
     }
 
@@ -172,17 +180,62 @@ impl ResidentSet {
         let spec = self.resolve(model_name).await?;
         self.check_pinned(&spec)?;
         let spec_id = spec.id;
+        let admitted = self
+            .admit_resolved(core, spec, num_ctx, default_ctx, overrides, observer)
+            .await;
+        if let Err(ModelRuntimeError::LoadFailed(failure)) = &admitted {
+            self.load_failures
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(spec_id, (Instant::now(), (**failure).clone()));
+        }
+        admitted
+    }
+
+    /// The last load of model `model_id` that failed, and when: see
+    /// [`ModelRuntimePort::last_load_failure`](gglib_core::ports::ModelRuntimePort::last_load_failure).
+    pub(super) fn last_load_failure(&self, model_id: u32) -> Option<(Instant, LoadFailure)> {
+        self.load_failures
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&model_id)
+            .cloned()
+    }
+
+    /// [`Self::admit_observed`] for the model `spec` resolved to.
+    async fn admit_resolved(
+        &self,
+        core: &Arc<RwLock<GuiProcessCore>>,
+        spec: ModelLaunchSpec,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: LaunchOverrides,
+        observer: Option<Arc<dyn AdmitObserver>>,
+    ) -> Result<Admission, ModelRuntimeError> {
+        let spec_id = spec.id;
 
         // Everything a launch would lack, before the queue: once `poll`
         // grants a launch it has already forgotten the model it displaces,
         // so this is the last point at which a refusal costs nobody their
         // slot. The launch checks the files again after its stop.
-        let sd_server = core
-            .read()
-            .await
-            .binary(RuntimeKind::StableDiffusion)
-            .to_path_buf();
+        let (sd_server, engine) = {
+            let core = core.read().await;
+            (
+                core.binary(RuntimeKind::StableDiffusion).to_path_buf(),
+                core.binary(spec.runtime()).to_path_buf(),
+            )
+        };
         launch::launch_files::preflight(&spec, &sd_server).await?;
+        // A model already loaded is served by a server that runs: its
+        // engine is not asked about.
+        let resident = self
+            .queue
+            .residents()
+            .iter()
+            .any(|(_, resident)| resident.model_id == spec_id);
+        if !resident {
+            launch::launch_files::engine_works(&spec, &engine).await?;
+        }
         let request = prepare(
             spec,
             &self.template_for(spec_id),

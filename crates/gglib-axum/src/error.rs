@@ -171,6 +171,12 @@ impl From<GuiError> for HttpError {
                 suggested_command,
                 reason,
             },
+            // The code is `LoadFailure::CODE`, spelled out for the code scan.
+            GuiError::LoadFailed(message) => Self::Coded {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                code: "model_load_failed",
+                message,
+            },
             GuiError::Internal(msg) => Self::Internal(msg),
         }
     }

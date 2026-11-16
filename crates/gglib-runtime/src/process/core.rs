@@ -8,6 +8,7 @@
 //!
 //! [#849]: https://github.com/mmogr/gglib/pull/849
 
+use super::output_tail::OutputTail;
 use super::ports::{allocate_port, is_port_available};
 use super::shutdown::shutdown_child;
 use super::spawn_config::{RuntimeBinaries, SpawnConfig};
@@ -20,8 +21,19 @@ use gglib_core::domain::RuntimeKind;
 use gglib_core::utils::process::tied::tie_to_this_process;
 use std::collections::HashMap;
 use std::path::Path;
+use std::process::ExitStatus;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};
+
+/// How a child ended, as [`GuiProcessCore::exited`] reads it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Exit {
+    /// It exited with this status.
+    Status(ExitStatus),
+    /// It is gone and there is no status to give: it is untracked, or its
+    /// status could not be read.
+    Unknown,
+}
 
 /// GUI-oriented process lifecycle manager.
 ///
@@ -38,6 +50,11 @@ pub struct GuiProcessCore {
     base_port: u16,
     /// The program each runtime is started with.
     binaries: RuntimeBinaries,
+    /// How each child [`Self::cleanup_dead`] took out of `processes` ended,
+    /// by model id, until [`Self::exited`] reads it or the id is spawned
+    /// again: another launch's cleanup can reap a child whose own launch has
+    /// not yet looked, and that launch still says how it ended.
+    reaped: HashMap<u32, ExitStatus>,
 }
 
 impl GuiProcessCore {
@@ -47,6 +64,7 @@ impl GuiProcessCore {
             processes: HashMap::new(),
             base_port,
             binaries,
+            reaped: HashMap::new(),
         }
     }
 
@@ -72,6 +90,8 @@ impl GuiProcessCore {
         if self.processes.contains_key(&model_id) {
             return Err(anyhow!("Model {model_id} is already running"));
         }
+        // What an earlier child under this id ended with is not this one's.
+        self.reaped.remove(&model_id);
 
         if !config.model_path().exists() {
             return Err(anyhow!(
@@ -95,7 +115,7 @@ impl GuiProcessCore {
             "GuiProcessCore::spawn allocated port"
         );
         let binary = self.binaries.for_runtime(runtime);
-        let mut child = match &config {
+        let child = match &config {
             SpawnConfig::Llama(llama) => build_and_spawn(Some(binary), llama, port)?,
             SpawnConfig::Sd(sd) => build_and_spawn_sd(binary, sd, port)?,
         };
@@ -119,15 +139,14 @@ impl GuiProcessCore {
             debug!("Failed to write PID file: {}", e);
         }
 
-        spawn_log_readers(&mut child, port);
-
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
         let info = ServerInfo::new(model_id, config.into_model_name(), pid, port, now, runtime);
-        let running = RunningProcess::new(info, child);
+        let mut running = RunningProcess::new(info, child);
+        spawn_log_readers(&mut running.child, port, &running.output);
         self.processes.insert(model_id, running);
 
         Ok((port, pid))
@@ -228,9 +247,34 @@ impl GuiProcessCore {
     /// — bad arguments, OOM, a missing GPU library — is waited out for the
     /// whole launch budget, which is minutes for a large model.
     pub fn has_exited(&mut self, model_id: u32) -> bool {
+        self.exited(model_id).is_some()
+    }
+
+    /// How the child tracked for `model_id` ended, once it has: what
+    /// [`Self::has_exited`] answers, with the status it exited with.
+    /// A child [`Self::cleanup_dead`] already took is read from what it
+    /// kept, once.
+    pub(crate) fn exited(&mut self, model_id: u32) -> Option<Exit> {
+        let Some(running) = self.processes.get_mut(&model_id) else {
+            return Some(
+                self.reaped
+                    .remove(&model_id)
+                    .map_or(Exit::Unknown, Exit::Status),
+            );
+        };
+        match running.child.try_wait() {
+            Ok(None) => None,
+            Ok(Some(status)) => Some(Exit::Status(status)),
+            Err(_) => Some(Exit::Unknown),
+        }
+    }
+
+    /// The last lines the child tracked for `model_id` printed, kept as it
+    /// runs and after it exits.
+    pub(crate) fn output_of(&self, model_id: u32) -> Option<OutputTail> {
         self.processes
-            .get_mut(&model_id)
-            .is_none_or(|running| !matches!(running.child.try_wait(), Ok(None)))
+            .get(&model_id)
+            .map(|running| running.output.clone())
     }
 
     /// List all running processes
@@ -267,6 +311,7 @@ impl GuiProcessCore {
                 Ok(Some(status)) => {
                     debug!(id = %id, status = ?status, "Process exited");
                     dead.push(*id);
+                    self.reaped.insert(*id, status);
                 }
                 Ok(None) => {}
                 Err(e) => {

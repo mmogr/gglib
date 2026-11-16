@@ -150,9 +150,25 @@ fn from_load_failed_error() {
         fitted_context: None,
     };
     let err: ErrorResponse = ModelRuntimeError::LoadFailed(Box::new(failure.clone())).into();
-    assert_eq!(err.error.message, failure.to_string());
+    // The endpoint cannot tell this machine's clients from another's, so it
+    // gives the kind of failure, not what the engine printed.
+    assert_eq!(err.error.message, failure.remote_sentence());
+    assert!(
+        !err.error.message.contains("load_tensors"),
+        "{}",
+        err.error.message
+    );
     assert_eq!(err.error.code.as_deref(), Some("model_load_failed"));
     assert_eq!(err.error.r#type, "server_error");
+}
+
+/// A spawn or health failure that is not a typed load failure is said in
+/// its own words, not as a connection that failed: none was tried.
+#[test]
+fn a_spawn_failure_is_not_said_to_be_a_failed_connection() {
+    let err: ErrorResponse = ModelRuntimeError::SpawnFailed("no binary".into()).into();
+    assert_eq!(err.error.message, "Failed to start model: no binary");
+    assert_eq!(err.error.code.as_deref(), Some("upstream_error"));
 }
 
 #[test]

@@ -1,11 +1,12 @@
 //! What a launch needs on disk: checked by `ResidentSet::admit` before the
 //! request joins the queue, so a refusal displaces nothing, and again by the
-//! launch once the model it displaces is stopped.
+//! launch once the model it displaces is stopped. Its engine, known not to
+//! work, is refused there too.
 
 use std::path::Path;
 
 use gglib_core::domain::RuntimeKind;
-use gglib_core::ports::{ModelLaunchSpec, ModelRuntimeError};
+use gglib_core::ports::{LoadCause, LoadFailure, ModelLaunchSpec, ModelRuntimeError};
 
 /// Fails with the first thing `spec`'s launch would lack: its weights, then
 /// its projector; and for an image model, `sd-server` itself
@@ -43,6 +44,34 @@ pub(in crate::process::residency) async fn preflight(
         }
     }
     Ok(())
+}
+
+/// Refuses `spec`'s launch when the engine that serves it, `binary`, is
+/// known not to work: the engine check found it so and still does
+/// ([`crate::engine::refuse_if_known_not_working`]). The refusal is the
+/// check's sentence, the one the engine's status gives.
+pub(in crate::process::residency) async fn engine_works(
+    spec: &ModelLaunchSpec,
+    binary: &Path,
+) -> Result<(), ModelRuntimeError> {
+    let runtime = spec.runtime();
+    let path = binary.to_path_buf();
+    let checked = tokio::task::spawn_blocking(move || {
+        crate::engine::refuse_if_known_not_working(runtime, &path)
+    })
+    .await
+    .map_err(|e| ModelRuntimeError::Internal(format!("the engine check failed: {e}")))?;
+    checked.map_err(|not_working| {
+        ModelRuntimeError::LoadFailed(Box::new(LoadFailure {
+            model: spec.name.clone(),
+            runtime,
+            cause: LoadCause::EngineNotWorking {
+                failure: not_working.failure.clone(),
+                reason: not_working.to_string(),
+            },
+            fitted_context: None,
+        }))
+    })
 }
 
 /// Fails with the first of `spec`'s files that is not on disk: the weights,

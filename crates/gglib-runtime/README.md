@@ -67,7 +67,7 @@ This crate is in the **Infrastructure Layer** — it manages external processes 
 - **`server_config.rs`** / **`unified_server_config.rs`** — Launch argument resolution
 - **`pidfile/`** — PID file writing and cleanup for spawned servers
 - **`binary_install/`** — Installing a server binary from a pinned GitHub release, for any product, and the source checkout a build starts from
-- **`engine.rs`** — The questions asked of llama.cpp and stable-diffusion.cpp alike, by their `RuntimeKind`: where an install stands against its pin, whether its binary works (`engine_check.rs`, which the statuses and an install's Verify phase ask), and removing what an install put there
+- **`engine.rs`** — The questions asked of llama.cpp and stable-diffusion.cpp alike, by their `RuntimeKind`: where an install stands against its pin, whether its binary works (`engine_check.rs`, which the statuses and an install's Verify phase ask, and which refuses a load of a binary it last found not working, after asking it again), and removing what an install put there
 - **`llama/`** — llama.cpp at the pin: installing it (a download or a source build), detecting the GPU backend, and checking the binaries
 - **`proxy/`** — Proxy supervisor and routing logic
 - **`sd/`** — stable-diffusion.cpp's `sd-server`: install, status, its command line and its launch

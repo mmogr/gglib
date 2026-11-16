@@ -4,9 +4,11 @@ use std::sync::Arc;
 
 use tracing::{debug, warn};
 
+use gglib_core::domain::RuntimeKind;
 use gglib_core::events::AppEvent;
-use gglib_core::ports::{AppEventEmitter, ModelRuntimeError};
+use gglib_core::ports::{AppEventEmitter, LoadCause, ModelRuntimeError};
 use gglib_core::services::AppCore;
+use gglib_core::utils::process::bounded::Failure;
 
 use crate::error::GuiError;
 use crate::launch_options::plan_bare_launch;
@@ -231,17 +233,39 @@ fn llama_server_unavailable_reason(msg: &str) -> Option<&'static str> {
 /// Map a runtime failure onto the GUI error the frontend expects.
 ///
 /// Preserves the llama-server-not-installed hint, which is the one failure a
-/// user can act on directly. Only [`ModelRuntimeError::SpawnFailed`] is probed
-/// for it — that is the sole variant a binary problem can arrive as, so no
-/// other failure gets to claim the install prompt by wording alone.
+/// user can act on directly. A load refused for an engine the check found
+/// missing brings it by the check's typed answer; otherwise only
+/// [`ModelRuntimeError::SpawnFailed`] is probed for it — that is the sole
+/// other variant a binary problem can arrive as, so no other failure gets to
+/// claim the install prompt by wording alone.
+///
+/// A failed load is passed on in the runtime's words, with nothing round
+/// them: they are the cause the user reads.
 fn map_runtime_error(err: &ModelRuntimeError) -> GuiError {
     match err {
         ModelRuntimeError::ModelNotFound(name) => GuiError::NotFound {
             entity: "model",
             id: name.clone(),
         },
+        ModelRuntimeError::LoadFailed(failure) => match (&failure.runtime, &failure.cause) {
+            (
+                RuntimeKind::Llama,
+                LoadCause::EngineNotWorking {
+                    failure: Failure::NotFound,
+                    ..
+                },
+            ) => GuiError::llama_server_not_installed("not found"),
+            (
+                RuntimeKind::Llama,
+                LoadCause::EngineNotWorking {
+                    failure: Failure::NotExecutable,
+                    ..
+                },
+            ) => GuiError::llama_server_not_installed("not executable"),
+            _ => GuiError::LoadFailed(failure.to_string()),
+        },
         ModelRuntimeError::SpawnFailed(msg) => llama_server_unavailable_reason(msg).map_or_else(
-            || GuiError::Internal(format!("Failed to start server: {err}")),
+            || GuiError::Internal(err.to_string()),
             GuiError::llama_server_not_installed,
         ),
         // Serving an image model is the caller's mistake, said as the runtime
@@ -253,7 +277,7 @@ fn map_runtime_error(err: &ModelRuntimeError) -> GuiError {
         // Not the server failing: nothing to draw with yet. The runtime's
         // words name the remedy.
         ModelRuntimeError::ImageRuntimeNotInstalled => GuiError::Unavailable(err.to_string()),
-        _ => GuiError::Internal(format!("Failed to start server: {err}")),
+        _ => GuiError::Internal(err.to_string()),
     }
 }
 
