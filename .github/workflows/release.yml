@@ -861,7 +861,9 @@ jobs:
   # installed and of the CLI archive, a data folder of the job's own, the
   # pinned llama.cpp installed by that gglib, tinygemma3 from the pinned test
   # models added, `gglib up`, one chat request to its endpoint, `gglib daemon
-  # stop`, and no gglib, llama-server or sd-server process or lock left.
+  # stop`, and no gglib, llama-server or sd-server process or lock left; then
+  # the uninstall. On Windows the user's own PATH, read from the registry,
+  # gains the install folder once and gives it back.
   # #1959 found every Windows defect by hand; this is the standing check that
   # the path from the installer to a first reply works.
   #

@@ -15,8 +15,9 @@ Windows by hand:
     on each OS), and the installed `gglib --version` names the version and the
     commit being released;
  3. the CLI archive unpacks and its `gglib --version` says the same;
- 4. where PLATFORMS names a check for it, a new shell finds `gglib` on the
-    PATH it would be given (expected to fail until mmogr/gglib#2024 merges);
+ 4. where the OS keeps a user's own PATH (Windows), the install put its
+    folder on it exactly once and left every other entry as it was, read
+    from the registry a new terminal's PATH is built from;
  5. `gglib config paths` reads a data folder of the smoke's own, under
     --work, through GGLIB_DATA_DIR: nothing of the runner's or a person's;
  6. `gglib config llama install` installs the pinned engine, and
@@ -30,8 +31,13 @@ Windows by hand:
 10. `gglib daemon stop`, then no gglib, gglib-gui, llama-server or sd-server
     process is left, and no lock or pid file is left in the data folder;
 11. uninstalling, where PLATFORMS says how, removes what was installed and
-    leaves no gglib process. Steps 10 and 11 run after an earlier failure
-    too; an uninstall that then fails is reported, not counted as the cause.
+    leaves no gglib process, and the user's own PATH is again what it was
+    before the install. Steps 10 and 11 run after an earlier failure too;
+    an uninstall that then fails is reported, not counted as the cause.
+
+A step PLATFORMS lists under `pending` is expected to fail on that OS until
+the change it names merges: its failure is a warning, and its passing a
+notice to take it off the list. None is listed now, and the summary says so.
 
 Every command has a time limit and its stdout and stderr go to files under
 --work/logs, which the job uploads whether or not the run passed, with the
@@ -48,7 +54,8 @@ so `run` refuses to start outside GitHub Actions unless given --here.
 `--self-test` checks the pure parts: that PLATFORMS has a complete entry for
 each target release.yml builds and names no value the run does not give;
 that the leftover-process check finds a planted gglib program and ignores
-everything else; that the reply check refuses an empty reply and an error
+everything else; that the PATH checks refuse a folder added twice or not at
+all, another entry changed, and a value not given back whole; that the reply check refuses an empty reply and an error
 body; that the version check refuses another version or commit; and the
 readers of a process list, of `gglib config paths`, of `gglib model list`
 (on what `model add` printed on Windows, which has no ID, and on a list
@@ -150,11 +157,14 @@ class Platform:
     # A command that kills a watched program by name, `{name}` in it. Only
     # the clean-up after the checks runs it.
     kill: tuple[str, ...]
-    # A command printing the PATH a new shell is given, read from where a
-    # new shell reads it; () where no install puts gglib on PATH that way.
-    new_shell_path: tuple[str, ...]
-    # Why the new-shell check is expected to fail today; "" once it holds.
-    new_shell_pending: str
+    # A command printing, as a JSON list, the user's own PATH as it is
+    # stored, `%VAR%` references unexpanded, and gglib's record of the
+    # folders it added to it, each null when absent; () where the OS keeps
+    # no PATH of the user's own.
+    user_path: tuple[str, ...]
+    # Steps expected to fail on this OS, each with why: (step, reason). Its
+    # failure is then a warning. Empty once every step is required.
+    pending: tuple[tuple[str, str], ...]
 
 
 PLATFORMS: dict[str, Platform] = {
@@ -175,21 +185,26 @@ PLATFORMS: dict[str, Platform] = {
         processes=("tasklist", "/FO", "CSV", "/NH"),
         process_listing="tasklist",
         kill=("taskkill", "/F", "/T", "/IM", "{name}.exe"),
-        # The machine's PATH, then the user's, from the registry, as Explorer
-        # gives them to a shell it starts. The job's own PATH proves nothing.
-        new_shell_path=(
+        # The installer runs `gglib config path-entry add` after it installs
+        # and `remove` before it uninstalls (src-tauri/windows/
+        # installer-hooks.nsh), which edit the value `Path` of
+        # HKCU\Environment and record the folder in HKCU\Software\gglib,
+        # `PathEntriesAdded` (gglib_core::paths::user_path). A new terminal's
+        # PATH is built from that value; a process the job starts is not, as
+        # the installer tells only its own desktop session, so the value is
+        # read where it is stored, unexpanded. The record is cast to text, so
+        # an absent one reads as "". No braces: this is a template.
+        user_path=(
             "powershell",
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + "
-            "[Environment]::GetEnvironmentVariable('Path','User')",
+            "$p = (Get-Item HKCU:\\Environment).GetValue('Path', $null, 'DoNotExpandEnvironmentNames'); "
+            "$r = [string](Get-ItemProperty -Path HKCU:\\Software\\gglib -Name PathEntriesAdded "
+            "-ErrorAction SilentlyContinue).PathEntriesAdded; "
+            "ConvertTo-Json -Compress -InputObject @($p, $r)",
         ),
-        new_shell_pending=(
-            "the installer does not add its folder to the user's PATH until "
-            "https://github.com/mmogr/gglib/pull/2024 merges; empty "
-            "`new_shell_pending` then, and this check fails the job when it fails"
-        ),
+        pending=(),
     ),
     "macos": Platform(
         target="aarch64-apple-darwin",
@@ -213,8 +228,8 @@ PLATFORMS: dict[str, Platform] = {
         processes=("ps", "-A", "-o", "comm="),
         process_listing="ps",
         kill=("pkill", "-KILL", "-x", "{name}"),
-        new_shell_path=(),
-        new_shell_pending="",
+        user_path=(),
+        pending=(),
     ),
     "linux": Platform(
         target="x86_64-unknown-linux-gnu",
@@ -239,8 +254,8 @@ PLATFORMS: dict[str, Platform] = {
         processes=("ps", "-A", "-o", "comm="),
         process_listing="ps",
         kill=("pkill", "-KILL", "-x", "{name}"),
-        new_shell_path=(),
-        new_shell_pending="",
+        user_path=(),
+        pending=(),
     ),
 }
 
@@ -265,6 +280,8 @@ def platform_templates(platform: Platform) -> list[str]:
     """Every string of a platform's entry that the run expands."""
     found: list[str] = []
     for field in fields(Platform):
+        if field.name == "pending":
+            continue
         value = getattr(platform, field.name)
         if isinstance(value, str):
             found.append(value)
@@ -297,8 +314,11 @@ def check_table(platforms: Mapping[str, Platform], targets: list[str]) -> list[s
             problems.append(f"{name}: no reader for a {platform.process_listing!r} process list")
         if "{name}" not in " ".join(platform.kill):
             problems.append(f"{name}: kill does not name {{name}}")
-        if platform.new_shell_pending and not platform.new_shell_path:
-            problems.append(f"{name}: a new-shell check is pending with no command to run it")
+        for step, reason in platform.pending:
+            if step not in STEPS:
+                problems.append(f"{name}: pending names {step!r}, which is no step")
+            if not reason:
+                problems.append(f"{name}: pending {step!r} gives no reason")
         for template in platform_templates(platform):
             # `kill` alone also takes the program's name.
             unknown = template_names(template) - set(VALUES) - ({"name"} if template in platform.kill else set())
@@ -429,6 +449,69 @@ def shorten(text: str, limit: int = 240) -> str:
     return flat[: limit - 40].rstrip() + " \u2026 (whole text in 00-summary.txt)"
 
 
+def path_entries(text: str | None) -> list[str]:
+    """A PATH value's entries, as gglib_core::paths::user_path splits them:
+    at each `;` outside double quotes, an unclosed quote running to the end."""
+    if not text:
+        return []
+    entries, entry, quoted = [], "", False
+    for char in text:
+        if char == '"':
+            quoted = not quoted
+        if char == ";" and not quoted:
+            entries.append(entry)
+            entry = ""
+        else:
+            entry += char
+    entries.append(entry)
+    return entries
+
+
+def names_folder(entry: str, folder: str) -> bool:
+    """Whether a PATH entry names `folder`, by user_path's rule: the same text
+    once surrounding quotes and trailing separators are dropped, `/` read as
+    `\\` and case ignored. `%LOCALAPPDATA%\\gglib-gui` is another entry."""
+
+    def plain(text: str) -> str:
+        # user_path.rs's `compared`, step for step.
+        if len(text) >= 2 and text.startswith('"') and text.endswith('"'):
+            text = text[1:-1]
+        return text.rstrip("\\/").replace("/", "\\").lower()
+
+    return bool(plain(entry)) and plain(entry) == plain(folder)
+
+
+def check_path_added(before: str | None, after: str | None, folder: str) -> str | None:
+    """Why the install did not put `folder` on the user's PATH as it should:
+    once, every other entry kept as written. None when it did."""
+    named = [entry for entry in path_entries(after) if names_folder(entry, folder)]
+    if not named:
+        return f"the user's PATH has no entry for {folder}; it is {after!r}"
+    if len(named) > 1:
+        return f"the user's PATH names {folder} {len(named)} times; it is {after!r}"
+    kept = [entry for entry in path_entries(after) if not names_folder(entry, folder) and entry]
+    was = [entry for entry in path_entries(before) if entry]
+    if kept != was:
+        return f"the install changed the user's PATH's other entries: it was {before!r}, it is {after!r}"
+    return None
+
+
+def check_path_removed(before: str | None, after: str | None, folder: str) -> str | None:
+    """Why the uninstall did not give the user's PATH back as it was before
+    the install. An absent value and an empty one are the same: a value left
+    with nothing in it is stored empty. None when it did."""
+    if any(names_folder(entry, folder) for entry in path_entries(after)):
+        return f"the user's PATH still names {folder}; it is {after!r}"
+    if (after or "") != (before or ""):
+        return f"the user's PATH is not what it was before the install: it was {before!r}, it is {after!r}"
+    return None
+
+
+def record_names(record: str | None, folder: str) -> bool:
+    """Whether gglib's record of the folders it added (`;`-separated) names `folder`."""
+    return any(names_folder(entry, folder) for entry in (record or "").split(";"))
+
+
 def leftover_locks(paths: list[str]) -> list[str]:
     """The files among `paths`, relative to the data folder, that a running
     daemon or engine holds and a stopped one removes: the daemon's lock and
@@ -467,6 +550,26 @@ class Step:
 
 # How a step that had nothing to check says so.
 SKIPPED = "skipped: "
+
+# Every step's name, in order; PLATFORMS' `pending` names steps from here.
+STEPS = (
+    "no gglib program is running yet",
+    "the user's PATH is read before the install",
+    "install the built release",
+    "the installed gglib --version",
+    "the CLI archive's gglib --version",
+    "the install put its folder on the user's PATH once",
+    "a data folder of the smoke's own",
+    "the pinned engine installs and works",
+    "the pinned test model is added",
+    "gglib up starts the endpoint",
+    "one chat request gets a reply",
+    "gglib daemon stop",
+    "no gglib process is left",
+    "no lock is left in the data folder",
+    "uninstall",
+    "the uninstall gave the user's PATH back as it was",
+)
 
 
 def slug(text: str) -> str:
@@ -514,7 +617,8 @@ class Smoke:
         self.daemon_may_run = False
         self.stopped = False
         self.model = ""
-        self.new_shell_found = False
+        self.path_before: str | None = None
+        self.path_read = False
         self.up_said: dict[str, str] = {}
         self.results: list[tuple[str, str, str]] = []
 
@@ -641,21 +745,48 @@ class Smoke:
             raise Failed(f"{os.path.basename(archive)}'s gglib is not this release: {reason}")
         return said.strip()
 
-    def new_shell_finds(self, want: bool) -> str | None:
-        if not want and not self.new_shell_found:
-            # Nothing to take away: the first check found it on no PATH.
-            return SKIPPED + "no new shell found gglib before the uninstall either"
-        _, said, _ = self.run("the PATH a new shell is given", self.command(self.platform.new_shell_path), LIMITS["short"])
-        folders = [os.path.expandvars(entry.strip()) for entry in said.strip().split(os.pathsep) if entry.strip()]
-        name = os.path.basename(self.cli())
-        found = [folder for folder in folders if os.path.isfile(os.path.join(folder, name))]
-        if want and not found:
-            raise Failed(f"no folder on a new shell's PATH holds {name}; it is: {os.pathsep.join(folders)}")
-        if not want and found:
-            raise Failed(f"a new shell still finds {name} in {', '.join(found)}")
-        if want:
-            self.new_shell_found = True
-        return ", ".join(found) or None
+    def user_path(self) -> tuple[str | None, str | None]:
+        """The user's own PATH as stored, and gglib's record, from the registry."""
+        _, said, _ = self.run("the user's PATH and gglib's record", self.command(self.platform.user_path), LIMITS["short"])
+        try:
+            path, record = json.loads(said)
+        except (ValueError, TypeError):
+            raise Failed(f"could not read the user's PATH: {said.strip()[:400]!r}") from None
+        if not all(value is None or isinstance(value, str) for value in (path, record)):
+            raise Failed(f"the user's PATH or gglib's record read as something other than text: {said.strip()[:400]!r}")
+        return path, record
+
+    def path_before_install(self) -> str | None:
+        self.path_before, record = self.user_path()
+        self.path_read = True
+        folder = self.path(self.platform.installed)
+        if any(names_folder(entry, folder) for entry in path_entries(self.path_before)):
+            raise Failed(f"the user's PATH names {folder} before anything was installed: {self.path_before!r}")
+        if record_names(record, folder):
+            raise Failed(f"gglib's record names {folder} before anything was installed: {record!r}")
+        return f"{len([e for e in path_entries(self.path_before) if e])} entries"
+
+    def path_added(self) -> str | None:
+        folder = self.path(self.platform.installed)
+        after, record = self.user_path()
+        reason = check_path_added(self.path_before, after, folder)
+        if reason:
+            raise Failed(reason)
+        if not record_names(record, folder):
+            raise Failed(f"gglib's record (HKCU\\Software\\gglib, PathEntriesAdded) does not name {folder}: {record!r}")
+        return f"{folder}, once, the other entries as they were"
+
+    def path_removed(self) -> str | None:
+        if not self.path_read or not self.installed:
+            return SKIPPED + "the user's PATH was not read before an install"
+        folder = self.path(self.platform.installed)
+        after, record = self.user_path()
+        reason = check_path_removed(self.path_before, after, folder)
+        if reason:
+            raise Failed(reason)
+        if record_names(record, folder):
+            raise Failed(f"gglib's record still names {folder}: {record!r}")
+        return "as it was before the install"
 
     def clean_data(self) -> str | None:
         os.makedirs(self.data, exist_ok=True)
@@ -782,39 +913,34 @@ class Smoke:
         return None
 
     def steps(self) -> list[Step]:
-        pending = self.platform.new_shell_pending
-        steps = [
-            Step("no gglib program is running yet", self.nothing_running),
-            Step("install the built release", self.install),
-            Step("the installed gglib --version", self.installed_version),
-            Step("the CLI archive's gglib --version", self.archive_version),
+        pending = dict(self.platform.pending)
+        path = bool(self.platform.user_path)
+        # (name, what runs it, runs after a failure, its failure then not the cause, kept on this OS)
+        listed = [
+            (STEPS[0], self.nothing_running, False, False, True),
+            (STEPS[1], self.path_before_install, False, False, path),
+            (STEPS[2], self.install, False, False, True),
+            (STEPS[3], self.installed_version, False, False, True),
+            (STEPS[4], self.archive_version, False, False, True),
+            (STEPS[5], self.path_added, False, False, path),
+            (STEPS[6], self.clean_data, False, False, True),
+            (STEPS[7], self.engine, False, False, True),
+            (STEPS[8], self.add_model, False, False, True),
+            (STEPS[9], self.up, False, False, True),
+            (STEPS[10], self.chat, False, False, True),
+            (STEPS[11], self.stop, True, False, True),
+            (STEPS[12], self.no_leftovers, True, False, True),
+            (STEPS[13], self.no_locks, True, False, True),
+            # After a failure too, so one run says as much as it can; its
+            # failure then is reported, not counted as the cause.
+            (STEPS[14], self.uninstall, True, True, True),
+            (STEPS[15], self.path_removed, True, True, path),
         ]
-        if self.platform.new_shell_path:
-            steps.append(Step("a new shell finds gglib", lambda: self.new_shell_finds(True), pending=pending))
-        steps += [
-            Step("a data folder of the smoke's own", self.clean_data),
-            Step("the pinned engine installs and works", self.engine),
-            Step("the pinned test model is added", self.add_model),
-            Step("gglib up starts the endpoint", self.up),
-            Step("one chat request gets a reply", self.chat),
-            Step("gglib daemon stop", self.stop, always=True),
-            Step("no gglib process is left", self.no_leftovers, always=True),
-            Step("no lock is left in the data folder", self.no_locks, always=True),
-            # Runs after a failure too, so one run says as much as it can;
-            # its failure then is reported, not counted as the cause.
-            Step("uninstall", self.uninstall, always=True, secondary=True),
+        return [
+            Step(name, run, always=always, secondary=secondary, pending=pending.get(name, ""))
+            for name, run, always, secondary, kept in listed
+            if kept
         ]
-        if self.platform.new_shell_path:
-            steps.append(
-                Step(
-                    "a new shell no longer finds gglib",
-                    lambda: self.new_shell_finds(False),
-                    always=True,
-                    pending=pending,
-                    secondary=True,
-                )
-            )
-        return steps
 
     def save(self, name: str, text: str) -> None:
         with open(os.path.join(self.logs, name), "w", encoding="utf-8") as handle:
@@ -881,7 +1007,9 @@ class Smoke:
     def report(self) -> None:
         width = max(len(name) for name, _, _ in self.results)
         whole = [f"{name:<{width}}  {verdict}{': ' + said if said else ''}" for name, verdict, said in self.results]
-        self.save("00-summary.txt", "\n".join(whole) + "\n")
+        expected = "; ".join(f"{step} ({why})" for step, why in self.platform.pending) or "none"
+        self.save("00-summary.txt", f"Steps expected to fail on this OS: {expected}\n\n" + "\n".join(whole) + "\n")
+        print(f"\nSteps expected to fail on this OS: {expected}")
         print("\n=== Summary")
         for name, verdict, said in self.results:
             print(f"{name:<{width}}  {verdict}{': ' + shorten(said) if said else ''}")
@@ -889,6 +1017,7 @@ class Smoke:
         if summary:
             with open(summary, "a", encoding="utf-8") as handle:
                 handle.write(f"### Smoke test of gglib {self.version} on {self.platform.target}\n\n")
+                handle.write(f"Steps expected to fail on this OS: {shorten(expected)}\n\n")
                 handle.write("| Step | Result | What it saw |\n|---|---|---|\n")
                 for name, verdict, said in self.results:
                     cell = shorten(said).replace("|", "\\|")
@@ -1050,6 +1179,11 @@ def self_test() -> int:
             planted = {**PLATFORMS, name: replace(platform, target="x86_64-unknown-freebsd")}
             if not check_table(planted, targets):
                 wrong.append(f"{name}: a target release.yml does not build passed")
+            planted = {**PLATFORMS, name: replace(platform, pending=(("a step nobody runs", "#0"),))}
+            if not any("no step" in problem for problem in check_table(planted, targets)):
+                wrong.append(f"{name}: a pending step that is no step passed")
+            planted = {**PLATFORMS, name: replace(platform, pending=((STEPS[-1], "#0 merges"),))}
+            expect(f"{name}: a pending step that is one", check_table(planted, targets), [])
 
     attempt("the per-OS table", table)
 
@@ -1163,12 +1297,52 @@ def self_test() -> int:
 
     attempt("the readers", readers)
 
+    def user_paths() -> None:
+        folder = "C:\\Users\\runneradmin\\AppData\\Local\\gglib-gui"
+        before = '%USERPROFILE%\\.dotnet\\tools;"C:\\odd;dir";C:\\Tools\\'
+        added = before + ";" + folder
+        expect("PATH entries, a ; inside quotes kept", path_entries(before), ["%USERPROFILE%\\.dotnet\\tools", '"C:\\odd;dir"', "C:\\Tools\\"])
+        expect("PATH entries, an unclosed quote to the end", path_entries('a;"b;c'), ["a", '"b;c'])
+        expect("PATH entries of no value", path_entries(None), [])
+        for spelt in (folder, folder.lower() + "\\", '"' + folder + '"', folder.replace("\\", "/") + "/"):
+            if not names_folder(spelt, folder):
+                wrong.append(f"{spelt!r} was not read as naming {folder}")
+        for other in ("%LOCALAPPDATA%\\gglib-gui", folder + "-old", "", '"'):
+            if names_folder(other, folder):
+                wrong.append(f"{other!r} was read as naming {folder}")
+        expect("the folder added once", check_path_added(before, added, folder), None)
+        expect("the folder added to no value", check_path_added(None, folder, folder), None)
+        expect("the folder added after a trailing ;", check_path_added("C:\\a;", "C:\\a;" + folder + ";", folder), None)
+        for what, after in (
+            ("not added", before),
+            ("added twice", added + ";" + folder.lower()),
+            ("an entry expanded", added.replace("%USERPROFILE%", "C:\\Users\\runneradmin")),
+            ("an entry dropped", "C:\\Tools\\;" + folder),
+            ("the quoted entry split", before.replace('"', "") + ";" + folder),
+        ):
+            if check_path_added(before, after, folder) is None:
+                wrong.append(f"the PATH check took a folder {what} for one added once")
+        expect("the value given back", check_path_removed(before, before, folder), None)
+        expect("no value given back as empty", check_path_removed(None, "", folder), None)
+        for what, after in (
+            ("still there", added),
+            ("there in another spelling", before + ";" + folder.upper() + "\\"),
+            ("not given back whole", before.rstrip("\\")),
+            ("emptied", ""),
+        ):
+            if check_path_removed(before, after, folder) is None:
+                wrong.append(f"the PATH check took a value {what} for the one before the install")
+        expect("a record naming the folder", record_names("C:\\other;" + folder, folder), True)
+        expect("no record", record_names(None, folder), False)
+
+    attempt("the user's PATH checks", user_paths)
+
     if wrong:
         print("❌ self-test: a planted case was not judged as planted:")
         for line in wrong:
             print(f"     {line}")
         return 1
-    print(f"✅ self-test: the table covers {', '.join(sorted(PLATFORMS))} as release.yml builds them; every planted process, reply, version and file judged as planted")
+    print(f"✅ self-test: the table covers {', '.join(sorted(PLATFORMS))} as release.yml builds them; every planted process, reply, version, PATH and file judged as planted")
     return 0
 
 
