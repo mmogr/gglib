@@ -246,6 +246,16 @@ impl ProcessManager {
             .collect()
     }
 
+    /// Stop every engine this manager runs, for a service that has seconds
+    /// left.
+    pub async fn kill_all_now(&self) {
+        for handle in self.list_running().await {
+            if let Ok(model_id) = u32::try_from(handle.model_id) {
+                let _ = self.stop_model(model_id).await;
+            }
+        }
+    }
+
     /// The single model this manager is pinned to, if any.
     ///
     /// `Some(pin)` is `gglib serve`: every model whose id is not `pin.id` is
@@ -329,3 +339,7 @@ mod tests;
 #[cfg(test)]
 #[path = "manager_gate_tests.rs"]
 mod gate_tests;
+
+#[cfg(test)]
+#[path = "manager_kill_tests.rs"]
+mod kill_tests;

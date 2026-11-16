@@ -279,7 +279,7 @@ impl Drop for GuiProcessCore {
 
 #[cfg(test)]
 #[path = "core_drop_tests.rs"]
-mod drop_tests;
+pub(in crate::process) mod drop_tests;
 
 #[cfg(test)]
 #[path = "core_spawn_tests.rs"]
