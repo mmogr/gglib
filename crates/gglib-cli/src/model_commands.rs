@@ -431,6 +431,13 @@ pub enum ModelCommand {
         /// model is refused while the pin holds.
         #[arg(long)]
         pin: bool,
+        /// With --pin, switch an endpoint that is on otherwise without asking.
+        ///
+        /// Switching it cuts off the clients connected now, so --pin asks
+        /// first, as `gglib serve` does. Without -y, a run that is not in a
+        /// terminal changes and loads nothing.
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 
     /// Unload a model from memory on the daemon, as the app's Unload does.

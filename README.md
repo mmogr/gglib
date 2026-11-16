@@ -178,10 +178,11 @@ On an iPhone or iPad, [ggchat](https://github.com/mmogr/ggchat) scans the
 same QR code and talks to the same endpoint; it is a native iPhone and Mac
 app.
 
-The desktop app doubles as an always-on host: `proxy-autostart`,
-`close-to-tray` and `start-at-login` (Settings › General in the app) keep
-the endpoint up without a terminal window, and the tray shows the endpoint,
-what is loaded, and your devices.
+The desktop app doubles as an always-on host: the endpoint comes on when
+gglib starts (`proxy-autostart`, on unless set to `false`), and
+`close-to-tray` and `start-at-login` (Settings › General in the app) keep it
+up without a terminal window. The tray shows the endpoint, what is loaded,
+and your devices.
 
 <p align="center">
   <img src="docs/assets/tray-dashboard.png" alt="The tray popover while a loaded model answers a request" height="420">
@@ -208,7 +209,7 @@ Settings are optional and persist:
 
 ```bash
 gglib config set default-context-size 131072
-gglib config set proxy-autostart true
+gglib config set proxy-autostart false   # the endpoint waits to be turned on
 gglib config set close-to-tray true
 ```
 

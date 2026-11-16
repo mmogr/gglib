@@ -15,7 +15,7 @@
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, StartProxyBody};
+use crate::daemon_client::StartProxyBody;
 use crate::handlers::model::resolver;
 use crate::presentation::style;
 use crate::shared_args::{AccessArgs, CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
@@ -234,10 +234,9 @@ async fn serve_here(
         selection.profile.as_ref().map(|p| p.name.clone()),
     );
 
-    let handle = daemon_client::ensure_daemon().await?;
-    let started = super::proxy::start_on(&handle, &body, &settings).await?;
     let reach = super::proxy::reached(options.host.as_deref(), &settings);
-    super::proxy::attach_dashboard(ctx, reach, started.port, access.api_key).await
+    let attach = super::proxy::Attach::new(reach, access.api_key, true);
+    super::proxy::start_and_attach(ctx, &body, &settings, options.yes, attach).await
 }
 
 /// What `gglib serve` asks the daemon to start: the proxy as `planned`,
@@ -271,6 +270,7 @@ fn start_body(
         default_profile,
         api_key: planned.api_key,
         allowed_hosts: planned.allowed_hosts,
+        replace: false,
     }
 }
 

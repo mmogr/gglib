@@ -208,7 +208,9 @@ never stores, turns thinking off for a request by sending
 `"reasoning_budget_tokens": 0` in the body of `POST /v1/chat/completions`,
 and leaves the key out otherwise. gglib honours that key from any client,
 whatever `trust_client_sampling` says
-([The two reasoning controls](sampling.md#the-two-reasoning-controls)). The
+([The two reasoning controls](sampling.md#the-two-reasoning-controls)), and
+adds `"chat_template_kwargs": {"enable_thinking": false}` beside it when it
+forwards the request, keeping any other kwargs the client sent. The
 choice is the client's to keep: gglib remembers nothing of such a request.
 
 gglib's own turn routes take the choice as a word and remember it on the

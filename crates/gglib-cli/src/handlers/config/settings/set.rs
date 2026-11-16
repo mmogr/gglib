@@ -95,3 +95,7 @@ pub(super) mod tests;
 #[cfg(test)]
 #[path = "set_drawing_tests.rs"]
 mod drawing_tests;
+
+#[cfg(test)]
+#[path = "set_autostart_tests.rs"]
+mod autostart_tests;

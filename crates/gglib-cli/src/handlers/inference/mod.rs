@@ -6,3 +6,4 @@ pub(crate) mod proxy;
 pub(crate) mod question_input;
 pub(crate) mod serve;
 pub(crate) mod shared;
+pub(crate) mod switch;

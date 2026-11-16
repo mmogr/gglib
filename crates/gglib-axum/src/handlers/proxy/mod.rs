@@ -10,6 +10,7 @@ use axum::{
 };
 
 use crate::{error::HttpError, state::AppState};
+use gglib_app_services::StartAnswer;
 use gglib_core::domain::loop_guard_log::{
     LOOP_GUARD_LOG_DEFAULT_DAYS, LoopGuardTripDay, first_day_of_window,
 };
@@ -29,7 +30,7 @@ async fn fetch_status(state: &AppState) -> ProxyStatus {
         pin.name = model.name;
     }
     let key = state.proxy.key_state().await;
-    to_api_status(&s, pinned, key)
+    to_api_status(&s, pinned, key, state.proxy.refused())
 }
 
 /// Start the proxy pinned to one model, resolving the launch cascade
@@ -149,7 +150,9 @@ pub(crate) async fn trips(
     Ok(Json(days))
 }
 
-/// Start the proxy (idempotent).
+/// Start the proxy as the body asks: idempotent for the endpoint as it
+/// runs, refused with `endpoint_differs` for another one unless the body
+/// says `replace` ([`gglib_app_services::ProxyOps::start_as`]).
 pub(crate) async fn start(
     State(state): State<AppState>,
     Json(cfg): Json<Option<StartProxyConfig>>,
@@ -164,72 +167,21 @@ pub(crate) async fn start(
     let settings = state.core.settings().get().await?;
     let runtime_cfg = to_runtime_config(&cfg, &settings);
 
-    // Idempotent: if already running (Conflict), treat as success — unless
-    // the caller asked for a pinned mode the running proxy does not match,
-    // where "success" would silently hand them an endpoint without the
-    // refuse-foreign-models guarantee they explicitly requested.
-    match state.proxy.start(runtime_cfg, cfg.pinned.clone()).await {
-        Ok(_addr) => {}
-        Err(e) => {
-            let http: HttpError = e.into();
-            if !matches!(http, HttpError::Conflict(_)) {
-                return Err(http);
-            }
-
-            // `Conflict` covers two different outcomes. `AlreadyRunning` is
-            // the idempotent success this branch exists for; `BindFailed` is
-            // somebody else's process on the port, and it leaves nothing
-            // running. Only the first is success, so ask which one happened
-            // rather than assuming — treating a bind failure as success
-            // would answer 200 with `running: false` and discard the one
-            // message that names the port and what to do about it.
-            if !fetch_status(&state).await.running {
-                return Err(http);
-            }
-
-            // A running proxy's sampling override and default profile are
-            // fixed for the life of the run — `AppState` reads both once at
-            // startup. Asking for *different* ones would print the operator's
-            // flags back at them and apply none of them, which is the precise
-            // failure the override exists to prevent.
-            //
-            // Compared rather than merely detected, because "the same request
-            // again" is legitimate and common: re-running the identical
-            // command is how an operator re-attaches after a detach, and with
-            // `proxy_autostart` the daemon has already started an unpinned
-            // proxy before the first `gglib proxy --temperature …` ever runs.
-            // Refusing on presence alone broke both.
-            if let Some((running_override, running_profile)) = state.proxy.started_sampling().await
-                && (cfg.inference_override != running_override
-                    || cfg.default_profile != running_profile)
-            {
-                return Err(HttpError::Conflict(
-                    "the proxy is already running with different sampling — that is fixed for \
-                     the life of the run, so stop it first (`gglib proxy stop`)"
-                        .to_string(),
-                ));
-            }
-
-            // The same pin is the same model id, as the runtime enforces it;
-            // the refusal names the model.
-            let running = state.proxy.pinned();
-            if let Some(requested) = &cfg.pinned
-                && running.as_ref().map(|pin| pin.id) != Some(requested.id)
-            {
-                return Err(HttpError::Conflict(format!(
-                    "the proxy is already running {} — stop it first (`gglib proxy stop`)",
-                    match running {
-                        Some(pin) => format!("pinned to '{}'", pin.name),
-                        None => "unpinned".to_string(),
-                    }
-                )));
-            }
-        }
-    }
-
-    // `proxy_started` is said by `ProxyOps` itself, by the start that
-    // turned the endpoint on, so a start that found it on says nothing more.
-    Ok(Json(fetch_status(&state).await))
+    // On as asked is success; on otherwise is refused with how it differs,
+    // unless the caller asked to replace it, which `ProxyOps` does as one
+    // operation. `proxy_started` and `proxy_stopped` are said there, by the
+    // start and the stop that change the endpoint.
+    let outcome = match state
+        .proxy
+        .start_as(runtime_cfg, cfg.pinned.clone(), cfg.replace)
+        .await?
+    {
+        StartAnswer::On(_, outcome) => outcome,
+        StartAnswer::Differs(change) => return Err(HttpError::EndpointDiffers(change)),
+    };
+    let mut status = fetch_status(&state).await;
+    status.outcome = Some(outcome);
+    Ok(Json(status))
 }
 
 /// Stop the proxy (idempotent).

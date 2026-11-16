@@ -131,6 +131,20 @@ export function endpointFacts({ running, status }: ProxyState): EndpointFacts {
   };
 }
 
+/**
+ * Why the endpoint is off, in the daemon's words, while it is off because a
+ * start could not bind its port (the service's own launch among them); `null`
+ * otherwise.
+ */
+export function endpointRefusal({ running, status }: ProxyState): string | null {
+  return running ? null : (status?.refused ?? null);
+}
+
+/** React hook — [`endpointRefusal`], on every change. */
+export function useEndpointRefusal(): string | null {
+  return endpointRefusal(store.useStore());
+}
+
 /** React hook — the endpoint line's facts, derived on every change. */
 export function useEndpointFacts(): EndpointFacts {
   return endpointFacts(store.useStore());

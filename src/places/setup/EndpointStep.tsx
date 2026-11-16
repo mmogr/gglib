@@ -6,7 +6,8 @@
  * The proof waits for the model's download ("The test runs when … finishes")
  * and is run by the place, so it lands on whichever step is open; nothing
  * here waits for it, and Continue is always there. Start the endpoint when
- * gglib launches is the stored setting (`proxyAutostart`). A failed start
+ * gglib launches is the setting as the service acts on it (`proxyAutostart`,
+ * on unless switched off). A failed start
  * or proof is the daemon's sentence, with Retry. An endpoint that was on
  * before setup, with a model already here, reads "Already done".
  *
