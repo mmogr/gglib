@@ -163,7 +163,9 @@ fn serve_with_a_silent_open_stdin_refuses_at_once() {
 #[test]
 fn up_stops_at_an_installed_llama_server_that_does_not_work() {
     let root = tempfile::tempdir().unwrap();
-    let bin = root.path().join(".llama/bin");
+    // Joined a name at a time: the path is compared with what gglib prints,
+    // and a `/` inside one name is not what Windows prints.
+    let bin = root.path().join(".llama").join("bin");
     std::fs::create_dir_all(&bin).unwrap();
     let server = bin.join(format!("llama-server{}", std::env::consts::EXE_SUFFIX));
     std::fs::write(&server, "not a program").unwrap();
