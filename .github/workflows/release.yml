@@ -9,10 +9,14 @@
 #
 #   gh workflow run release.yml --ref main -f tag=v<version>
 #
+# Before anything is published, `smoke` installs each OS's build as a user
+# would and asks it one question (scripts/release_smoke.py).
+#
 # `test_run` builds the dispatched ref instead and keeps every file as a
 # `dryrun-*` artifact; it attests, uploads and deploys nothing. With `only`
-# set to a target, a test run builds that target's CLI and desktop app and
-# nothing else, such as a Windows installer to try on a machine:
+# set to a target, a test run builds and smokes that target's CLI and
+# desktop app and nothing else, such as a Windows installer to try on a
+# machine:
 #
 #   gh workflow run release.yml --ref <branch> -f test_run=true -f only=x86_64-pc-windows-msvc
 
@@ -849,9 +853,107 @@ jobs:
           path: dist/*
           retention-days: 7
 
+  # The built release, installed on each OS the way a user installs it, asked
+  # one question: scripts/release_smoke.py says each step and holds what
+  # differs between the OSes (the files, how they install, where gglib lands)
+  # in one table. On Windows the NSIS installer silently, on macOS the .dmg's
+  # app, on Linux both .debs with apt; then `gglib --version` of what was
+  # installed and of the CLI archive, a data folder of the job's own, the
+  # pinned llama.cpp installed by that gglib, tinygemma3 from the pinned test
+  # models added, `gglib up`, one chat request to its endpoint, `gglib daemon
+  # stop`, and no gglib, llama-server or sd-server process or lock left; then
+  # the uninstall. On Windows the user's own PATH, read from the registry,
+  # gains the install folder once and gives it back.
+  # #1959 found every Windows defect by hand; this is the standing check that
+  # the path from the installer to a first reply works.
+  #
+  # One leg per desktop target `meta` lists, so a test run with `only` smokes
+  # that target alone. `build` has no leg on a test run of macOS alone, and is
+  # skipped then. `publish` waits for every leg, on a candidate and on a
+  # stable version alike: Promote's stable tag is a commit of its own, its
+  # version changed, and this workflow builds it again, so those bytes have
+  # not been smoked as the candidate's were.
+  #
+  # The harness is the workflow's, not the tag's: the checkout is the ref this
+  # workflow runs from (main, for a release), so the script, the action and
+  # the test model list always match these steps, and a tag older than the
+  # script is smoked all the same. Only the built files come from the tag.
+  smoke:
+    name: Smoke test ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    needs: [meta, build, build-gui]
+    if: ${{ !cancelled() && needs.build-gui.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    # The script's own limits end a hang with its output kept; these are the
+    # backstop.
+    timeout-minutes: 75
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.meta.outputs.gui-legs) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # One Python name on every runner; the script needs the standard
+      # library alone.
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      # The models, as `build-phone` takes them; the engine is installed
+      # below by the gglib under test, as a user's is.
+      - name: Fetch the pinned test models
+        id: models
+        uses: ./.github/actions/pinned-engines
+        with:
+          target: ${{ matrix.target }}
+          engines: "false"
+
+      - name: Collect this target's built release
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ needs.meta.outputs.artifacts }}-*-${{ matrix.target }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/smoke-artifacts
+
+      # GITHUB_TOKEN as the pinned-engines action passes it: the engine's
+      # download asks GitHub's API for the pinned release.
+      - name: Install it, ask it one question, stop it
+        timeout-minutes: 60
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PYTHONUTF8: "1"
+          ARTIFACTS: ${{ runner.temp }}/smoke-artifacts
+          WORK: ${{ runner.temp }}/smoke
+          MODELS: ${{ steps.models.outputs.models }}
+          VERSION: ${{ needs.meta.outputs.version }}
+          SHA: ${{ needs.meta.outputs.sha }}
+        run: python scripts/release_smoke.py run --artifacts "$ARTIFACTS" --version "$VERSION" --sha "$SHA" --models "$MODELS" --work "$WORK"
+
+      # The script's log of each command, the request and reply, and
+      # gglib's own logs, whatever happened. Not named like the assets, so
+      # `publish` never collects it.
+      - name: Upload what the smoke test saw
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/smoke/logs
+            ${{ runner.temp }}/smoke/data/logs
+          if-no-files-found: warn
+          # A re-run of a failed leg uploads its own.
+          overwrite: true
+          retention-days: 14
+
   # The only job that writes to the release, and it runs only once every
-  # build has succeeded, so a release carries all its assets or none of this
-  # run's. A re-dispatch replaces them as a whole: SHA256SUMS goes first, so
+  # build has succeeded and been smoked, so a release carries all its assets
+  # or none of this run's. A re-dispatch replaces them as a whole: SHA256SUMS goes first, so
   # no download can check against a manifest from the run before, and comes
   # back last, once every asset it lists is up.
   #
@@ -861,7 +963,7 @@ jobs:
   publish:
     name: Publish the release
     runs-on: ubuntu-24.04
-    needs: [meta, build, build-gui, build-phone]
+    needs: [meta, build, build-gui, build-phone, smoke]
     timeout-minutes: 15
     permissions:
       contents: write

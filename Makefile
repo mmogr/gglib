@@ -384,6 +384,9 @@ enforce: ## Run the architecture enforcement checks
 	@# check_pe_imports.py reads Windows programs, which only Windows CI and a
 	@# release build make, so its planted images run here, on every OS.
 	@./scripts/check_pe_imports.py --self-test
+	@# release_smoke.py runs only in a release or a test run of release.yml,
+	@# so its per-OS table and its checks are held here, on every change.
+	@./scripts/release_smoke.py --self-test
 	@# ts-rs reads Rust types, not serde's behaviour, so two annotations stand
 	@# between the generated bindings and a new class of lie: i64 becomes a
 	@# `bigint` no `JSON.parse` can produce, and `skip_serializing_if` becomes a
