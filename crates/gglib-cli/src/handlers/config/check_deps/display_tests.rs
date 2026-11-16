@@ -1,7 +1,7 @@
 use super::*;
+use gglib_core::host::HostOs;
 use gglib_core::utils::system::{
-    BuildOrigin, DependencyStatus, EngineInstall, Found, GpuInfo, HostOs, LinuxDistro,
-    dependency_report,
+    BuildOrigin, DependencyStatus, EngineInstall, Found, GpuInfo, LinuxDistro, dependency_report,
 };
 
 /// The same text with its colour taken out.

@@ -1,4 +1,5 @@
 import { FC } from 'react';
+import { HF_REPO, fileName } from '../../services/hostRegistry';
 import type { HfImagePreview } from '../../types';
 import { componentRoleLabel, imageFamilyLabel } from '../../utils/imageFamily';
 import { formatSize } from '../../utils/format';
@@ -6,10 +7,6 @@ import { formatSize } from '../../utils/format';
 interface CompanionNoteProps {
   /** The daemon's reading of the repository as an image model, with the companions its download fetches */
   image: HfImagePreview;
-}
-
-function fileName(path: string): string {
-  return path.split('/').pop() || path;
 }
 
 /**
@@ -41,7 +38,7 @@ export const CompanionNote: FC<CompanionNoteProps> = ({ image }) => {
               >
                 <span className="text-text-secondary">{componentRoleLabel(companion.role)}</span>
                 <span className="font-mono break-all" title={`${companion.repo}/${companion.file_path}`}>
-                  {fileName(companion.file_path)}
+                  {fileName(companion.file_path, HF_REPO)}
                 </span>
                 <span className="text-text-muted break-all">{companion.repo}</span>
                 <span className="text-text-secondary tabular-nums">{formatSize(companion.size_bytes)}</span>

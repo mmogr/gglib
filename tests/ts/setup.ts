@@ -5,16 +5,23 @@
  * - DOM testing utilities from @testing-library/jest-dom
  * - Tauri API mocks for testing components that use Tauri
  * - A longer wait for `findBy*` and `waitFor`
+ * - The service's host: a Mac
  */
 
 import '@testing-library/jest-dom';
 import { configure } from '@testing-library/react';
 import { vi } from 'vitest';
+import { applyHost } from '../../src/services/hostRegistry';
 
 // Testing Library gives up after one second by default. A chat page mounted
 // under coverage on a CI runner has taken longer than that to show its
 // buttons, so the wait is five seconds; a passing test is no slower.
 configure({ asyncUtilTimeout: 5000 });
+
+// The service the tests fake runs on a Mac, as `GET /api/version` would say
+// (`contracts/host/machines.json`'s first host), so every place names it
+// "This Mac". A test of another machine applies that machine's host.
+applyHost({ os: 'macos', machine: 'Mac', separators: '/' });
 
 // Mock Tauri's invoke API
 const mockInvoke = vi.fn();

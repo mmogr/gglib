@@ -41,12 +41,12 @@ use serde::Serialize;
 use tokio::fs::File;
 
 use gglib_core::domain::RuntimeKind;
+use gglib_core::host::HostOs;
 use gglib_core::utils::process::bounded::{
     PROBE_WAIT, VISUAL_CPP_RUNTIME_X64_URL, run_bounded, run_bounded_silent,
 };
 use gglib_core::utils::process::cmd;
 use gglib_core::utils::process::held::hold_unchanged;
-use gglib_core::utils::system::HostOs;
 
 use crate::engine::validate_engine;
 
@@ -241,7 +241,7 @@ impl Drop for Installing {
 /// it. The install is a task of its own: a caller that stops waiting does
 /// not stop it.
 pub async fn install_visual_cpp_runtime(kind: RuntimeKind) -> RepairReport {
-    let os = HostOs::this();
+    let os = HostOs::current();
     detached(
         &INSTALLING,
         kind,

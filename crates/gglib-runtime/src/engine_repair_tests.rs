@@ -4,8 +4,8 @@
 //! Linux too.
 
 use gglib_core::domain::RuntimeKind;
+use gglib_core::host::HostOs;
 use gglib_core::utils::process::bounded::{Ended, Failure, failure_kind};
-use gglib_core::utils::system::HostOs;
 
 use super::{Fix, FixOffer, RuntimeState, fix_for};
 

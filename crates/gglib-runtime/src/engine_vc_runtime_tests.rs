@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use gglib_core::domain::RuntimeKind;
-use gglib_core::utils::system::HostOs;
+use gglib_core::host::HostOs;
 use tokio::fs::File;
 
 use super::{

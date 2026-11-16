@@ -2,35 +2,11 @@
 //! is called on each OS.
 //!
 //! One table, [`NEEDS`], so the report, its probe and the llama.cpp build's
-//! own check read one answer. An OS is a value ([`HostOs`]) here, not a
-//! `cfg`: every OS's rows are tested on every OS.
+//! own check read one answer. An OS is a value ([`HostOs`], the one
+//! `gglib_core::host` keeps) here, not a `cfg`: every OS's rows are tested
+//! on every OS.
 
-/// The OS a report describes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HostOs {
-    Linux,
-    MacOs,
-    Windows,
-}
-
-impl HostOs {
-    /// The OS named by a `std::env::consts::OS` spelling. Anything that is
-    /// neither macOS nor Windows reads as Linux, as `check-deps` always has.
-    #[must_use]
-    pub fn from_consts(os: &str) -> Self {
-        match os {
-            "macos" => Self::MacOs,
-            "windows" => Self::Windows,
-            _ => Self::Linux,
-        }
-    }
-
-    /// The OS this binary runs on.
-    #[must_use]
-    pub fn this() -> Self {
-        Self::from_consts(std::env::consts::OS)
-    }
-}
+use crate::host::HostOs;
 
 /// What a dependency is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

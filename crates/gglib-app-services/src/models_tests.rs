@@ -808,6 +808,23 @@ async fn explain_resolves_nothing_when_nothing_is_stored() {
     );
 }
 
+/// The line the service gives is its plan's, written for this machine's
+/// shell, on every OS.
+#[tokio::test]
+async fn explain_writes_the_line_for_this_machines_shell() {
+    let core = test_core().await;
+    let ops = make_ops(Arc::clone(&core));
+    let dir = tempdir().unwrap();
+    let id = seed_model(&ops, &dir).await;
+
+    let dto = ops.explain(id, None).await.expect("explain");
+
+    let shell = gglib_core::host::HostOs::current().shell();
+    let command = dto.command.expect("this build gives the line");
+    assert_eq!(command.shell, shell);
+    assert_eq!(command, dto.plan.command_line(shell));
+}
+
 #[tokio::test]
 async fn explain_unknown_id_returns_not_found() {
     let core = test_core().await;

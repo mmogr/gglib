@@ -5,9 +5,11 @@
  * with whose choice it was and why; for a token whose decision the Load
  * with options sheet holds (`SHEET_FIELDS`), the note offers Change for
  * this model…, which opens the sheet on that field. A token the person
- * chose (source `you`) is underlined. The text is `commandLine`'s, which
- * the CLI's recorded lines pin. A per-token override field and `+ flag`
- * wait for a Rust surface that sets any flag.
+ * chose (source `you`) is underlined. The text is the daemon's
+ * (`CommandLine`, which `LaunchPlan::command_line` writes for the shell of
+ * the machine that would run it): its program, then each argument's token,
+ * the same tokens `gglib model explain` prints. A per-token override field
+ * and `+ flag` wait for a Rust surface that sets any flag.
  *
  * @module inspector/local/LaunchLine
  */
@@ -16,18 +18,20 @@ import { Fragment, useRef, useState, type FC } from 'react';
 import { CHOICE_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
 import { useClickOutside } from '../../hooks/useClickOutside';
+import type { CommandLine } from '../../types/generated/CommandLine';
 import type { LaunchPlan } from '../../types/generated/LaunchPlan';
 import { SHEET_FIELDS, type SheetField } from '../loadOptions';
 import { cn } from '../../utils/cn';
-import { argText } from './commandLine';
 
 interface LaunchLineProps {
-  plan: Pick<LaunchPlan, 'program' | 'args'>;
+  plan: Pick<LaunchPlan, 'args'>;
+  /** The line the daemon wrote of `plan`: one token per argument of it, in order. */
+  command: CommandLine;
   /** Change for this model…: open the sheet on a token's field. */
   onChange?: (field: SheetField) => void;
 }
 
-export const LaunchLine: FC<LaunchLineProps> = ({ plan, onChange }) => {
+export const LaunchLine: FC<LaunchLineProps> = ({ plan, command, onChange }) => {
   const [open, setOpen] = useState<number | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   useClickOutside(ref, () => setOpen(null), open !== null);
@@ -36,7 +40,7 @@ export const LaunchLine: FC<LaunchLineProps> = ({ plan, onChange }) => {
   return (
     <div ref={ref} className="flex flex-col gap-xs" onKeyDown={(e) => e.key === 'Escape' && setOpen(null)}>
       <p aria-label="Launch line" className="m-0 font-mono text-xs leading-relaxed text-text-secondary">
-        <span>{plan.program}</span>
+        <span>{command.program}</span>
         {plan.args.map((arg, i) => (
           <Fragment key={i}>
             {' '}
@@ -50,7 +54,7 @@ export const LaunchLine: FC<LaunchLineProps> = ({ plan, onChange }) => {
                 arg.source === 'you' && 'underline underline-offset-2',
               )}
             >
-              {argText(arg)}
+              {command.args[i]}
             </Button>
           </Fragment>
         ))}

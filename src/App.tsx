@@ -19,6 +19,7 @@ import { initRemoteEvents, cleanupRemoteEvents } from "./services/remoteEvents";
 import { initModelEvents, cleanupModelEvents } from "./services/modelEvents";
 import { initDownloadEvents, cleanupDownloadEvents } from "./services/downloadsEvents";
 import { keepBuiltinToolsCurrent } from "./services/tools";
+import { keepHostCurrent } from "./services/hostEvents";
 
 /**
  * The layout every place sits in: the shell (the sidebar and the place the
@@ -51,6 +52,11 @@ export function AppContent() {
   // Built-in tool definitions from the backend, kept in the tool registry
   useEffect(() => {
     return keepBuiltinToolsCurrent();
+  }, []);
+
+  // The machine the service runs on, which every place names it by
+  useEffect(() => {
+    return keepHostCurrent();
   }, []);
 
   // A file dropped where nothing takes it must not open in place of the app

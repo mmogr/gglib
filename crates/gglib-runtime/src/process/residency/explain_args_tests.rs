@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use gglib_core::cache_config::{CacheRamSetting, KvCacheType};
 use gglib_core::domain::{ChoiceSource, ComponentRole, ImageFamily, ModelComponent};
+use gglib_core::host::Shell;
 use gglib_core::ports::{LaunchOverrides, ModelLaunchSpec};
 use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use std::collections::BTreeMap;
@@ -148,11 +149,12 @@ fn the_port_is_auto_and_the_line_is_the_tokens_in_order() {
     let plan = planned(launch_spec(3, "qwen"), ServerConfigOptions::default());
     let port = plan.args.iter().find(|a| a.flag == "--port").unwrap();
     assert_eq!(port.value.as_deref(), Some("auto"));
+    let line = plan.command_line(Shell::Posix).line;
     assert!(
-        plan.command_line()
-            .starts_with("llama-server -m /nonexistent/qwen.gguf --host 127.0.0.1 --port auto --metrics --parallel 1"),
-        "{}",
-        plan.command_line()
+        line.starts_with(
+            "llama-server -m /nonexistent/qwen.gguf --host 127.0.0.1 --port auto --metrics --parallel 1"
+        ),
+        "{line}"
     );
 }
 

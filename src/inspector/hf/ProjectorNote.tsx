@@ -1,4 +1,5 @@
 import { FC } from 'react';
+import { HF_REPO, fileName as nameOf } from '../../services/hostRegistry';
 import { HfQuantization } from '../../types';
 import { formatSize } from '../../utils/format';
 
@@ -13,7 +14,7 @@ export const ProjectorNote: FC<{ quantization: HfQuantization }> = ({ quantizati
   const projector = quantization.projector;
   if (!projector) return null;
 
-  const fileName = projector.file_path.split('/').pop() || projector.file_path;
+  const fileName = nameOf(projector.file_path, HF_REPO);
   const size = formatSize(projector.size_bytes);
   return (
     <p

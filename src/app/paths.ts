@@ -56,7 +56,7 @@ export const paths = {
   libraryAdd: (sub: 'browse' | 'add') => `/library?add=${sub === 'add' ? 'file' : 'browse'}`,
   /** A model's inspector with its Load with options sheet opened. */
   serve: (id: number) => `/models/${id}?serve=1`,
-  /** The devices: sharing this Mac, the paired devices, using another machine. */
+  /** The devices: sharing this machine, the paired devices, using another machine. */
   devices: () => '/devices',
   /** The settings place, open on `section`. */
   settings: (section: SettingsSection = 'general') => `/settings/${section}`,

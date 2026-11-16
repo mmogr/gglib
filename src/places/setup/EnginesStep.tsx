@@ -26,6 +26,7 @@ import { InstallProgress } from '../../components/InstallProgress';
 import { StatusMark } from '../../components/status/StatusMark';
 import { ENGINE_WORDS, FAST_DOWNLOADS_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
+import { useThisMachine } from '../../services/hostRegistry';
 import { ENGINE_PRODUCT } from '../../types/setup';
 import type { EngineStatus } from '../../types/setup';
 import { Item, Problem, Step } from './Step';
@@ -88,6 +89,7 @@ const Llama: FC<{
   onRepair: () => void;
 }> = ({ view, readError, onRetry, onRecheck, onRepair }) => {
   const { status } = view;
+  const machine = useThisMachine();
   let state;
   if (view.installing !== null) state = <StatusMark kind="changing" word="installing" />;
   else if (status?.installed) state = <Installed status={status} />;
@@ -104,7 +106,7 @@ const Llama: FC<{
       {status && view.installing === null && needsBuild(status) && (
         <>
           <p className="m-0 flex flex-wrap items-center gap-xs">
-            This Mac needs llama.cpp built from source. In a terminal: <Command status={status} />
+            {`${machine.title} needs llama.cpp built from source. In a terminal:`} <Command status={status} />
           </p>
           <p className="m-0 flex items-center gap-sm">
             <Button variant="secondary" size="sm" onClick={onRecheck}>

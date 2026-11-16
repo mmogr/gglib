@@ -168,7 +168,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `GET` | `/api/attachments/{id}` | A stored image's bytes, as they were sent |
 | `POST` | `/api/images/generations` | Draw, as the proxy's `/v1/images/generations` does |
 | `GET` | `/api/images/drawing` | Whether a message sent with Draw pressed can draw here, and this machine's image models; query `far`, `calls_tools`, `image_model` |
-| `GET` | `/api/version` | Which build of gglib is answering |
+| `GET` | `/api/version` | Which build of gglib is answering, and the machine it runs on (`host`: its OS, what it is called, its path separators) |
 | `POST` | `/api/benchmark/compare` | A compare run, streamed as SSE |
 | `POST` | `/api/benchmark/perf` | A perf run, streamed as SSE |
 | `POST` | `/api/benchmark/tune` | A tune run (a sampling-parameter sweep), streamed as SSE |

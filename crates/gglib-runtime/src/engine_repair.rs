@@ -13,8 +13,8 @@
 use serde::Serialize;
 
 use gglib_core::domain::RuntimeKind;
+use gglib_core::host::HostOs;
 use gglib_core::utils::process::bounded::Failure;
-use gglib_core::utils::system::HostOs;
 
 use super::{NotWorking, validate_engine};
 
@@ -103,7 +103,7 @@ impl NotWorking {
     /// The repair for this on the OS this is, if there is one.
     #[must_use]
     pub fn fix(&self) -> Option<Fix> {
-        fix_for(&self.failure, HostOs::this(), runtime_state)
+        fix_for(&self.failure, HostOs::current(), runtime_state)
     }
 }
 

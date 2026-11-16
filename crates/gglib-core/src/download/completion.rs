@@ -75,14 +75,11 @@ impl fmt::Display for CompletionKey {
                 }
             }
             Self::UrlFile { filename, .. } => write!(f, "{filename}"),
-            Self::LocalFile { path } => {
-                // Show only filename for local files
-                if let Some(name) = path.rsplit('/').next() {
-                    write!(f, "{name}")
-                } else {
-                    write!(f, "{path}")
-                }
-            }
+            // A local file by its name, split as this machine splits a path.
+            Self::LocalFile { path } => match std::path::Path::new(path).file_name() {
+                Some(name) => write!(f, "{}", name.to_string_lossy()),
+                None => write!(f, "{path}"),
+            },
         }
     }
 }
@@ -231,6 +228,12 @@ mod tests {
             path: "model.gguf".to_string(),
         };
         assert_eq!(local_no_slash.to_string(), "model.gguf");
+
+        // A path written with this machine's own separator: on Windows `\`.
+        let native = CompletionKey::LocalFile {
+            path: ["models", "sub", "q.Q8_0.gguf"].join(std::path::MAIN_SEPARATOR_STR),
+        };
+        assert_eq!(native.to_string(), "q.Q8_0.gguf");
     }
 
     #[test]
