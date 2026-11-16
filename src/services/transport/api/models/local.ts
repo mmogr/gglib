@@ -4,6 +4,7 @@
  */
 
 import { del, get, patch, post, put } from '../client';
+import { HUB_READ_LIMIT_MS } from '../timeLimit';
 import { TransportError } from '../../errors';
 import type { ModelId } from '../../types/ids';
 import type { AddModelParams, UpdateModelBody, UpdateModelParams } from '../../types/models';
@@ -168,9 +169,12 @@ export async function setModelCapabilities(
   return patch<GgufModel>(`/api/models/${modelId}/capabilities`, request);
 }
 
-/** Commit-SHA update check: the one `gglib model upgrade` runs before it downloads. */
+/**
+ * Commit-SHA update check: the one `gglib model upgrade` runs before it
+ * downloads. Asked of the Hub, so held to the Hub's limit.
+ */
 export async function checkModelUpgrade(modelId: number): Promise<UpgradeCheck> {
-  return get<UpgradeCheck>(`/api/models/${modelId}/upgrade-check`);
+  return get<UpgradeCheck>(`/api/models/${modelId}/upgrade-check`, { timeoutMs: HUB_READ_LIMIT_MS });
 }
 
 /**

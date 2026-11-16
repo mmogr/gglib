@@ -105,13 +105,16 @@ describe('runs transport', () => {
 
   it('asks for an event stream, and passes the reader\'s signal to the request', async () => {
     fetchMock.mockResolvedValueOnce(new Response('', { status: 200 }));
-    const signal = new AbortController().signal;
-    for await (const item of readRunEvents('r 1', 3, signal)) void item;
+    const reader = new AbortController();
+    for await (const item of readRunEvents('r 1', 3, reader.signal)) void item;
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/runs/r%201/events?after=3');
     expect(init.headers).toEqual({ Accept: 'text/event-stream' });
-    expect(init.signal).toBe(signal);
+    // The request's signal is the time limit's, and the reader's fires it.
+    expect(init.signal?.aborted).toBe(false);
+    reader.abort();
+    expect(init.signal?.aborted).toBe(true);
   });
 
   it('reads a preview as its own item, with no seq, between the frames (contracts/runs/preview_stream.txt)', async () => {
