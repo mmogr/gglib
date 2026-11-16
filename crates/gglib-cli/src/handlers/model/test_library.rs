@@ -23,7 +23,7 @@ use crate::bootstrap::{CliContext, test_context};
 pub(super) fn write_gguf(dir: &Path, name: &str, pairs: &[(&str, &str)]) -> PathBuf {
     let path = dir.join(name);
     gglib_gguf::write_string_gguf(&path, pairs);
-    path.canonicalize().unwrap()
+    gglib_core::paths::canonical(&path).unwrap()
 }
 
 /// A library in `dir` holding one model, and that model. Whatever a command
@@ -76,14 +76,14 @@ pub(super) const FLUX_T5XXL: &[(&str, &[u64])] = &[
 pub(super) fn write_flux(dir: &Path, name: &str) -> PathBuf {
     let path = dir.join(name);
     gglib_gguf::write_tensor_gguf(&path, &[], FLUX_TENSORS);
-    path.canonicalize().unwrap()
+    gglib_core::paths::canonical(&path).unwrap()
 }
 
 /// A safetensors file in `dir` holding `tensors`, under its canonical path.
 pub(super) fn write_component(dir: &Path, name: &str, tensors: &[(&str, &[u64])]) -> PathBuf {
     let path = dir.join(name);
     gglib_gguf::write_safetensors(&path, tensors);
-    path.canonicalize().unwrap()
+    gglib_core::paths::canonical(&path).unwrap()
 }
 
 /// A library in `dir` holding one Flux.1 model, imported from its file, and

@@ -9,7 +9,8 @@
  * surface read before the status said more. `status` is the daemon's whole
  * answer (`ProxyStatus`: the state word, where a client reaches it, whether
  * a request needs the key, the pin), read on hydration and again after each
- * event, since an event carries only the port. An event drops the status it
+ * event, since an event carries only the port, and taken from the answer to
+ * a start this window asked for. An event drops the status it
  * finds: it belonged to the run before the event, and a stop followed at
  * once by a start would otherwise show the old run's address and key rule
  * until a read landed. So between an event and the read that follows it the
@@ -55,7 +56,8 @@ export function ingestProxyEvent(evt: ProxyEvent): void {
 
 /**
  * Take the daemon's status as the whole truth: the read that hydrates the
- * registry and the one that follows each event.
+ * registry, the one that follows each event, and the answer to a start
+ * (`proxyEvents.startEndpoint`).
  */
 export function applyProxyStatus(status: ProxyStatus): void {
   store.setState({ running: status.running, port: status.running ? status.port : null, status });

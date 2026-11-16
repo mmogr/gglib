@@ -97,7 +97,7 @@ async fn update_stores_the_projector_path_resolved() {
 
     assert_eq!(
         repo.get_by_id(model.id).await.unwrap().projector_path,
-        Some(std::fs::canonicalize(&file).unwrap())
+        Some(gglib_core::paths::canonical(&file).unwrap())
     );
 }
 
@@ -177,7 +177,7 @@ mod through_a_symlink {
         let mut model = registrar.register_model(&download).await.unwrap().model;
         assert_eq!(
             model.projector_path,
-            Some(std::fs::canonicalize(real.join("mmproj-F16.gguf")).unwrap())
+            Some(gglib_core::paths::canonical(real.join("mmproj-F16.gguf")).unwrap())
         );
         let chosen = dir.path().join("chosen").join("mmproj-BF16.gguf");
         model.projector_path = Some(chosen.clone());

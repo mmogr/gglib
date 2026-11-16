@@ -19,5 +19,7 @@ The Windows-specific flag is applied here and nowhere else.
   limit.
 - [`detached`]: starting the service, so it outlives the command that
   started it.
+- [`stop`]: hearing that this process is asked to stop, and whether it has
+  time for an orderly teardown or seconds before the OS ends it.
 
 <!-- module-docs:end -->

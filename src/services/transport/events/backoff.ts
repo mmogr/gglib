@@ -2,11 +2,13 @@
  * Exponential backoff with jitter for reconnection.
  */
 export class Backoff {
-  private ms = 500;
+  private ms: number;
+  private readonly minMs: number;
   private readonly maxMs: number;
 
   constructor(minMs = 500, maxMs = 30000) {
     this.ms = minMs;
+    this.minMs = minMs;
     this.maxMs = maxMs;
   }
 
@@ -17,7 +19,8 @@ export class Backoff {
     return out;
   }
 
+  /** Back to the first wait, the one it was made with. */
   reset(): void {
-    this.ms = 500;
+    this.ms = this.minMs;
   }
 }

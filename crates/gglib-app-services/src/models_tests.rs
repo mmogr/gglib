@@ -63,7 +63,7 @@ async fn add_and_list_model() {
     fs::write(&gguf_path, b"placeholder").await.unwrap();
     // Canonicalize to resolve macOS /var → /private/var symlinks so the
     // comparison matches the path the service stores after canonicalization.
-    let gguf_path = gguf_path.canonicalize().unwrap();
+    let gguf_path = gglib_core::paths::canonical(&gguf_path).unwrap();
 
     let req = AddModelRequest {
         file_path: gguf_path.to_str().unwrap().to_string(),
@@ -73,7 +73,7 @@ async fn add_and_list_model() {
         .add(req, None, ImportMode::Fresh)
         .await
         .expect("add should succeed");
-    let canonical = std::fs::canonicalize(&gguf_path).unwrap();
+    let canonical = gglib_core::paths::canonical(&gguf_path).unwrap();
     assert_eq!(added.file_path, canonical.to_str().unwrap());
 
     let models = ops.list_with_query(ModelListQuery::default()).await;
@@ -228,7 +228,7 @@ async fn forcing_from_a_sibling_shard_refuses_rather_than_repointing() {
         .expect("the row must still be there");
     assert_eq!(
         still.file_path,
-        std::fs::canonicalize(&first).unwrap(),
+        gglib_core::paths::canonical(&first).unwrap(),
         "the model must still point at its first shard"
     );
     assert_eq!(core.models().list().await.unwrap().len(), 1);
@@ -295,7 +295,7 @@ async fn add_placeholder_model(core: Arc<AppCore>, dir: &tempfile::TempDir) -> G
 async fn add_placeholder_model_with(ops: &ModelOps, dir: &tempfile::TempDir) -> GuiModel {
     let gguf_path = dir.path().join("model.gguf");
     fs::write(&gguf_path, b"placeholder").await.unwrap();
-    let gguf_path = gguf_path.canonicalize().unwrap();
+    let gguf_path = gglib_core::paths::canonical(&gguf_path).unwrap();
 
     let request = AddModelRequest {
         file_path: gguf_path.to_str().unwrap().to_string(),
@@ -698,7 +698,7 @@ async fn update_server_defaults_json_round_trip() {
     let dir = tempdir().unwrap();
     let gguf_path = dir.path().join("model.gguf");
     fs::write(&gguf_path, b"placeholder").await.unwrap();
-    let gguf_path = gguf_path.canonicalize().unwrap();
+    let gguf_path = gglib_core::paths::canonical(&gguf_path).unwrap();
 
     let request = AddModelRequest {
         file_path: gguf_path.to_str().unwrap().to_string(),
@@ -912,7 +912,9 @@ async fn explain_carries_the_runtimes_plan_of_a_bare_start() {
     let weights = plan.args.iter().find(|a| a.flag == "-m").expect("-m");
     // The library stores the file's canonical path (`/private/var/…` on a
     // Mac), and the plan names the file as the library has it.
-    let stored = dir.path().canonicalize().unwrap().join("model.gguf");
+    let stored = gglib_core::paths::canonical(dir.path())
+        .unwrap()
+        .join("model.gguf");
     assert_eq!(weights.value.as_deref(), stored.to_str());
     let port = plan
         .args

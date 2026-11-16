@@ -85,8 +85,8 @@ pub(crate) const CPU_WARNING: &str = "No GPU runtime gglib can use was found, so
 ///
 /// - macOS, either arch: the one universal Metal build. Its asset is named
 ///   `-arm64` after the runner, though it holds both architectures.
-/// - Linux `x86_64`: the Vulkan build when a Vulkan runtime is present, else
-///   the CPU build, with a warning.
+/// - Linux `x86_64`: the Vulkan build when a Vulkan GPU is there, else the
+///   CPU build, with a warning.
 /// - Windows `x86_64`: CUDA 12 for an NVIDIA GPU with CUDA, else Vulkan, else
 ///   the CPU build, with a warning.
 pub(crate) fn sd_platform_asset(

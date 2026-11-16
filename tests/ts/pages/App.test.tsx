@@ -1,6 +1,7 @@
 /**
  * The app shell, past setup: that it refuses a file dropped where nothing
- * takes it, so the desktop window never opens the file in place of the app.
+ * takes it, so the desktop window never opens the file in place of the app,
+ * and that it listens for a second launch of the desktop app.
  * `useFileDropGuard` is tested on its own; this pins that the shell mounts
  * it. The pages, the services and the menu are stubbed: only the shell's own
  * wiring is under test.
@@ -14,7 +15,12 @@ vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <mai
 vi.mock('../../../src/places/endpoint/EndpointPlace', () => ({ default: () => <main aria-label="Endpoint" /> }));
 vi.mock('../../../src/places/diagnostics/DiagnosticsPlace', () => ({ default: () => <main aria-label="Diagnostics" /> }));
 vi.mock('../../../src/sidebar/Sidebar', () => ({ Sidebar: () => <nav aria-label="gglib" /> }));
+const secondLaunch = vi.hoisted(() => {
+  const stop = vi.fn();
+  return { stop, listen: vi.fn(() => stop) };
+});
 vi.mock('../../../src/services/platform', () => ({
+  listenToSecondLaunch: secondLaunch.listen,
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
   isDesktop: () => false,
   syncMenuStateSilent: vi.fn(),
@@ -35,12 +41,19 @@ vi.mock('../../../src/services/downloadsEvents', () => ({
 // The daemon answers the window's health probe and takes its token, so the
 // shell is drawn, not the service-not-running screen.
 vi.mock('../../../src/services/transport', () => ({
-  getTransport: () => ({ getSettings: async () => ({}), probeDaemon: async () => true, tokenRefusal: async () => null }),
+  getTransport: () => ({
+    getSettings: async () => ({}),
+    probeDaemon: async () => true,
+    tokenRefusal: async () => null,
+    onEventStreamOpen: () => () => {},
+    onEventStreamClose: vi.fn(() => () => {}),
+    isEventStreamOpen: vi.fn(() => false),
+  }),
 }));
 vi.mock('../../../src/services/transport/api/setup', () => ({
   getSetupStatus: async () => ({ setupCompleted: true }),
 }));
-vi.mock('../../../src/services/tools', () => ({ syncBuiltinTools: async () => {} }));
+vi.mock('../../../src/services/tools', () => ({ keepBuiltinToolsCurrent: () => () => {} }));
 
 import { StrictMode } from 'react';
 import App from '../../../src/App';
@@ -74,5 +87,18 @@ describe('App', () => {
     expect(fireEvent.dragOver(document.body, { dataTransfer: { ...files, dropEffect: 'copy' } })).toBe(false);
     expect(fireEvent.drop(document.body, { dataTransfer: files })).toBe(false);
     expect(fireEvent.drop(document.body, { dataTransfer: { types: ['text/plain'], files: [] } })).toBe(true);
+  });
+
+  it('listens for a second launch of the desktop app while it is open', async () => {
+    secondLaunch.listen.mockClear();
+    secondLaunch.stop.mockClear();
+    const { unmount } = render(<App />);
+    await screen.findByRole('main', { name: 'Library' });
+
+    expect(secondLaunch.listen).toHaveBeenCalledTimes(1);
+    expect(secondLaunch.stop).not.toHaveBeenCalled();
+
+    unmount();
+    expect(secondLaunch.stop).toHaveBeenCalledTimes(1);
   });
 });

@@ -199,6 +199,7 @@ pub async fn setup_database(
         .await?;
 
     generation::refuse_newer(&pool, db_path).await?; // before anything is created or altered
+    generation::refuse_verbatim_paths(&pool, db_path).await?; // and before the backup
     backup::before_upgrade(&pool, db_path).await?;
     create_schema_reading(&pool, gguf_parser).await?;
     generation::stamp(&pool).await?;

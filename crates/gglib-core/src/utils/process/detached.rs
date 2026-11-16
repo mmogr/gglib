@@ -8,10 +8,10 @@
 //!
 //! - **macOS and Linux:** a process group of its own, so the terminal's
 //!   Ctrl-C and hang-up go to the command in front, not to the service.
-//! - **Windows:** `command` comes from [`super::cmd`], whose
-//!   `CREATE_NO_WINDOW` gives the service a console of its own with no
-//!   window. The terminal's Ctrl-C and its close button reach only the
-//!   processes on the terminal's own console. The starting command's
+//! - **Windows:** `CREATE_NO_WINDOW`, set here beside the process group,
+//!   gives the service a console of its own with no window. The terminal's
+//!   Ctrl-C and its close button reach only the processes on the terminal's
+//!   own console. The starting command's
 //!   standard handles, a capturing caller's pipe among them, are kept from
 //!   the service by [`super::host::prepare`], which `main` calls first.
 
@@ -36,6 +36,18 @@ pub fn spawn_daemon(mut command: Command, log: &File) -> std::io::Result<Child> 
             reason = "the service's process group is set here and nowhere else"
         )]
         command.process_group(0);
+    }
+
+    // The flag `cmd` has already set, set again so the service is detached
+    // here whatever made `command`.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the service's creation flags are set here, beside its process group"
+        )]
+        command.creation_flags(super::CREATE_NO_WINDOW);
     }
 
     command.spawn()

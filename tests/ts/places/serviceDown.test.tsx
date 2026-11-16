@@ -9,7 +9,9 @@
  * at its address once the daemon answers; in a browser "Lost gglib.
  * Reconnecting…" with nothing to press, gone when it answers; and the place,
  * not the screen, before the first answer. The poll is the real two-second
- * one, run on fake timers.
+ * one, run on fake timers; the event stream is the real shared one over a
+ * fake `apiFetch`, ended when the daemon stops and opened again once it is
+ * back, its opening what reads the registries afresh.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -30,38 +32,66 @@ const fake = vi.hoisted(() => ({
   opened: [] as string[],
   /** The endpoint the daemon reports while it answers. */
   proxy: { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null } as Record<string, unknown>,
-  wakes: 0,
+  /** Ends each open event stream, as a daemon stopping does. */
+  ends: [] as (() => void)[],
 }));
 
-vi.mock('../../../src/services/transport', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  getTransport: () => ({
-    getSettings: async () => appSettings(),
-    getVersion: async () => fake.version,
-    // The health probe: held, answered, or no answer at all.
-    probeDaemon: () => (fake.up === null ? new Promise(() => {}) : Promise.resolve(fake.up)),
-    tokenRefusal: async () => null,
-    getProxyStatus: async () => {
-      if (!fake.up) throw new TypeError('Failed to fetch');
-      return { ...fake.proxy };
-    },
-    listServers: async () => {
-      if (!fake.up) throw new TypeError('Failed to fetch');
-      return [];
-    },
-    getRemoteStatus: async () => {
-      if (!fake.up) throw new TypeError('Failed to fetch');
-      return (await import('../../../src/services/remoteRegistry')).IDLE_STATUS;
-    },
-    reconnectEventStreamNow: () => void (fake.wakes += 1),
-    shutdownDaemon: vi.fn(async () => {
-      if (fake.shutdown) return fake.shutdown();
-      fake.up = false;
-      throw new TypeError('Failed to fetch');
+/** The daemon stops answering: its health, its reads and its event stream. */
+function daemonStops() {
+  fake.up = false;
+  for (const end of fake.ends.splice(0)) end();
+}
+
+vi.mock('../../../src/services/transport', async (importOriginal) => {
+  const sse = await vi.importActual<typeof import('../../../src/services/transport/events/sse')>(
+    '../../../src/services/transport/events/sse',
+  );
+  return {
+    ...(await importOriginal<Record<string, unknown>>()),
+    getTransport: () => ({
+      getSettings: async () => appSettings(),
+      getVersion: async () => fake.version,
+      // The health probe: held, answered, or no answer at all.
+      probeDaemon: () => (fake.up === null ? new Promise(() => {}) : Promise.resolve(fake.up)),
+      tokenRefusal: async () => null,
+      getProxyStatus: async () => {
+        if (!fake.up) throw new TypeError('Failed to fetch');
+        return { ...fake.proxy };
+      },
+      listServers: async () => {
+        if (!fake.up) throw new TypeError('Failed to fetch');
+        return [];
+      },
+      getRemoteStatus: async () => {
+        if (!fake.up) throw new TypeError('Failed to fetch');
+        return (await import('../../../src/services/remoteRegistry')).IDLE_STATUS;
+      },
+      reconnectEventStreamNow: sse.reconnectEventStreamNow,
+      shutdownDaemon: vi.fn(async () => {
+        if (fake.shutdown) return fake.shutdown();
+        daemonStops();
+        throw new TypeError('Failed to fetch');
+      }),
+      subscribe: sse.subscribeSseEvent,
+      onEventStreamOpen: sse.onEventStreamOpen,
+      onEventStreamClose: sse.onEventStreamClose,
+      isEventStreamOpen: sse.isEventStreamOpen,
     }),
-    subscribe: () => () => {},
-    onEventStreamOpen: () => () => {},
-  }),
+  };
+});
+vi.mock('../../../src/services/transport/api/client', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  apiFetch: async (_path: string, init: { signal?: AbortSignal } = {}) => {
+    if (!fake.up) throw new TypeError('Failed to fetch');
+    const signal = init.signal as AbortSignal;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        signal.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')));
+        fake.ends.push(() => controller.error(new TypeError('network error')));
+      },
+    });
+    return new Response(body, { status: 200 });
+  },
 }));
 vi.mock('../../../src/services/transport/api/settings', () => ({
   getSettings: async () => appSettings(),
@@ -136,7 +166,7 @@ beforeEach(() => {
     startRefusal: null,
     opened: [],
     proxy: { running: false, state: 'off', port: null, base_url: null, key: null, pinned_model: null, pinned_to: null, pinned_model_id: null },
-    wakes: 0,
+    ends: [],
   });
   // The window's bridges, as `AppContent` starts them.
   initProxyEvents();
@@ -258,7 +288,6 @@ describe('the service-not-running screen', () => {
 
     expect(await screen.findByTestId('endpoint')).toHaveTextContent('On');
     expect(screen.getByTestId('servers')).toHaveTextContent('servers read');
-    expect(fake.wakes).toBe(1);
     expect(screen.getByRole('button', { name: 'Stop gglib…' })).toBeEnabled();
   });
 

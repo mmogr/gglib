@@ -33,7 +33,7 @@ async fn backfill_rekeys_a_row_stored_under_a_non_canonical_spelling() {
     std::fs::create_dir(dir.path().join("sub")).unwrap();
 
     let spelled = dir.path().join("sub").join("..").join("Legacy.gguf");
-    let canonical = std::fs::canonicalize(&file).unwrap();
+    let canonical = gglib_core::paths::canonical(&file).unwrap();
     assert_ne!(
         spelled, canonical,
         "this test needs the two spellings to differ"
@@ -109,7 +109,7 @@ async fn backfill_repairs_a_row_whose_stored_path_is_not_canonical() {
     // What pre-fix `update` left behind: a spelling only the filesystem
     // can equate with the real path.
     let non_canonical = dir.path().join("sub").join("..").join("Patched.gguf");
-    let canonical = std::fs::canonicalize(&file).unwrap();
+    let canonical = gglib_core::paths::canonical(&file).unwrap();
     assert_ne!(
         non_canonical.to_string_lossy(),
         canonical.to_string_lossy(),

@@ -17,7 +17,7 @@ const ingestRemoteEvent = vi.fn();
 const resetRemoteState = vi.fn();
 
 vi.mock('../../../src/services/transport', () => ({
-  getTransport: () => ({ subscribe: subscribeSseEvent, getRemoteStatus }),
+  getTransport: () => ({ subscribe: subscribeSseEvent, onEventStreamOpen: () => () => {}, onEventStreamClose: vi.fn(() => () => {}), isEventStreamOpen: vi.fn(() => false), getRemoteStatus }),
 }));
 
 vi.mock('../../../src/services/remoteRegistry', () => ({

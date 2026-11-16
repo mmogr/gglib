@@ -71,7 +71,7 @@ fn no_folder_says_why() {
 /// its crate's directory, which is neither home nor `/`.
 #[test]
 fn a_session_reads_where_it_runs_unless_its_list_admits_no_file_tool() {
-    let here = std::env::current_dir().unwrap().canonicalize().unwrap();
+    let here = gglib_core::paths::canonical(std::env::current_dir().unwrap()).unwrap();
     let session = |tools: &[&str], no_tools| {
         let args = ChatArgs {
             tools: names(tools),
@@ -99,7 +99,7 @@ fn a_resumed_chat_keeps_a_folder_still_there_and_else_takes_the_launch_directory
     let args = chat_args();
     let chosen = tempfile::tempdir().expect("a folder");
     let chosen = chosen.path().display().to_string();
-    let here = std::env::current_dir().unwrap().canonicalize().unwrap();
+    let here = gglib_core::paths::canonical(std::env::current_dir().unwrap()).unwrap();
     let here = here.display().to_string();
     let launched = (
         Some(here.clone()),

@@ -153,8 +153,8 @@ fn files_named_by(model: &Model) -> Vec<PathBuf> {
 /// library may record a path through a link (`/var` on macOS is one).
 fn remove_empty_folders(file: &Path, models_dir: &Path) {
     let (Ok(models_dir), Some(Ok(folder))) = (
-        models_dir.canonicalize(),
-        file.parent().map(Path::canonicalize),
+        gglib_core::paths::canonical(models_dir),
+        file.parent().map(gglib_core::paths::canonical),
     ) else {
         return;
     };

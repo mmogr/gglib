@@ -6,8 +6,9 @@
  * (`useDaemonRecovery`): whatever stopped it, About's Stop gglib…, the tray,
  * a terminal, a crash. While it is gone the registries let go of what it
  * said; it goes the moment the daemon answers again, back at the address the
- * window was at, with the proxy, the servers and the remote read again and
- * the event stream woken, as the tray does. Before the first answer the
+ * window was at, with the event stream woken as the tray does: its opening
+ * reads every store again, the settings, the library and the built-in
+ * tools among them (`keptCurrent`). Before the first answer the
  * window is drawn, never this screen: a healthy daemon is not called gone
  * for a moment.
  *

@@ -4,9 +4,12 @@
 
 use gglib_core::utils::system::GpuInfo;
 
-use super::release::{SD_RELEASE, SdAsset, sd_download_dir, sd_platform_asset, sd_wanted};
+use super::release::{
+    CPU_WARNING, SD_RELEASE, SdAsset, sd_download_dir, sd_platform_asset, sd_wanted,
+};
 use super::{PINNED_SD_RELEASE, SD_RELEASE_ENV};
 use crate::binary_install::{AssetChoice, ReleaseSelector, selector_from_override};
+use crate::system::vulkan_devices::{fixtures, vulkan_gpu_present};
 
 /// Every asset of the pinned release, as GitHub lists them.
 const ASSETS: [&str; 9] = [
@@ -241,6 +244,27 @@ fn only_the_cuda_build_fetches_the_cuda_runtime_and_its_pattern_finds_only_that_
     ] {
         assert_eq!(pick(os, "x86_64", &gpu).cuda_runtime, None, "{os}");
     }
+}
+
+/// The Vulkan loader alone, a software rasteriser or a list with no device
+/// in it is no GPU: the CPU build is installed, and said to be. The twin of
+/// llama.cpp's test of the same choice.
+#[test]
+fn the_cpu_build_is_chosen_when_no_vulkan_device_is_a_gpu() {
+    let mut wrong = Vec::new();
+    for os in ["linux", "windows"] {
+        for (what, devices) in fixtures::without_a_gpu() {
+            let found = GpuInfo {
+                has_vulkan: vulkan_gpu_present(os, true, &devices),
+                ..gpu(false, false)
+            };
+            let asset = pick(os, "x86_64", &found);
+            if !asset.description.ends_with("(CPU)") || asset.warning != Some(CPU_WARNING) {
+                wrong.push(format!("{os}, {what}: {}", asset.description));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "not the CPU build:\n{}", wrong.join("\n"));
 }
 
 #[test]

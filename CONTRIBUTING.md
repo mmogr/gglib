@@ -592,7 +592,8 @@ export GGLIB_DATA_DIR="$PWD/.dev" GGLIB_DAEMON_PORT=9888
 cargo run -p gglib-cli -- up
 ```
 
-A change to the database schema raises `SCHEMA_GENERATION` in
+A change to the database schema, or to the form of what a row stores,
+raises `SCHEMA_GENERATION` in
 `crates/gglib-db/src/setup_generation.rs` and rewrites the snapshot with
 `GGLIB_UPDATE_SCHEMA_SNAPSHOT=1 cargo test -p gglib-db schema_snapshot`; the
 `schema_snapshot` test fails until both are done. An older gglib then

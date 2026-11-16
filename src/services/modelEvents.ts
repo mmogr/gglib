@@ -2,7 +2,8 @@
  * What fills `modelRegistry`.
  *
  * `bridgeEvents` over the `model` category, as `proxyEvents` is over `proxy`:
- * subscribe first, read, and drop a read an event or a cleanup overtook. With
+ * subscribe first, read (now and on every opening of the event stream), and
+ * drop a read an event, a cleanup or a later read overtook. With
  * one difference: events are batched within a window before the re-read,
  * because one action can produce several (a retag of many models, a burst of
  * edits from another window), and each burst is a reason to read once, not
@@ -21,11 +22,12 @@
  */
 
 import { bridgeEvents } from './bridgeEvents';
-import { applyLibraryRead, readLibrary, resetModelLibrary } from './modelRegistry';
+import { applyLibraryRead, resetModelLibrary } from './modelRegistry';
 import type { ModelUpdates } from './modelRegistry';
 import { getTransport } from './transport';
 import type { ModelEvent } from './transport/types/events';
 import { createBatchWithinWindow, DEFAULT_BATCH_WINDOW_MS } from '../utils/batchWithinWindow';
+import { formatError } from '../utils/errors';
 
 /** Whether the bridge is up: a read asked while it is down writes nothing. */
 let live = false;
@@ -35,8 +37,10 @@ let batcher = createBatchWithinWindow<ModelEvent>(DEFAULT_BATCH_WINDOW_MS, onBur
 const bridge = bridgeEvents({
   category: 'model',
   onEvent: (evt) => batcher.push(evt),
-  read: readLibrary,
-  apply: applyLibraryRead,
+  read: () => getTransport().listModels(),
+  apply: (models) => applyLibraryRead({ models }),
+  // Said beside the list it had; never newer than a list read after it.
+  onFailure: (err) => applyLibraryRead({ failed: formatError(err) }),
   reset: resetModelLibrary,
 });
 

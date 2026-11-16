@@ -204,6 +204,7 @@ pub(super) async fn daemon_started(
         mcp: Arc::clone(&context.mcp),
         core: Arc::clone(&context.core),
         runtime: Arc::clone(&runtime),
+        emitter: Arc::clone(&context.sse) as _,
     }));
     context.servers = Arc::new(ServerOps::new(ServerDeps {
         core: Arc::clone(&context.core),

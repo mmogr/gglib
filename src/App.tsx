@@ -8,6 +8,7 @@ import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { ConfirmProvider } from "./contexts/ConfirmContext";
 import { startMenuBridge } from "./app/menuBridge";
+import { listenToSecondLaunch } from "./services/platform";
 import { createAppRouter } from "./app/router";
 import { SetupGate } from "./app/SetupGate";
 import { Shell } from "./app/Shell";
@@ -17,7 +18,7 @@ import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { initRemoteEvents, cleanupRemoteEvents } from "./services/remoteEvents";
 import { initModelEvents, cleanupModelEvents } from "./services/modelEvents";
 import { initDownloadEvents, cleanupDownloadEvents } from "./services/downloadsEvents";
-import { syncBuiltinTools } from "./services/tools";
+import { keepBuiltinToolsCurrent } from "./services/tools";
 
 /**
  * The layout every place sits in: the shell (the sidebar and the place the
@@ -29,7 +30,9 @@ export function AppContent() {
   const { toasts, showToast, dismissToast } = useToastContext();
 
   // Initialize the registries: servers, proxy, remote, the model library
-  // and the download queue
+  // and the download queue. Each reads now and again each time the event
+  // stream opens, so one whose first read the daemon refused (a cold start)
+  // is filled once it answers.
   useEffect(() => {
     initServerEvents();
     initProxyEvents();
@@ -45,9 +48,9 @@ export function AppContent() {
     };
   }, []);
 
-  // Sync built-in tool definitions from the backend into the tool registry
+  // Built-in tool definitions from the backend, kept in the tool registry
   useEffect(() => {
-    syncBuiltinTools().catch(() => void 0);
+    return keepBuiltinToolsCurrent();
   }, []);
 
   // A file dropped where nothing takes it must not open in place of the app
@@ -64,6 +67,12 @@ export function AppContent() {
   useEffect(() => {
     return startMenuBridge({ notify: showToast });
   }, [showToast]);
+
+  // A second launch of the desktop app: Rust has brought this window forward;
+  // what the launch carried is kept for a later feature to read.
+  useEffect(() => {
+    return listenToSecondLaunch();
+  }, []);
 
   return (
     <SettingsProvider showToast={showToast}>

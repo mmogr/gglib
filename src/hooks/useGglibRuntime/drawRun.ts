@@ -1,6 +1,10 @@
 /**
  * Draw a run's reply from its events, from the first.
  *
+ * A stream that ends before the run's end is read again from the last event
+ * drawn when the caller's `again` says so, into the same message: nothing
+ * is drawn twice and nothing between the two readings is lost.
+ *
  * One assistant message per loop iteration, as the agent route always drew
  * it: text and reasoning deltas and tool calls go to the current message,
  * `iteration_complete` opens the next. What is drawn is provisional: once the
@@ -40,6 +44,12 @@ export interface DrawRunOptions {
   onSystemWarning?: (message: string, suggestedAction?: string | null) => void;
   /** Changes the preview frames held beside the messages; none are shown without it. */
   setPreviews?: SetRunPreviews;
+  /**
+   * Asked when the stream ends before the run does, with its error (`null`:
+   * it closed) and whether it read a new event: true reads it again from
+   * there. Without it, the reading ends there.
+   */
+  again?: (error: Error | null, progressed: boolean) => Promise<boolean>;
 }
 
 /** How a drawn run ended, when its end was read. */
@@ -67,8 +77,9 @@ function parseEvent(data: string): AgentEvent | null {
 /**
  * Read run `runId` from its first event and draw it, until its end.
  *
- * Rejects only when the reading does (an unknown run, a dropped connection,
- * an abort); a reply that failed resolves with its error.
+ * Rejects only when the reading does (an unknown run, a dropped connection
+ * not read again, an abort); a reply that failed resolves with its error,
+ * and a stream that closed early and was not read again with `info: null`.
  */
 export async function drawRun(options: DrawRunOptions): Promise<RunOutcome> {
   const {
@@ -83,6 +94,7 @@ export async function drawRun(options: DrawRunOptions): Promise<RunOutcome> {
     setCurrentStreamingAssistantMessageId,
     onSystemWarning,
     setPreviews,
+    again,
   } = options;
 
   const makeNextMessage = (iteration: number): string => {
@@ -103,30 +115,48 @@ export async function drawRun(options: DrawRunOptions): Promise<RunOutcome> {
   let settled = false;
   /** The tool calls whose result was drawn: a frame of one is late, and dropped. */
   const over = new Set<string>();
+  /** The last event read: a stream read again starts after it. */
+  let cursor = 0;
   try {
-    for await (const item of runsOf(source).readRunEvents(runId, 0, signal)) {
-      if (item.type === 'end') {
-        if (!settled) cleanup();
-        return { info: item.info, error: error ?? endFailure(item.info) };
-      }
-      if (item.type === 'preview') {
-        // Shown beside the reply, never part of it.
-        const preview = settled || over.has(item.toolCallId) ? null : parsePreview(item.data);
-        if (preview) setPreviews?.((held) => withPreview(held, preview));
-        continue;
-      }
-      const event = settled ? null : parseEvent(item.data);
-      if (!event) continue;
+    for (;;) {
+      const from = cursor;
+      let broke: Error | null = null;
       try {
-        settled = dispatchAgentEvent(event, state, deps);
+        for await (const item of runsOf(source).readRunEvents(runId, cursor, signal)) {
+          if (item.type === 'end') {
+            if (!settled) cleanup();
+            return { info: item.info, error: error ?? endFailure(item.info) };
+          }
+          if (item.type === 'preview') {
+            // Shown beside the reply, never part of it.
+            const preview = settled || over.has(item.toolCallId) ? null : parsePreview(item.data);
+            if (preview) setPreviews?.((held) => withPreview(held, preview));
+            continue;
+          }
+          // Read, drawn or not: a stream read again does not bring it twice.
+          cursor = Math.max(cursor, item.seq);
+          const event = settled ? null : parseEvent(item.data);
+          if (!event) continue;
+          try {
+            settled = dispatchAgentEvent(event, state, deps);
+          } catch (e) {
+            error = e instanceof Error ? e : new Error(String(e));
+            settled = true;
+          }
+          const ended = event.type === 'tool_call_complete' ? event.result?.tool_call_id : undefined;
+          if (typeof ended === 'string') {
+            over.add(ended);
+            setPreviews?.((held) => withoutPreview(held, ended));
+          }
+        }
       } catch (e) {
-        error = e instanceof Error ? e : new Error(String(e));
-        settled = true;
+        if (signal.aborted || !again) throw e;
+        broke = e instanceof Error ? e : new Error(String(e));
       }
-      const ended = event.type === 'tool_call_complete' ? event.result?.tool_call_id : undefined;
-      if (typeof ended === 'string') {
-        over.add(ended);
-        setPreviews?.((held) => withoutPreview(held, ended));
+      // The stream ended before the run did.
+      if (!(await again?.(broke, cursor > from))) {
+        if (broke) throw broke;
+        break;
       }
     }
     if (!settled) cleanup();

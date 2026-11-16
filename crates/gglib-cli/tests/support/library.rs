@@ -41,7 +41,7 @@ pub(crate) fn write_gguf(dir: &Path, name: &str) -> PathBuf {
         &[],
         0,
     );
-    path.canonicalize().expect("its canonical path")
+    gglib_core::paths::canonical(&path).expect("its canonical path")
 }
 
 /// `gglib <args>` over the library in `root`, answered `typed` at its

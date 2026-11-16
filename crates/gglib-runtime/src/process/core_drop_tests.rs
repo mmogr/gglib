@@ -53,7 +53,7 @@ fn process_table(pid: sysinfo::Pid) -> System {
 ///
 /// A zombie counts as stopped: it has exited and waits only to be reaped,
 /// which is tokio's job for a child it spawned, so the test does not reap.
-fn is_running(pid: u32) -> bool {
+pub(in crate::process) fn is_running(pid: u32) -> bool {
     let pid = sysinfo::Pid::from_u32(pid);
     process_table(pid)
         .process(pid)
@@ -61,7 +61,7 @@ fn is_running(pid: u32) -> bool {
 }
 
 /// Whether `pid` stops running within five seconds.
-async fn stops(pid: u32) -> bool {
+pub(in crate::process) async fn stops(pid: u32) -> bool {
     for _ in 0..100 {
         if !is_running(pid) {
             return true;
@@ -74,7 +74,7 @@ async fn stops(pid: u32) -> bool {
 /// Leave nothing behind: `Drop` keeps the pidfile, and a failing run can
 /// leave the child running. Only a child that did not stop is killed, so a
 /// passing run sends nothing to a pid the OS may since have handed on.
-fn clean_up(model_id: i64, pid: u32, stopped: bool) {
+pub(in crate::process) fn clean_up(model_id: i64, pid: u32, stopped: bool) {
     if !stopped {
         let pid = sysinfo::Pid::from_u32(pid);
         if let Some(process) = process_table(pid).process(pid) {

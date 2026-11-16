@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use super::*;
 
 fn canonical(path: &Path) -> PathBuf {
-    path.canonicalize().expect("a path that resolves")
+    crate::paths::canonical(path).expect("a path that resolves")
 }
 
 #[test]

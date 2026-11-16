@@ -9,6 +9,7 @@ mod dock;
 mod lifecycle;
 mod menu;
 mod proxy_actions;
+mod second_launch;
 mod tray;
 
 use std::sync::Arc;
@@ -30,7 +31,8 @@ fn main() {
 
     info!("Tauri application starting");
 
-    let builder = tauri::Builder::default()
+    // First, as the plugin requires: a second launch exits here.
+    let builder = second_launch::guarded(tauri::Builder::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,

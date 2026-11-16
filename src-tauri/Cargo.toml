@@ -23,6 +23,7 @@ tauri-build.workspace = true
 tauri = { workspace = true, features = ["devtools", "tray-icon", "image-png"] }
 tauri-plugin-dialog.workspace = true
 tauri-plugin-autostart.workspace = true
+tauri-plugin-single-instance.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 gglib-build-info.workspace = true

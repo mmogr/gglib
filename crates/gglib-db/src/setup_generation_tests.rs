@@ -1,8 +1,8 @@
 //! Tests for [`super`]: a newer database is refused before it is touched,
-//! an older one is brought up and stamped, and the schema snapshot that
-//! keeps [`SCHEMA_GENERATION`] honest.
+//! an older one is brought up and stamped unless it holds a verbatim path,
+//! and the schema snapshot that keeps [`SCHEMA_GENERATION`] honest.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use sqlx::SqlitePool;
 
@@ -79,6 +79,161 @@ async fn a_database_from_an_older_build_is_brought_up_and_restamped() {
     let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
         .await
         .expect("an older file opens");
+    assert_eq!(generation(&pool).await, SCHEMA_GENERATION);
+}
+
+/// The last generation whose builds stored a path as Windows'
+/// `canonicalize` wrote it, prefix and all.
+const LAST_WITH_VERBATIM_PATHS: i64 = 10;
+
+/// A full library at `path`, restamped `generation`, after `fill` has run
+/// its statements on it.
+async fn library_at(path: &Path, generation: i64, fill: &[&str]) {
+    let pool = setup_database(path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("setup");
+    for statement in fill {
+        sqlx::query(statement)
+            .execute(&pool)
+            .await
+            .expect(statement);
+    }
+    sqlx::query("UPDATE schema_generation SET generation = ?")
+        .bind(generation)
+        .execute(&pool)
+        .await
+        .expect("restamp");
+    pool.close().await;
+}
+
+/// A library the last generation with verbatim paths wrote, filled by `fill`.
+struct Refused {
+    error: String,
+    pool: SqlitePool,
+    path: PathBuf,
+    dir: tempfile::TempDir,
+}
+
+/// Open the library `fill` writes, which must be refused, and reopen the file
+/// as the refusal left it.
+async fn refusal_of(fill: &[&str]) -> Refused {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("gglib.db");
+    library_at(&path, LAST_WITH_VERBATIM_PATHS, fill).await;
+
+    let error = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect_err("a library holding a verbatim path must be refused")
+        .to_string();
+    let pool = SqlitePool::connect(&format!("sqlite://{}", path.display()))
+        .await
+        .expect("reopen");
+    Refused {
+        error,
+        pool,
+        path,
+        dir,
+    }
+}
+
+#[tokio::test]
+async fn an_older_library_holding_a_verbatim_model_path_is_refused_and_left_as_it_was() {
+    let refused = refusal_of(
+        &[r"INSERT INTO models (name, file_path, added_at, model_key)
+           VALUES ('qwen', '\\?\C:\Users\me\models\qwen.gguf', '2026-11-01', 'local:1')"],
+    )
+    .await;
+    let err = &refused.error;
+
+    // What is wrong, in which file, and what to do.
+    assert!(err.contains(r"\\?\C:\Users\me\models\qwen.gguf"), "{err}");
+    assert!(err.contains(&refused.path.display().to_string()), "{err}");
+    // The write-ahead log goes with the file: a new library made beside an
+    // orphaned `-wal` would be paired with it.
+    let db = refused.path.display();
+    let moved = format!("Move {db} aside, and {db}-wal and {db}-shm with it if they are beside it");
+    assert!(err.contains(&moved), "{err}");
+    assert!(err.contains("benchmark, compare and tune history"), "{err}");
+    assert!(err.contains("gglib model add"), "{err}");
+
+    assert_eq!(generation(&refused.pool).await, LAST_WITH_VERBATIM_PATHS);
+    let stored: String = sqlx::query_scalar("SELECT file_path FROM models")
+        .fetch_one(&refused.pool)
+        .await
+        .expect("the row");
+    assert_eq!(
+        stored, r"\\?\C:\Users\me\models\qwen.gguf",
+        "nothing is rewritten"
+    );
+    let backups = std::fs::read_dir(refused.dir.path())
+        .expect("list")
+        .filter_map(Result::ok)
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".bak"))
+        .count();
+    assert_eq!(backups, 0, "a refused library is not copied");
+}
+
+#[tokio::test]
+async fn an_older_library_holding_only_a_verbatim_chat_folder_is_refused() {
+    let refused = refusal_of(&[r#"INSERT INTO chat_conversations (title, settings)
+           VALUES ('a chat', '{"folder":"\\\\?\\C:\\work"}')"#])
+    .await;
+    assert!(refused.error.contains(r"\\?\C:\work"), "{}", refused.error);
+}
+
+#[tokio::test]
+async fn an_older_library_holding_a_verbatim_shard_projector_or_component_is_refused() {
+    let model = r"INSERT INTO models (id, name, file_path, added_at, model_key)
+                  VALUES (1, 'm', '/m.gguf', '2026-11-01', 'local:1')";
+    for (fill, held) in [
+        (
+            r#"UPDATE models SET file_paths_json = '["/m.gguf","\\\\?\\C:\\m-2.gguf"]'"#,
+            r"\\?\C:\m-2.gguf",
+        ),
+        (
+            r"UPDATE models SET projector_path = '\\?\C:\mmproj.gguf'",
+            r"\\?\C:\mmproj.gguf",
+        ),
+        (
+            r"INSERT INTO model_files (model_id, file_path, file_index, expected_size)
+              VALUES (1, '\\?\C:\m-3.gguf', 2, 1)",
+            r"\\?\C:\m-3.gguf",
+        ),
+        (
+            r"INSERT INTO model_components (model_id, role, path)
+              VALUES (1, 'vae', '\\?\C:\vae.safetensors')",
+            r"\\?\C:\vae.safetensors",
+        ),
+    ] {
+        let refused = refusal_of(&[model, fill]).await;
+        assert!(refused.error.contains(held), "{fill}: {}", refused.error);
+    }
+}
+
+#[tokio::test]
+async fn an_older_library_with_plain_paths_is_brought_up() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("gglib.db");
+    library_at(
+        &path,
+        LAST_WITH_VERBATIM_PATHS,
+        &[
+            r"INSERT INTO models (name, file_path, added_at, model_key)
+              VALUES ('qwen', 'C:\Users\me\models\qwen.gguf', '2026-11-01', 'local:1')",
+            r#"INSERT INTO chat_conversations (title, settings) VALUES ('a chat', '{"folder":"/work"}')"#,
+            // Columns no JSON reader can parse, as an older build or a hand
+            // may have left them, are skipped rather than refused.
+            r"INSERT INTO models (name, file_path, added_at, model_key, file_paths_json)
+              VALUES ('torn', '/torn.gguf', '2026-11-01', 'local:2', '[not json')",
+            r"INSERT INTO chat_conversations (title, settings) VALUES ('torn', '{not json')",
+            r#"INSERT INTO chat_conversations (title, settings) VALUES ('no folder', '{"folder":7}')"#,
+        ],
+    )
+    .await;
+
+    let pool = setup_database(&path, &gglib_core::ports::NoopGgufParser)
+        .await
+        .expect("a library with no verbatim path opens");
     assert_eq!(generation(&pool).await, SCHEMA_GENERATION);
 }
 

@@ -12,7 +12,7 @@ fn relative_path_stays_inside() {
     let resolved = resolve_sandboxed_path(dir.path(), "hello.txt")
         .unwrap()
         .path;
-    assert_eq!(resolved, child.canonicalize().unwrap());
+    assert_eq!(resolved, gglib_core::paths::canonical(&child).unwrap());
 }
 
 #[test]
@@ -24,7 +24,7 @@ fn absolute_path_is_rebased() {
     let resolved = resolve_sandboxed_path(dir.path(), "/hello.txt")
         .unwrap()
         .path;
-    assert_eq!(resolved, child.canonicalize().unwrap());
+    assert_eq!(resolved, gglib_core::paths::canonical(&child).unwrap());
 }
 
 #[test]
@@ -38,10 +38,10 @@ fn absolute_path_inside_root_is_kept() {
     let under = "src/main.rs";
 
     let given = resolve_sandboxed_path(dir.path(), child.to_str().unwrap()).unwrap();
-    assert_eq!(given.path, child.canonicalize().unwrap());
+    assert_eq!(given.path, gglib_core::paths::canonical(&child).unwrap());
     assert_eq!(given.shown, under);
 
-    let canonical = child.canonicalize().unwrap();
+    let canonical = gglib_core::paths::canonical(&child).unwrap();
     let resolved = resolve_sandboxed_path(dir.path(), canonical.to_str().unwrap()).unwrap();
     assert_eq!(resolved.path, canonical);
     assert_eq!(resolved.shown, under);
@@ -51,7 +51,10 @@ fn absolute_path_inside_root_is_kept() {
 fn absolute_root_itself_is_kept() {
     let dir = tempfile::tempdir().unwrap();
     let resolved = resolve_sandboxed_path(dir.path(), dir.path().to_str().unwrap()).unwrap();
-    assert_eq!(resolved.path, dir.path().canonicalize().unwrap());
+    assert_eq!(
+        resolved.path,
+        gglib_core::paths::canonical(dir.path()).unwrap()
+    );
     assert_eq!(resolved.shown, ".");
 }
 
@@ -95,7 +98,7 @@ fn refusals_never_say_sandbox_or_the_root() {
     let dir = tempfile::tempdir().unwrap();
     let child = dir.path().join("sub");
     fs::create_dir(&child).unwrap();
-    let canon = child.canonicalize().unwrap();
+    let canon = gglib_core::paths::canonical(&child).unwrap();
     let root = canon.display().to_string();
     let inside = canon.join("nope.txt");
 
@@ -156,7 +159,10 @@ fn a_root_behind_a_link_takes_either_form() {
     fs::write(real.join("src").join("main.rs"), "match_me\n").unwrap();
     let link = tmp.path().join("link");
     std::os::unix::fs::symlink(&real, &link).unwrap();
-    let canon_file = real.canonicalize().unwrap().join("src").join("main.rs");
+    let canon_file = gglib_core::paths::canonical(&real)
+        .unwrap()
+        .join("src")
+        .join("main.rs");
 
     for root in [&link, &real] {
         for base in [&link, &real] {
@@ -237,7 +243,10 @@ fn backslash_dotdot_does_not_escape() {
     // Must either error or resolve inside the sandbox — never outside.
     match result {
         Err(_) => {} // expected: path doesn't exist (treated as literal or escaped)
-        Ok(p) => assert!(p.path.starts_with(child.canonicalize().unwrap())),
+        Ok(p) => assert!(
+            p.path
+                .starts_with(gglib_core::paths::canonical(&child).unwrap())
+        ),
     }
 }
 
@@ -252,11 +261,48 @@ fn whitespace_only_path_rejected() {
 fn dot_resolves_to_sandbox_root() {
     let dir = tempfile::tempdir().unwrap();
     let resolved = resolve_sandboxed_path(dir.path(), ".").unwrap().path;
-    assert_eq!(resolved, dir.path().canonicalize().unwrap());
+    assert_eq!(resolved, gglib_core::paths::canonical(dir.path()).unwrap());
 }
 
 #[test]
 fn a_path_inside_is_shown_with_forward_slashes() {
     let rest: PathBuf = ["sub", "deeper", "nested.rs"].iter().collect();
     assert_eq!(shown_inside(&rest), "sub/deeper/nested.rs");
+}
+
+/// Files in `dir` whose names a plain Windows path reads otherwise, beside
+/// the file such a path would open instead, made through the owner so that
+/// Windows makes them under these names. The folder's canonical form.
+fn names_a_plain_path_misreads(dir: &Path) -> PathBuf {
+    let root = gglib_core::paths::canonical(dir).unwrap();
+    fs::write(gglib_core::paths::child(&root, "notes"), "plain").unwrap();
+    fs::write(gglib_core::paths::child(&root, "notes."), "dotted").unwrap();
+    fs::write(gglib_core::paths::child(&root, "aux.c"), "device-named").unwrap();
+    root
+}
+
+#[test]
+fn a_name_a_plain_path_misreads_resolves_to_that_file_inside_the_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = names_a_plain_path_misreads(dir.path());
+
+    for (name, content) in [
+        ("notes.", "dotted"),
+        ("aux.c", "device-named"),
+        ("notes", "plain"),
+    ] {
+        let resolved =
+            resolve_sandboxed_path(dir.path(), name).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert_eq!(
+            fs::read_to_string(&resolved.path).unwrap(),
+            content,
+            "{name}"
+        );
+        assert_eq!(
+            resolved.path,
+            gglib_core::paths::child(&root, name),
+            "{name}"
+        );
+        assert_eq!(resolved.shown, name);
+    }
 }

@@ -399,6 +399,16 @@ pub(crate) fn test_core_and_proxy_on(
     repos: &gglib_core::ports::Repos,
     runtime: Arc<dyn gglib_core::ports::ModelRuntimePort>,
 ) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
+    test_core_and_proxy_telling(repos, runtime, Arc::new(gglib_core::ports::NoopEmitter))
+}
+
+/// [`test_core_and_proxy_on`] with the bus the proxy says it came on and
+/// went off on supplied too, so a test can hear it.
+pub(crate) fn test_core_and_proxy_telling(
+    repos: &gglib_core::ports::Repos,
+    runtime: Arc<dyn gglib_core::ports::ModelRuntimePort>,
+    emitter: Arc<dyn AppEventEmitter>,
+) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
     gglib_core::paths::isolate_data_root();
     let core = Arc::new(AppCore::bare(repos.clone()));
     let proxy = Arc::new(crate::proxy::ProxyOps::new(crate::proxy::ProxyDeps {
@@ -407,6 +417,7 @@ pub(crate) fn test_core_and_proxy_on(
         mcp: Arc::new(gglib_mcp::McpService::new(repos.mcp_servers.clone())),
         core: Arc::clone(&core),
         runtime,
+        emitter,
     }));
     (core, proxy)
 }

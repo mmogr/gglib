@@ -17,6 +17,10 @@ import { guiModel } from '../fixtures/model';
 
 const transport = vi.hoisted(() => ({
   subscribe: vi.fn(),
+  onEventStreamOpen: vi.fn(() => () => {}),
+  onEventStreamClose: vi.fn(() => () => {}),
+  /** Whether the event stream is open: while it is, a failed read is asked again. */
+  isEventStreamOpen: vi.fn(() => false),
   listModels: vi.fn(),
   addModel: vi.fn(),
   removeModel: vi.fn(),
@@ -67,7 +71,7 @@ describe('the model registry', () => {
 
   it('is empty and loading until init reads the library, then holds what was read', async () => {
     const { result } = renderHook(() => useModelLibrary());
-    expect(result.current).toEqual({ models: [], loading: true, error: null });
+    expect(result.current).toEqual({ models: [], loading: true, heard: false, error: null });
 
     act(() => initModelEvents());
     await settle();
@@ -83,7 +87,7 @@ describe('the model registry', () => {
 
     act(() => initModelEvents());
     await settle();
-    expect(result.current).toEqual({ models: [], loading: false, error: 'daemon away' });
+    expect(result.current).toEqual({ models: [], loading: false, heard: false, error: 'daemon away' });
 
     await act(() => refreshModels());
     expect(result.current.error).toBeNull();
@@ -104,6 +108,48 @@ describe('the model registry', () => {
     expect(result.current.loading).toBe(false);
   });
 
+  // A read that fails is not newer than one begun before it (a cold start's
+  // refused refresh beside a slow first read).
+  it('holds an earlier read that lands after a later one failed', async () => {
+    let answer: (models: unknown[]) => void = () => {};
+    transport.listModels
+      .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+      .mockRejectedValueOnce(new Error('daemon away'));
+    const { result } = renderHook(() => useModelLibrary());
+    act(() => initModelEvents());
+    await act(() => refreshModels());
+    expect(result.current.error).toBe('daemon away');
+
+    await act(async () => answer([guiModel({ id: 2, name: 'qwen3' })]));
+    await settle();
+
+    expect(result.current.models.map((m) => m.name)).toEqual(['qwen3']);
+    expect(result.current.error).toBeNull();
+  });
+
+  // The stream is open, so the daemon answers, but the library read keeps
+  // failing: it is asked again, after 1 s, then 2 s, until a list lands.
+  it('while the stream is open, asks a read that failed again, after a wait that grows, until a list lands', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    transport.isEventStreamOpen.mockReturnValue(true);
+    const timedOut = new Error('gglib did not answer in 30 seconds.');
+    transport.listModels.mockRejectedValueOnce(timedOut).mockRejectedValueOnce(timedOut);
+    const { result } = renderHook(() => useModelLibrary());
+    act(() => initModelEvents());
+    await settle();
+    expect(result.current.error).toBe('gglib did not answer in 30 seconds.');
+    expect(result.current.heard).toBe(false);
+
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(transport.listModels).toHaveBeenCalledTimes(2);
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(transport.listModels).toHaveBeenCalledTimes(3);
+    expect(result.current.heard).toBe(true);
+    expect(result.current.models.map((m) => m.name)).toEqual(['llama-7b']);
+    transport.isEventStreamOpen.mockReturnValue(false);
+    vi.restoreAllMocks();
+  });
+
   it('a read asked while the bridge is down, or answered after it went down, writes nothing', async () => {
     const { result } = renderHook(() => useModelLibrary());
     act(() => initModelEvents());
@@ -119,7 +165,7 @@ describe('the model registry', () => {
     await act(() => refreshModels());
     await act(() => addModel('/models/after.gguf'));
 
-    expect(result.current).toEqual({ models: [], loading: true, error: null });
+    expect(result.current).toEqual({ models: [], loading: true, heard: false, error: null });
     expect(transport.listModels).toHaveBeenCalledTimes(2);
   });
 
@@ -165,7 +211,7 @@ describe('the model registry', () => {
 
     expect(unsubscribe).toHaveBeenCalledTimes(1);
     expect(transport.listModels).toHaveBeenCalledTimes(1);
-    expect(result.current).toEqual({ models: [], loading: true, error: null });
+    expect(result.current).toEqual({ models: [], loading: true, heard: false, error: null });
   });
 
   it('adds, removes and updates through the transport, and reads again after each', async () => {

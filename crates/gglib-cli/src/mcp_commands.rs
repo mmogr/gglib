@@ -22,15 +22,19 @@ pub enum McpCommand {
         #[arg(long)]
         command: String,
 
-        /// Arguments for the command (comma-separated e.g. '--port,3000')
-        #[arg(long, value_delimiter = ',')]
+        /// Arguments for the command (comma-separated e.g. '-y,pkg' or
+        /// '--port,3000')
+        // `allow_hyphen_values`: a server's arguments are mostly flags, so
+        // the value may start with a dash.
+        #[arg(long, value_delimiter = ',', allow_hyphen_values = true)]
         args: Vec<String>,
 
         /// Working directory for the server process
         #[arg(long)]
         working_dir: Option<String>,
 
-        /// Additional PATH entries (colon-separated)
+        /// Additional PATH entries, separated as in PATH (':' on Linux and
+        /// macOS, ';' on Windows)
         #[arg(long)]
         path_extra: Option<String>,
 
@@ -98,3 +102,7 @@ pub enum McpCommand {
         server: String,
     },
 }
+
+#[cfg(test)]
+#[path = "mcp_commands_tests.rs"]
+mod tests;

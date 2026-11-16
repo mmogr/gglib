@@ -16,9 +16,15 @@
  * the answer is still unknown. Rows that fail to load leave the thread
  * empty and sending off until the conversation is opened again.
  *
- * Leaving (another conversation, unmount) stops reading; it never cancels
- * the run. The run's id is kept in memory only. A far chat is read the same
- * way from the far machine, and nothing of it is kept; each reading of it is
+ * A run's stream that ends before the run does is read again from where it
+ * stopped, with waits that grow, while it is read here (`followAgain`). Once
+ * the tries are spent the page shows what is saved and says why, and the run
+ * is taken as perhaps live: the next send asks first.
+ *
+ * Leaving (another conversation, unmount) stops reading, and any try
+ * waiting with it; it never cancels the run. The run's id is kept in memory
+ * only. A far chat is read the same way from the far machine, its stream
+ * read again the same way, and nothing of it is kept; each reading of it is
  * handed up (`onFarOpened`), for what the far list does not say of a chat.
  *
  * The preview frames of the run being read (`previews`) are held here beside
@@ -37,6 +43,7 @@ import type { ThreadConversation } from '../useChatPersistence/buildThreadMessag
 import { ReasoningTimingTracker } from './reasoningTiming';
 import { performanceClock } from './clock';
 import { drawRun, type RunOutcome } from './drawRun';
+import { followAgain } from './followAgain';
 import { liveRunFor, loadSavedThread, type SavedView } from './savedRows';
 import { NO_PREVIEWS, type RunPreviews } from './runPreviews';
 
@@ -156,7 +163,8 @@ export function useRunReader(
   }, []);
 
   /**
-   * Read run `runId` from its first event, then show what the daemon saved:
+   * Read run `runId` from its first event, and again from where it stopped
+   * while its stream ends before it does, then show what the daemon saved:
    * how the run ended, or `null` when the reading was left first.
    */
   const follow = useCallback(async (cid: number, runId: string, signal: AbortSignal): Promise<RunOutcome | null> => {
@@ -166,6 +174,7 @@ export function useRunReader(
     const unlessLeft = <T>(set: (value: T) => void) => (value: T) => {
       if (!signal.aborted) set(value);
     };
+    const tries = followAgain(signal);
     let outcome: RunOutcome;
     try {
       outcome = await drawRun({
@@ -180,12 +189,19 @@ export function useRunReader(
         setCurrentStreamingAssistantMessageId: unlessLeft(setCurrentStreamingAssistantMessageId),
         onSystemWarning: (message, action) => latest.current.onSystemWarning?.(message, action),
         setPreviews: unlessLeft(setPreviews),
+        again: tries.again,
       });
     } catch (error) {
       if (signal.aborted) return null;
       outcome = { info: null, error: error as Error };
     }
     if (signal.aborted) return null;
+    const spent = tries.spent();
+    if (spent) {
+      // Its end was never read: the run may still be going.
+      unaskedRef.current = true;
+      outcome.error = new Error(spent);
+    }
     try {
       await showSaved(cid, signal);
     } catch (error) {
