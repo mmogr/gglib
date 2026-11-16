@@ -45,6 +45,8 @@ vi.mock('../../../src/services/transport', async () => {
       getModelDetail: vi.fn(async () => null),
       getSettings: vi.fn(async () => ({})),
       onEventStreamOpen: vi.fn(() => () => {}),
+      onEventStreamClose: vi.fn(() => () => {}),
+      isEventStreamOpen: vi.fn(() => false),
       revealSecret: vi.fn(async () => null),
       subscribe: vi.fn((category: string, handler: (e: unknown) => void) => {
         if (category !== 'verification') return () => {};

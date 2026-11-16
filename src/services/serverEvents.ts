@@ -21,6 +21,7 @@
 import { bridgeEvents } from './bridgeEvents';
 import { createEventStore } from './createEventStore';
 import { getTransport } from './transport';
+import { formatError } from '../utils/errors';
 import { ingestServerEvent } from './serverRegistry';
 import {
   normalizeServerEventFromAppEvent,
@@ -32,10 +33,22 @@ import {
  * it: the difference between no servers running and not knowing yet.
  */
 const listHeard = createEventStore(false);
+/** Why the last read of the list failed, while none has landed since; `null` otherwise. */
+const listError = createEventStore<string | null>(null);
 
 // The ordering is `bridgeEvents`'s: subscribe first, then fetch the list, and
-// drop a list that a live event or a cleanup overtook. No `reset`: this
-// registry keeps what it holds across a cleanup.
+// drop a list that a live event or a cleanup overtook; read it again each
+// time the stream opens. No `reset`: this registry keeps what it holds
+// across a cleanup.
+//
+// Until a list has been read, the registry cannot tell "nothing running"
+// from "not known", and a page waits on it (a chat's address). So a read
+// that failed or that an event overtook must be followed by another, and it
+// is, with no timer of this module's own: `keptCurrent` asks a failed read
+// again while the stream is open, the next opening reads again, and so does
+// every server event while the list is unheard. An event says the daemon
+// answers, and it overtook the read that was out, so the read it sets going
+// is the one that can land; there is at most one per event.
 const bridge = bridgeEvents({
   category: 'server',
   onEvent: (payload) => {
@@ -43,8 +56,7 @@ const bridge = bridgeEvents({
     if (normalized) {
       ingestServerEvent(normalized);
     }
-    // An event overtakes a read still out, which is then dropped.
-    readUntilHeard();
+    if (!listHeard.getState()) void bridge.refresh();
   },
   // Hydration: seed the registry with servers already running at load. No
   // event carries those, so they are read from the REST list, which has the
@@ -54,7 +66,9 @@ const bridge = bridgeEvents({
   apply: (servers) => {
     ingestServerEvent(normalizeServerSnapshotFromList(servers));
     listHeard.setState(true);
+    listError.setState(null);
   },
+  onFailure: (err) => listError.setState(formatError(err)),
 });
 
 /** Whether a read of the list has landed: until one has, an empty registry is not "nothing running". */
@@ -62,33 +76,20 @@ export function useServerListHeard(): boolean {
   return listHeard.useStore();
 }
 
+/** Why the last read of the list failed, until one lands; `null` when none has failed since. */
+export function useServerListError(): string | null {
+  return listError.useStore();
+}
+
 /** Forget that the list was read, for a reader whose daemon went away; the next read sets it again. */
 export function forgetServerList(): void {
   listHeard.setState(false);
+  listError.setState(null);
 }
 
-/** Read the list again, as hydration does: for a reader whose daemon has come back. */
+/** Read the list again now, as hydration does: a reader's Retry. */
 export function refreshServers(): void {
   void bridge.refresh();
-}
-
-/**
- * Until a read lands, a read that failed or that an event overtook is tried
- * again, waiting longer each time: a page that waits on "nothing serves
- * this model" (a chat's address) must not wait for ever on a dropped read.
- */
-const RETRY_MS = [1000, 2000, 4000, 8000];
-let retry: ReturnType<typeof setTimeout> | null = null;
-let bridged = false;
-function readUntilHeard(attempt = 0): void {
-  if (retry !== null || !bridged || listHeard.getState()) return;
-  retry = setTimeout(() => {
-    retry = null;
-    if (!bridged || listHeard.getState()) return;
-    void bridge.refresh().then((outcome) => {
-      if (outcome !== 'applied') readUntilHeard(Math.min(attempt + 1, RETRY_MS.length - 1));
-    });
-  }, RETRY_MS[attempt]);
 }
 
 /**
@@ -97,18 +98,13 @@ function readUntilHeard(attempt = 0): void {
  * Safe to call multiple times — only the first call does anything.
  */
 export function initServerEvents(): void {
-  bridged = true;
   bridge.init();
-  readUntilHeard();
 }
 
 /**
  * Stop bridging server lifecycle events. Call on app unmount.
  */
 export function cleanupServerEvents(): void {
-  bridged = false;
-  if (retry !== null) clearTimeout(retry);
-  retry = null;
   bridge.cleanup();
 }
 
