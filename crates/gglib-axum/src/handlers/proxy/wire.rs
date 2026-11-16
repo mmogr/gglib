@@ -43,6 +43,16 @@ pub(crate) struct ProxyStatus {
     /// rename keeps the id. `None` exactly when `pinned_model` is.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub pinned_model_id: Option<i64>,
+    /// Why the endpoint is off, while it is off because a start could not
+    /// bind its port: the port, and what holds it when that can be told.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub refused: Option<String>,
+    /// What a start did: `started`, `unchanged` (it was on as asked) or
+    /// `replaced`. Only a start's answer says it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub outcome: Option<gglib_app_services::StartOutcome>,
 }
 
 /// Optional configuration for starting the proxy.
@@ -95,6 +105,11 @@ pub(crate) struct StartProxyConfig {
     /// list replaces it for this run.
     #[serde(default)]
     pub allowed_hosts: Vec<String>,
+    /// When the endpoint is on otherwise than this start asks, stop it and
+    /// start it as asked, in one operation. Without it such a start is
+    /// refused with `endpoint_differs`, naming how it differs.
+    #[serde(default)]
+    pub replace: bool,
 }
 
 /// Request body for `POST /api/proxy/start-pinned`.
@@ -118,11 +133,13 @@ pub(crate) struct StartPinnedBody {
 /// Convert runtime `ProxyStatus` to API `ProxyStatus`. `pinned` is the
 /// run's pin, its id and name reported together; `key` is what the proxy
 /// demands now, or `None` when that could not be read. Both are reported
-/// only while the proxy listens.
+/// only while the proxy listens; `refused`, why a start did not bind, only
+/// while it does not.
 pub(super) fn to_api_status(
     s: &RuntimeProxyStatus,
     pinned: Option<PinnedSpec>,
     key: Option<KeyState>,
+    refused: Option<String>,
 ) -> ProxyStatus {
     match s {
         RuntimeProxyStatus::Running { address } => ProxyStatus {
@@ -136,6 +153,8 @@ pub(super) fn to_api_status(
                 .as_ref()
                 .map(|pin| EndpointState::pinned_to(&pin.name)),
             pinned_model: pinned.map(|pin| pin.name),
+            refused: None,
+            outcome: None,
         },
         // A crashed proxy is not serving, so it reports exactly as a stopped
         // one does: no port to hand out, and no pin still in force.
@@ -148,6 +167,8 @@ pub(super) fn to_api_status(
             pinned_model: None,
             pinned_to: None,
             pinned_model_id: None,
+            refused,
+            outcome: None,
         },
     }
 }

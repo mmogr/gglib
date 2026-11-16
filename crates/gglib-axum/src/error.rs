@@ -13,6 +13,9 @@ use gglib_core::{CoreError, RepositoryError};
 use serde::Serialize;
 use thiserror::Error;
 
+/// The `type` of [`HttpError::EndpointDiffers`]'s body.
+pub const ENDPOINT_DIFFERS: &str = gglib_core::contracts::http::daemon::ENDPOINT_DIFFERS_TYPE;
+
 /// Axum-specific error type.
 #[derive(Debug, Error)]
 pub enum HttpError {
@@ -52,6 +55,13 @@ pub enum HttpError {
     /// Internal server error.
     #[error("Internal error: {0}")]
     Internal(String),
+
+    /// A start that found the endpoint on otherwise, and left it alone
+    /// (409, type [`ENDPOINT_DIFFERS`]); the body's `metadata` is the
+    /// [`EndpointChange`](gglib_app_services::EndpointChange), for a caller
+    /// that asks the user before it starts again with `replace`.
+    #[error("the endpoint is {}: {}", .0.now, .0.action)]
+    EndpointDiffers(gglib_app_services::EndpointChange),
 
     /// A refusal with a stable code, which the body carries as `type`.
     #[error("{message}")]
@@ -110,6 +120,16 @@ impl IntoResponse for HttpError {
                 )
             }
             Self::TooManyRequests(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.clone(), None, None),
+            Self::EndpointDiffers(change) => (
+                StatusCode::CONFLICT,
+                format!(
+                    "The endpoint is {}. Starting it to {} replaces it, which cuts off the \
+                     clients connected now: ask again with replace.",
+                    change.now, change.action
+                ),
+                Some(ENDPOINT_DIFFERS.to_owned()),
+                serde_json::to_value(change).ok(),
+            ),
             Self::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone(), None, None),
             Self::Coded {
                 status,
@@ -328,5 +348,30 @@ mod tests {
 
         let storage: HttpError = AttachmentError::Storage("disk".to_string()).into();
         assert!(matches!(storage, HttpError::Internal(_)));
+    }
+
+    /// A start left alone because the endpoint is on otherwise is a 409 a
+    /// person reads, wherever it lands (the tray's Turn on among them), with
+    /// the change beside it for a caller that asks before switching.
+    #[tokio::test]
+    async fn a_start_left_alone_says_why_in_words_a_person_reads() {
+        let refused = HttpError::EndpointDiffers(gglib_app_services::EndpointChange {
+            now: "on at port 8080, serving only Qwen3-4B".to_owned(),
+            action: "serve every model again".to_owned(),
+        })
+        .into_response();
+        assert_eq!(refused.status(), StatusCode::CONFLICT);
+        let body = axum::body::to_bytes(refused.into_body(), usize::MAX)
+            .await
+            .expect("the body");
+        let body: serde_json::Value = serde_json::from_slice(&body).expect("JSON");
+
+        assert_eq!(
+            body["error"],
+            "The endpoint is on at port 8080, serving only Qwen3-4B, so it was left as it is: \
+             switching it to serve every model again would cut off the clients connected now."
+        );
+        assert_eq!(body["type"], ENDPOINT_DIFFERS);
+        assert_eq!(body["metadata"]["action"], "serve every model again");
     }
 }

@@ -4,7 +4,8 @@
 
 use super::*;
 use gglib_core::contracts::http::daemon::{
-    PROXY_START_CLI_FIELDS, PROXY_START_DAEMON_ONLY_FIELDS, PROXY_STATUS_FIELDS,
+    PROXY_START_ANSWER_FIELDS, PROXY_START_CLI_FIELDS, PROXY_START_DAEMON_ONLY_FIELDS,
+    PROXY_STATUS_FIELDS, PROXY_STATUS_REFUSED_FIELDS,
 };
 use gglib_core::domain::KeyState;
 use gglib_core::settings::DEFAULT_PROXY_PORT;
@@ -160,6 +161,7 @@ fn a_crashed_proxy_reports_as_stopped() {
         &RuntimeProxyStatus::Crashed,
         Some(pin(7, "qwen")),
         Some(KeyState::Required),
+        None,
     );
 
     assert!(!status.running);
@@ -183,6 +185,7 @@ fn a_listening_proxy_says_on_or_pinned() {
         &RuntimeProxyStatus::Running { address },
         None,
         Some(KeyState::NoneNeeded),
+        None,
     );
     assert!(open.running);
     assert_eq!(open.state, EndpointState::On);
@@ -194,6 +197,7 @@ fn a_listening_proxy_says_on_or_pinned() {
         &RuntimeProxyStatus::Running { address },
         Some(pin(7, "qwen")),
         Some(KeyState::Required),
+        None,
     );
     assert_eq!(pinned.state, EndpointState::Pinned);
     assert_eq!(pinned.pinned_model.as_deref(), Some("qwen"));
@@ -205,7 +209,7 @@ fn a_listening_proxy_says_on_or_pinned() {
     assert_eq!(open.pinned_model_id, None);
 
     // A key the daemon could not read is said as nothing, not guessed.
-    let unread = to_api_status(&RuntimeProxyStatus::Running { address }, None, None);
+    let unread = to_api_status(&RuntimeProxyStatus::Running { address }, None, None, None);
     assert!(unread.running);
     assert_eq!(unread.key, None);
 }
@@ -218,6 +222,7 @@ fn a_pinned_status_names_its_model_by_id() {
     let status = to_api_status(
         &RuntimeProxyStatus::Running { address },
         Some(pin(12, "qwen")),
+        None,
         None,
     );
     let json = serde_json::to_value(&status).expect("the status serialises");
@@ -243,6 +248,7 @@ fn the_base_url_is_where_a_client_reaches_the_bind() {
             &RuntimeProxyStatus::Running { address },
             None,
             Some(KeyState::NoneNeeded),
+            None,
         );
         assert_eq!(status.base_url.as_deref(), Some(reached), "{bound}");
     }
@@ -257,6 +263,7 @@ fn the_status_sends_exactly_the_contract_fields() {
         &RuntimeProxyStatus::Running { address },
         Some(pin(7, "qwen")),
         Some(KeyState::Required),
+        None,
     );
 
     let json = serde_json::to_value(&status).expect("the status serialises");
@@ -270,6 +277,60 @@ fn the_status_sends_exactly_the_contract_fields() {
     let mut want = PROXY_STATUS_FIELDS.to_vec();
     want.sort_unstable();
     assert_eq!(keys, want);
+}
+
+/// An endpoint off because a start could not bind its port says why, the
+/// key the CLI reads beside the status's; one that listens never does.
+#[test]
+fn an_endpoint_refused_its_port_adds_exactly_the_contract_fields() {
+    let off = to_api_status(
+        &RuntimeProxyStatus::Stopped,
+        None,
+        None,
+        Some("port 8080 is in use".to_owned()),
+    );
+    let json = serde_json::to_value(&off).expect("the status serialises");
+    let mut keys: Vec<&str> = json
+        .as_object()
+        .expect("a JSON object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    let mut want = [PROXY_STATUS_FIELDS, PROXY_STATUS_REFUSED_FIELDS].concat();
+    want.sort_unstable();
+    assert_eq!(keys, want);
+
+    let address: std::net::SocketAddr = "127.0.0.1:8080".parse().unwrap();
+    let on = to_api_status(
+        &RuntimeProxyStatus::Running { address },
+        None,
+        None,
+        Some("stale".to_owned()),
+    );
+    assert_eq!(on.refused, None);
+}
+
+/// A start's answer is the status with what the start did, the keys the
+/// CLI reads beside the status's.
+#[test]
+fn a_starts_answer_adds_exactly_the_contract_fields() {
+    let address: std::net::SocketAddr = "127.0.0.1:8080".parse().unwrap();
+    let mut status = to_api_status(&RuntimeProxyStatus::Running { address }, None, None, None);
+    status.outcome = Some(gglib_app_services::StartOutcome::Unchanged);
+
+    let json = serde_json::to_value(&status).expect("the status serialises");
+    let mut keys: Vec<&str> = json
+        .as_object()
+        .expect("a JSON object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    let mut want = [PROXY_STATUS_FIELDS, PROXY_START_ANSWER_FIELDS].concat();
+    want.sort_unstable();
+    assert_eq!(keys, want);
+    assert_eq!(json["outcome"], "unchanged");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -289,7 +350,7 @@ fn sample_for(name: &str) -> serde_json::Value {
         "port" => json!(8080),
         "llama_base_port" => json!(9100),
         "default_context" => json!(4096),
-        "cache" => json!(true),
+        "cache" | "replace" => json!(true),
         "slot_dir" => json!("/slots"),
         "pinned" => serde_json::to_value(gglib_core::ports::PinnedSpec::default())
             .expect("PinnedSpec serialises"),
@@ -335,6 +396,7 @@ fn the_daemon_accepts_every_field_the_cli_sends() {
         default_profile,
         api_key,
         allowed_hosts,
+        replace,
     } = cfg;
 
     // The width is half the guard. `StartProxyConfig` has no
@@ -342,7 +404,7 @@ fn the_daemon_accepts_every_field_the_cli_sends() {
     // grew a field for deserializes into nothing at all and leaves no assertion
     // to fail. Tying this array's length to the contract's total catches that
     // direction; the `E0027` above catches the other.
-    let fields: [(&str, bool); 12] = [
+    let fields: [(&str, bool); 13] = [
         ("host", host.is_some()),
         ("port", port.is_some()),
         ("llama_base_port", llama_base_port.is_some()),
@@ -355,6 +417,7 @@ fn the_daemon_accepts_every_field_the_cli_sends() {
         ("default_profile", default_profile.is_some()),
         ("api_key", api_key.is_some()),
         ("allowed_hosts", !allowed_hosts.is_empty()),
+        ("replace", replace),
     ];
 
     assert_eq!(

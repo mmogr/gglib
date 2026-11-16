@@ -416,6 +416,13 @@ impl Settings {
         !matches!(self.loop_guard, Some(false))
     }
 
+    /// Whether the service starts the endpoint when it starts: the stored
+    /// [`Self::proxy_autostart`].
+    #[must_use]
+    pub const fn effective_proxy_autostart(&self) -> bool {
+        matches!(self.proxy_autostart, Some(true))
+    }
+
     /// Whether `/mcp` offers the drawing tool: the stored
     /// [`Self::mcp_drawing`], and off when none is stored.
     #[must_use]
@@ -591,6 +598,10 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
 #[cfg(test)]
 #[path = "settings_loop_guard_tests.rs"]
 mod settings_loop_guard_tests;
+
+#[cfg(test)]
+#[path = "settings_autostart_tests.rs"]
+mod settings_autostart_tests;
 
 #[cfg(test)]
 #[path = "settings_tests.rs"]

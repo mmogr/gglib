@@ -188,9 +188,22 @@ pub(in crate::handlers) async fn started(
     };
 
     let answered = STAND_IN_PORT
-        .scope(port, start_on(&handle, body, settings))
+        .scope(
+            port,
+            start_on(
+                &handle,
+                body,
+                settings,
+                &mut crate::handlers::inference::switch::Consent {
+                    yes: false,
+                    terminal: false,
+                    ask: Box::new(|_| Ok(false)),
+                },
+            ),
+        )
         .await
-        .expect("the daemon's answer");
+        .expect("the daemon's answer")
+        .expect("an endpoint as asked");
 
     let (line, sent) = daemon.join().expect("the stand-in ran");
     assert_eq!(line, format!("POST {} HTTP/1.1", paths::PROXY_START_PATH));

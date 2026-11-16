@@ -378,6 +378,15 @@ pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>
 pub(crate) fn test_core_and_proxy_over(
     repos: &gglib_core::ports::Repos,
 ) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
+    test_core_and_proxy_heard(repos, Arc::new(gglib_core::ports::NoopEmitter))
+}
+
+/// [`test_core_and_proxy_over`], with the bus the proxy says it came on and
+/// went off on supplied, so a test can hear it.
+pub(crate) fn test_core_and_proxy_heard(
+    repos: &gglib_core::ports::Repos,
+    emitter: Arc<dyn AppEventEmitter>,
+) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
     use gglib_core::cache_config::CacheRamSetting;
     use gglib_core::ports::ModelCatalogPort;
     use gglib_core::server_config::ServerConfigOptions;
@@ -398,20 +407,12 @@ pub(crate) fn test_core_and_proxy_over(
         CacheRamSetting::Auto,
         Arc::new(gglib_core::ports::NoopResidencyObserver),
     ))));
-    test_core_and_proxy_on(repos, runtime)
+    test_core_and_proxy_telling(repos, runtime, emitter)
 }
 
 /// [`test_core_and_proxy_over`] with the runtime the proxy drives models
-/// through supplied too, so a test can script what a start and a stop meet.
-pub(crate) fn test_core_and_proxy_on(
-    repos: &gglib_core::ports::Repos,
-    runtime: Arc<dyn gglib_core::ports::ModelRuntimePort>,
-) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
-    test_core_and_proxy_telling(repos, runtime, Arc::new(gglib_core::ports::NoopEmitter))
-}
-
-/// [`test_core_and_proxy_on`] with the bus the proxy says it came on and
-/// went off on supplied too, so a test can hear it.
+/// through and the bus it says it came on and went off on supplied, so a
+/// test can script what a start and a stop meet, and hear it.
 pub(crate) fn test_core_and_proxy_telling(
     repos: &gglib_core::ports::Repos,
     runtime: Arc<dyn gglib_core::ports::ModelRuntimePort>,

@@ -30,7 +30,19 @@ fn proxy_lines(proxy: &ProxyStatusDto) -> Vec<String> {
     if let Some(key) = proxy.key {
         lines.push(format!("  API key: {key}"));
     }
+    if let Some(why) = &proxy.refused {
+        lines.push(format!("  Why:     {why}"));
+    }
     lines
+}
+
+/// The line under a pinned proxy's report naming the command that serves
+/// every model again; nothing for an unpinned or stopped one.
+///
+/// This CLI's own words, about one of its commands, and so kept apart from
+/// [`proxy_lines`], whose every word is the daemon's.
+fn way_back_line(proxy: &ProxyStatusDto) -> Option<String> {
+    proxy.pinned_to.as_ref().filter(|_| false).cloned()
 }
 
 /// Execute `gglib daemon status`.
@@ -47,6 +59,9 @@ pub(crate) async fn status() -> Result<()> {
             match handle.proxy_status().await {
                 Ok(proxy) => {
                     for line in proxy_lines(&proxy) {
+                        eprintln!("{line}");
+                    }
+                    if let Some(line) = way_back_line(&proxy) {
                         eprintln!("{line}");
                     }
                 }

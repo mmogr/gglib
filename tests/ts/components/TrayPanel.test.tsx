@@ -247,6 +247,17 @@ describe('the tray panel', () => {
       expect(await within(endpoint()).findByRole('alert')).toHaveTextContent('port 8080 is in use');
     });
 
+    it('a turn on that finds the endpoint on otherwise says the daemon’s sentence', async () => {
+      // The poll saw it off; meanwhile a pinned endpoint came on, and the
+      // daemon left it as it is.
+      const sentence =
+        'The endpoint is on at port 8080, serving only Qwen3-4B, so it was left as it is: switching it to serve every model again would cut off the clients connected now.';
+      transport.startProxy.mockRejectedValueOnce(new Error(sentence));
+      const { user } = await renderTray(DOWN);
+      await user.click(screen.getByRole('button', { name: 'Turn on' }));
+      expect(await within(endpoint()).findByRole('alert')).toHaveTextContent(/^.*serving only Qwen3-4B, so it was left as it is/);
+    });
+
     it('a long failure is cut to fit, and an empty one still says something', async () => {
       transport.startProxy.mockRejectedValueOnce(new Error('x'.repeat(500))).mockRejectedValueOnce(new Error(''));
       const { user } = await renderTray(DOWN);

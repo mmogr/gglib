@@ -275,6 +275,7 @@ pub(crate) mod runs;
 mod settings;
 pub(crate) mod wire;
 
+pub(crate) use calls::StartedOrDiffers;
 pub(crate) use library_changes::LibraryChanges;
 pub(crate) use wire::{
     ClientRecipesDto, ProofOutcomeDto, ProxyStatusDto, QueueDownloadBody, StartProxyBody,
@@ -284,3 +285,6 @@ pub(crate) use wire::{
 #[cfg(test)]
 #[path = "handle_tests.rs"]
 pub(crate) mod handle_tests;
+
+#[cfg(test)]
+pub(crate) mod stand_in;

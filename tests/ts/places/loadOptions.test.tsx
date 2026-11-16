@@ -150,7 +150,7 @@ describe('the Load with options sheet', () => {
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     expect(bodies()).toEqual([
-      ['/api/proxy/start-pinned', { model_id: 9, options: { mlock: false } }],
+      ['/api/proxy/start-pinned', { model_id: 9, options: { mlock: false }, proxy: { replace: true } }],
       ['/api/servers/start', { id: 9, mlock: false }],
     ]);
   });

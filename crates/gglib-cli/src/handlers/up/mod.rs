@@ -14,11 +14,6 @@ use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, StartProxyBody};
 use crate::handlers::inference::proxy;
 
-/// Loopback only. `up` is the "get me working" path; exposing an
-/// unauthenticated endpoint to a network is a decision, and decisions belong to
-/// `gglib proxy --host`.
-const HOST: &str = "127.0.0.1";
-
 /// Number of steps announced in the progress headers.
 const STEPS: usize = 5;
 
@@ -38,14 +33,16 @@ pub(crate) struct UpArgs {
     pub port: Option<u16>,
 }
 
-/// What `up` asks the daemon to start: the unpinned proxy on loopback.
+/// What `up` asks the daemon to start: the unpinned endpoint as the stored
+/// settings describe it, as the service's own launch starts it.
 ///
-/// `port` is the `--port` flag as typed. An absent flag travels as no port,
-/// so a stored `proxy_port` is where the endpoint comes up and what the
-/// client configuration then prints.
+/// No host, so the stored `proxy_host` decides, loopback until one is stored:
+/// `up` never changes where the endpoint listens. `port` is the `--port` flag
+/// as typed; an absent flag travels as no port, so a stored `proxy_port` is
+/// where the endpoint comes up and what the client configuration then prints.
 fn start_body(port: Option<u16>, default_context: Option<u64>) -> StartProxyBody {
     StartProxyBody {
-        host: Some(HOST.to_string()),
+        host: Some("127.0.0.1".to_owned()),
         port,
         default_context,
         // Unpinned: `/v1/models` has to work for Cline and Open WebUI to
@@ -90,13 +87,17 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
 
     let handle = daemon_client::ensure_daemon().await?;
     let body = start_body(args.port, default_context);
-    let started = proxy::start_on(&handle, &body, &settings).await?;
+    // An endpoint that is on is working: `up` leaves one on otherwise as it
+    // is, never asks to switch it, and `-y` does not switch it either.
+    let started = proxy::start_or_leave(&handle, &body, &settings).await?;
 
     // Step 5: prove it. The daemon sends one real request through the very
     // endpoint the user is about to point their client at, by the id that
-    // endpoint lists it under, and says how a client connects.
-    warm::run(&handle, model.id).await;
-    for line in warm::render_next_steps(started.port, model.id, use_color()) {
+    // endpoint lists it under, and says how a client connects. A pinned
+    // endpoint serves its own model, so that is the one proved.
+    let proved = started.pinned_model_id.unwrap_or(model.id);
+    warm::run(&handle, proved).await;
+    for line in warm::render_next_steps(started.port, proved, use_color()) {
         println!("{line}");
     }
     Ok(())
@@ -224,6 +225,17 @@ mod tests {
 
         assert!(started.sent_no_port(), "{}", started.sent);
         assert_eq!(started.port, 9000);
+    }
+
+    /// No host is sent, so the stored `proxy_host` decides where the
+    /// endpoint listens: `up` never rebinds one the settings put elsewhere.
+    #[tokio::test]
+    async fn the_stored_host_decides_where_the_endpoint_listens() {
+        let body = body_for(&["gglib", "up"]);
+
+        let started = started(&body, Some(9000), &Settings::default()).await;
+
+        assert!(started.sent["host"].is_null(), "{}", started.sent);
     }
 
     #[tokio::test]

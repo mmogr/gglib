@@ -51,9 +51,13 @@ export function shownAddress(baseUrl: string): string {
   return baseUrl.replace(/^https?:\/\//, '');
 }
 
-/** The second line, from the endpoint's facts and how many models are loaded; the state word is said beside the name. */
-export function secondLine(facts: EndpointFacts, loaded: number): string {
-  if (facts.state === 'off') return 'click to turn on';
+/**
+ * The second line, from the endpoint's facts and how many models are loaded;
+ * the state word is said beside the name. An endpoint off because its port
+ * was refused says so, and the page it opens says why in the daemon's words.
+ */
+export function secondLine(facts: EndpointFacts, loaded: number, refused: string | null = null): string {
+  if (facts.state === 'off') return refused === null ? 'click to turn on' : 'click to turn on';
   if (facts.state === 'starting') return ENDPOINT_WORDS.starting;
   if (facts.pinned !== null) return facts.pinned.name;
   if (loaded === 0) return 'nothing loaded yet';

@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 
+mod autostart;
 mod lock;
 mod shutdown;
 mod watchdog;
@@ -146,19 +147,10 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     }
 
     // 5. The proxy belongs to the daemon: honour autostart here, not in the
-    //    desktop app.
-    match state.core.settings().get().await {
-        Ok(settings) if settings.proxy_autostart == Some(true) => {
-            let proxy = Arc::clone(&state.proxy);
-            tokio::spawn(async move {
-                match proxy.ensure_running().await {
-                    Ok(addr) => info!("proxy autostarted on {addr}"),
-                    Err(e) => warn!("proxy autostart failed: {e}"),
-                }
-            });
-        }
-        Ok(_) => {}
-        Err(e) => warn!("could not read settings for proxy autostart: {e}"),
+    //    desktop app (`autostart.rs`).
+    {
+        let state = Arc::clone(&state);
+        tokio::spawn(async move { autostart::autostart_proxy(&state).await });
     }
 
     // 5b. Put the tunnel back up if this machine was told to be reachable.

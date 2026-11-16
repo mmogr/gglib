@@ -273,6 +273,7 @@ pub async fn dispatch(
                 sampling,
                 cache,
                 access,
+                bind.yes,
             )
             .await?;
         }

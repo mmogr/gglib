@@ -7,7 +7,9 @@
 //! model (`POST /api/proxy/start-pinned`: the app's pinned start, which runs
 //! `gglib serve`'s cascade on the daemon) and then for the model, in that
 //! order, since a plain start brings up an unpinned endpoint when none is
-//! running, which a pinned start then refuses. Every answer printed is the
+//! running. An endpoint already on otherwise is switched to the model only
+//! with a yes, as `gglib serve` asks for one (`handlers::inference::switch`).
+//! Every answer printed is the
 //! daemon's; the pinned line lays out its status, as `daemon status` does.
 
 use anyhow::{Context as _, Result};
@@ -16,14 +18,18 @@ use super::resolver;
 use super::start_body::start_body;
 use crate::bootstrap::CliContext;
 use crate::daemon_client::wire::{StartPinnedBody, StopServerBody};
-use crate::daemon_client::{self, Absent, DaemonHandle, StartProxyBody, StartServerBody};
+use crate::daemon_client::{
+    self, Absent, DaemonHandle, StartProxyBody, StartServerBody, StartedOrDiffers,
+};
+use crate::handlers::inference::switch::Consent;
 
-/// Execute `gglib model load <id> [--context-size N|max] [--pin]`.
+/// Execute `gglib model load <id> [--context-size N|max] [--pin] [-y]`.
 pub(crate) async fn load(
     ctx: &CliContext,
     identifier: &str,
     context: Option<&str>,
     pin: bool,
+    yes: bool,
 ) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
     // A bad `--context-size` is refused before anything is installed or asked.
@@ -32,7 +38,7 @@ pub(crate) async fn load(
     // asked for it, as `serve` and `chat` make sure of.
     crate::handlers::config::engine::ensure_installed(model.runtime(), false).await?;
     let handle = daemon_client::ensure_daemon().await?;
-    for line in load_on(&handle, &body, pin).await? {
+    for line in load_on(&handle, &body, pin, &mut Consent::here(yes)).await? {
         eprintln!("{line}");
     }
     Ok(())
@@ -41,22 +47,36 @@ pub(crate) async fn load(
 /// Ask the daemon, in order, for the endpoint pinned to the model when `pin`
 /// and then for the model loaded. The lines are the daemon's answers, one per
 /// request: the pinned status laid out, then the start's own sentence. A
-/// refusal is the daemon's sentence.
+/// refusal is the daemon's sentence. An endpoint on otherwise is switched to
+/// the model only with `consent`; without it nothing is loaded.
 pub(super) async fn load_on(
     handle: &DaemonHandle,
     body: &StartServerBody,
     pin: bool,
+    consent: &mut Consent,
 ) -> Result<Vec<String>> {
     let mut lines = Vec::new();
     if pin {
-        let pinned = handle
-            .start_pinned_proxy(&StartPinnedBody {
-                model_id: body.id,
-                options: body.config.clone(),
-                proxy: StartProxyBody::default(),
-            })
+        let asked = StartPinnedBody {
+            model_id: body.id,
+            options: body.config.clone(),
+            proxy: StartProxyBody::default(),
+        };
+        let pinned = match handle
+            .start_pinned_proxy_or_differs(&asked)
             .await
-            .context("the daemon did not pin the endpoint")?;
+            .context("the daemon did not pin the endpoint")?
+        {
+            StartedOrDiffers::Started(status) => status,
+            StartedOrDiffers::Differs(change) => {
+                // Today: the same start again, which nothing replaces.
+                let _ = consent.allows(&change)?;
+                handle
+                    .start_pinned_proxy(&asked)
+                    .await
+                    .context("the daemon did not pin the endpoint")?
+            }
+        };
         // A pinned start that answers no port left nothing listening; the
         // model is not loaded behind it.
         let Some(port) = pinned.port else {

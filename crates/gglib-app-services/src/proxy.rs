@@ -90,6 +90,17 @@ pub struct ProxyOps {
     /// settings, so handing the tunnel the stored value would give it a
     /// credential the proxy refuses.
     effective_key: std::sync::RwLock<Option<(String, ApiKeySource)>>,
+    /// What the running endpoint was started with, as this started it: what
+    /// a second start is compared against, and what a replacement that
+    /// fails puts back. `None` while stopped.
+    running: std::sync::RwLock<Option<start_as::Running>>,
+    /// Held across a start that may compare and switch, so two of them
+    /// cannot interleave a stop and a start.
+    switching: tokio::sync::Mutex<()>,
+    /// Why the last start did not bind, in words, until a start binds: the
+    /// reason an endpoint that should be on is off, the service's own launch
+    /// above all, which nobody is watching when it fails.
+    refused: std::sync::RwLock<Option<String>>,
 }
 
 impl ProxyOps {
@@ -109,6 +120,9 @@ impl ProxyOps {
             turns: std::sync::OnceLock::new(),
             images: std::sync::OnceLock::new(),
             effective_key: std::sync::RwLock::new(None),
+            running: std::sync::RwLock::new(None),
+            switching: tokio::sync::Mutex::new(()),
+            refused: std::sync::RwLock::new(None),
         }
     }
 
@@ -267,8 +281,10 @@ impl ProxyOps {
             Arc::new(CatalogPortImpl::new(self.model_repo.clone()));
 
         let runtime = Arc::clone(&self.runtime);
+        let kept = config.clone();
 
-        self.supervisor
+        let started = self
+            .supervisor
             .start(
                 config,
                 runtime,
@@ -276,7 +292,18 @@ impl ProxyOps {
                 self.mcp.clone(),
                 self.core.settings().repo(),
             )
-            .await
+            .await;
+        // A port another program holds is kept as the reason the endpoint is
+        // off, so every surface that shows the endpoint can say why; the
+        // next start that binds clears it.
+        if let Err(SupervisorError::BindFailed { address, .. }) = &started {
+            let why = crate::proxy_refusal::port_in_use(address).await;
+            *self
+                .refused
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(why);
+        }
+        started
             // The token the supervisor settled on is kept here and not
             // returned. These callers are the GUI and the desktop tray, which
             // read it back from settings rather than being handed a
@@ -294,6 +321,17 @@ impl ProxyOps {
                 // the supervisor answers `Ok` only to the start that took
                 // its slot, under its own lock, so a racing start or one
                 // that finds it on (`AlreadyRunning`) says nothing.
+                *self
+                    .running
+                    .write()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(start_as::Running {
+                    config: kept,
+                    pin: self.runtime.pinned(),
+                });
+                *self
+                    .refused
+                    .write()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
                 self.emitter.emit(AppEvent::proxy_started(bind.addr.port()));
                 bind.addr
             })
@@ -398,6 +436,10 @@ impl ProxyOps {
             .effective_key
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        *self
+            .running
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         let stopped = self.supervisor.stop().await;
         if !matches!(stopped, Err(SupervisorError::NotRunning)) {
             self.emitter.emit(AppEvent::proxy_stopped());
@@ -412,6 +454,16 @@ impl ProxyOps {
             }
             SupervisorError::Internal(msg) => GuiError::Internal(msg),
         })
+    }
+
+    /// Why the endpoint is off when a start could not bind it, until a start
+    /// does: the port, and what holds it when that can be told.
+    #[must_use]
+    pub fn refused(&self) -> Option<String> {
+        self.refused
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// Get the current proxy status.
@@ -549,6 +601,9 @@ impl ProxyOps {
         self.supervisor.exit_receiver()
     }
 }
+#[path = "proxy_start_as.rs"]
+mod start_as;
+
 #[cfg(test)]
 #[path = "proxy_tests.rs"]
 mod tests;

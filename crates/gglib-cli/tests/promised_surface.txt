@@ -281,6 +281,7 @@ gglib model list
 gglib model load
   --context-size -c
   --pin
+  --yes -y
 gglib model remove
   --yes -y
 gglib model repair
@@ -370,6 +371,7 @@ gglib proxy
   --top-k
   --top-n-sigma
   --top-p
+  --yes -y
 gglib proxy cache-clear
   --api-key
   --host
@@ -459,6 +461,7 @@ gglib serve
   --top-k
   --top-n-sigma
   --top-p
+  --yes -y
 gglib up
   --model
   --port -p

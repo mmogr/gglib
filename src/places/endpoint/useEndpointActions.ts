@@ -22,6 +22,9 @@ import { formatError } from '../../utils/errors';
 
 export type EndpointBusy = 'on' | 'off' | 'serve' | null;
 
+/** What a switch says when the service answered without switching. */
+export const OLDER_SERVICE = '';
+
 /** The proof's outcome as the page says it. */
 export interface Proof {
   answered: boolean;

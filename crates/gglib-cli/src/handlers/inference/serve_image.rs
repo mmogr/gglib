@@ -139,9 +139,13 @@ pub(super) async fn serve_image(
     );
 
     let handle = daemon_client::ensure_daemon().await?;
-    let proxy_port = crate::handlers::inference::proxy::start_on(&handle, &body, &settings)
-        .await?
-        .port;
+    let started =
+        crate::handlers::inference::proxy::start_here(&handle, &body, &settings, flags.options.yes)
+            .await?;
+    let Some(started) = started else {
+        return Ok(());
+    };
+    let proxy_port = started.port;
     let key = auth::proxy_key(ctx, access.api_key.clone()).await;
     let client = gglib_proxy::loopback::client();
 
@@ -165,8 +169,14 @@ pub(super) async fn serve_image(
     }
 
     let reach = crate::handlers::inference::proxy::reached(options.host.as_deref(), &settings);
-    crate::handlers::inference::proxy::attach_dashboard(ctx, reach, proxy_port, access.api_key)
-        .await
+    crate::handlers::inference::proxy::attach_dashboard(
+        ctx,
+        reach,
+        proxy_port,
+        access.api_key,
+        true,
+    )
+    .await
 }
 
 /// What the banner says of an image model: the model, its runtime, its
