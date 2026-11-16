@@ -15,11 +15,13 @@ use anyhow::Result;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::{AdmissionSnapshot, LaunchPlan};
 use gglib_core::ports::{
-    Admission, AdmitObserver, GenerationGate, GenerationTurn, LaunchOverrides, ModelCatalogPort,
-    ModelLaunchSpec, ModelRuntimeError, ProcessHandle, ResidencyObserver, RunningTarget,
+    Admission, AdmitObserver, GenerationGate, GenerationTurn, LaunchOverrides, LoadFailure,
+    ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ProcessHandle, ResidencyObserver,
+    RunningTarget,
 };
 use gglib_core::server_config::ServerConfigOptions;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::RwLock;
 
 use crate::process::admission::{PRIMARY_SLOT, Resident};
@@ -82,6 +84,16 @@ impl ProcessManager {
             core: Arc::new(RwLock::new(core)),
             residency: ResidentSet::new(catalog, launch_overrides, cache_ram, observer),
         }
+    }
+
+    /// The last load of model `model_id` (its catalog id) that failed in
+    /// this manager, and when. The endpoint gives its clients the short form
+    /// ([`LoadFailure::remote_sentence`]), as it cannot tell this machine's
+    /// from another's; a caller in this process that made a load through it
+    /// (the daemon's proof for `gglib up`) reads the whole sentence here.
+    #[must_use]
+    pub fn last_load_failure(&self, model_id: u32) -> Option<(Instant, LoadFailure)> {
+        self.residency.last_load_failure(model_id)
     }
 
     /// Pin this manager to a single model, or clear the pin (`gglib serve`).

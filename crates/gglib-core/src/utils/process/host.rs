@@ -24,9 +24,17 @@
 //!   puts each child it ties in a kill-on-close job object this process
 //!   makes on first use and never closes (#1985).
 //!
+//! It also reads and writes the user's own `Path` variable, and gglib's
+//! record of the entries it added there, for [`crate::paths::user_path`]:
+//! the desktop app's Windows installer runs gglib to put its folder there
+//! and take it off (#1959). Off Windows there is no such variable, and
+//! `Registry` says so. No other crate may call it.
+//!
 //! These calls have no safe form in the standard library, so the Windows
 //! half of this file allows `unsafe`, and Windows is called directly from
 //! here only (ADR 0030).
+
+use crate::paths::user_path::{Store, UserPath};
 
 /// Prepare this process. Each `main` calls it first, before any child
 /// process is started.
@@ -42,6 +50,75 @@ pub(super) fn tie_by_job(child: &tokio::process::Child) -> std::io::Result<()> {
     windows::tie_by_job(child)
 }
 
+/// The registry, where Windows keeps the user's own `Path` and gglib its
+/// record of the folders it added there: the one [`Store`] outside tests.
+/// Visible to gglib-core alone, so no other crate can rewrite a user's
+/// `Path`.
+///
+/// - The `Path` is the value `Path` of `HKEY_CURRENT_USER\Environment`,
+///   which Windows joins to the machine's `Path` when it builds a new
+///   program's environment. It is read whole however long it is, with every
+///   `%VAR%` unexpanded, and written with the type it had: `REG_EXPAND_SZ`
+///   or `REG_SZ`. An empty one is written empty, never removed. After each
+///   write every top-level window is told that the environment changed, so
+///   a terminal started from Explorer or the Start menu from now on reads
+///   it.
+/// - The record is the value `PathEntriesAdded` of
+///   `HKEY_CURRENT_USER\Software\gglib`, a `REG_SZ` list separated by `;`,
+///   removed when it is empty.
+///
+/// A read fails with the error Windows gave, a value of a type other than
+/// `REG_SZ` or `REG_EXPAND_SZ` among them, or on a value that is not valid
+/// UTF-16, which gglib leaves alone rather than write back changed. Off
+/// Windows the `Path` is [`UserPath::NotKept`], the record is empty, and a
+/// write is an [`std::io::ErrorKind::Unsupported`] error that changes
+/// nothing.
+pub(crate) struct Registry;
+
+impl Store for Registry {
+    fn path(&mut self) -> std::io::Result<UserPath> {
+        #[cfg(windows)]
+        return windows::user_path();
+        #[cfg(not(windows))]
+        Ok(UserPath::NotKept)
+    }
+
+    fn set_path(&mut self, text: &str, expandable: bool) -> std::io::Result<()> {
+        #[cfg(windows)]
+        return windows::set_user_path(text, expandable);
+        #[cfg(not(windows))]
+        {
+            let _ = (text, expandable);
+            Err(not_kept())
+        }
+    }
+
+    fn record(&mut self) -> std::io::Result<String> {
+        #[cfg(windows)]
+        return windows::path_record();
+        #[cfg(not(windows))]
+        Ok(String::new())
+    }
+
+    fn set_record(&mut self, text: &str) -> std::io::Result<()> {
+        #[cfg(windows)]
+        return windows::set_path_record(text);
+        #[cfg(not(windows))]
+        {
+            let _ = text;
+            Err(not_kept())
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn not_kept() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "only Windows keeps a user's own Path",
+    )
+}
+
 #[cfg(windows)]
 #[expect(
     unsafe_code,
@@ -54,7 +131,8 @@ mod windows {
     use std::sync::OnceLock;
 
     use windows_sys::Win32::Foundation::{
-        HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation,
+        ERROR_FILE_NOT_FOUND, ERROR_MORE_DATA, ERROR_SUCCESS, HANDLE_FLAG_INHERIT,
+        INVALID_HANDLE_VALUE, SetHandleInformation,
     };
     use windows_sys::Win32::System::Console::{
         GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
@@ -68,6 +146,15 @@ mod windows {
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
         SetInformationJobObject,
     };
+    use windows_sys::Win32::System::Registry::{
+        HKEY_CURRENT_USER, REG_EXPAND_SZ, REG_SZ, RRF_NOEXPAND, RRF_RT_REG_EXPAND_SZ,
+        RRF_RT_REG_SZ, RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        HWND_BROADCAST, SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_SETTINGCHANGE,
+    };
+
+    use super::UserPath;
 
     /// The error mode gglib and every process it starts run with: no dialog
     /// for a missing library or file, and none for a crash.
@@ -154,6 +241,204 @@ mod windows {
         Ok(job)
     }
 
+    /// The key under `HKEY_CURRENT_USER` that holds the user's own
+    /// variables, and the variable's name. Registry names are not case
+    /// sensitive, so `Path` also finds a value written `PATH`.
+    const ENVIRONMENT: &str = "Environment";
+    const PATH: &str = "Path";
+
+    /// `text` as UTF-16 with the terminating NUL every call below reads to.
+    fn wide(text: &str) -> Vec<u16> {
+        text.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    /// A registry status as an [`io::Error`].
+    fn status_error(status: u32) -> io::Error {
+        io::Error::from_raw_os_error(i32::try_from(status).unwrap_or(i32::MAX))
+    }
+
+    pub(super) fn user_path() -> io::Result<UserPath> {
+        Ok(match read_string(ENVIRONMENT, PATH)? {
+            None => UserPath::Absent,
+            Some((text, expandable)) => UserPath::Text { text, expandable },
+        })
+    }
+
+    pub(super) fn set_user_path(text: &str, expandable: bool) -> io::Result<()> {
+        write_string(ENVIRONMENT, PATH, text, expandable)?;
+        announce_environment_change();
+        Ok(())
+    }
+
+    /// gglib's own key under `HKEY_CURRENT_USER`, and the value that
+    /// records the folders gglib added to the user's `Path`.
+    const GGLIB: &str = r"Software\gglib";
+    const PATH_RECORD: &str = "PathEntriesAdded";
+
+    pub(super) fn path_record() -> io::Result<String> {
+        Ok(read_string(GGLIB, PATH_RECORD)?
+            .map(|(text, _)| text)
+            .unwrap_or_default())
+    }
+
+    pub(super) fn set_path_record(text: &str) -> io::Result<()> {
+        if text.is_empty() {
+            delete_value(GGLIB, PATH_RECORD)
+        } else {
+            write_string(GGLIB, PATH_RECORD, text, false)
+        }
+    }
+
+    /// Remove the value `value` of the key `subkey` under
+    /// `HKEY_CURRENT_USER`; one that is not there is already removed.
+    fn delete_value(subkey: &str, value: &str) -> io::Result<()> {
+        let key = wide(subkey);
+        let name = wide(value);
+        // SAFETY: the two names are NUL-terminated UTF-16 that outlive the
+        // call, which only reads them.
+        match unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, key.as_ptr(), name.as_ptr()) } {
+            ERROR_SUCCESS | ERROR_FILE_NOT_FOUND => Ok(()),
+            other => Err(status_error(other)),
+        }
+    }
+
+    /// The string value `value` of the key `subkey` under
+    /// `HKEY_CURRENT_USER`, whole, with whether it is `REG_EXPAND_SZ`;
+    /// `None` when there is no such value or key.
+    fn read_string(subkey: &str, value: &str) -> io::Result<Option<(String, bool)>> {
+        let key = wide(subkey);
+        let name = wide(value);
+        // Either string type, and a REG_EXPAND_SZ value as it is stored:
+        // RRF_NOEXPAND is "do not automatically expand environment strings
+        // if the value is of type REG_EXPAND_SZ" (RegGetValueW).
+        let flags = RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_NOEXPAND;
+        loop {
+            let mut size: u32 = 0;
+            // SAFETY: the two names are NUL-terminated UTF-16 that outlive
+            // the call. "If pvData is NULL, and pcbData is non-NULL, the
+            // function returns ERROR_SUCCESS and stores the size of the
+            // data, in bytes" (RegGetValueW); it writes only `size`.
+            let status = unsafe {
+                RegGetValueW(
+                    HKEY_CURRENT_USER,
+                    key.as_ptr(),
+                    name.as_ptr(),
+                    flags,
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    &raw mut size,
+                )
+            };
+            match status {
+                ERROR_SUCCESS => {}
+                // No such value, or no such key at all.
+                ERROR_FILE_NOT_FOUND => return Ok(None),
+                other => return Err(status_error(other)),
+            }
+            // Room for the value and one more NUL: the call adds one to a
+            // string stored without it "if the buffer is large enough",
+            // and fails otherwise.
+            let units = usize::try_from(size).unwrap_or(usize::MAX).div_ceil(2) + 1;
+            let mut buffer = vec![0u16; units];
+            let mut written = u32::try_from(units * 2)
+                .map_err(|_| io::Error::other("the value is too long to read"))?;
+            let mut kind: u32 = 0;
+            // SAFETY: the names are as above, and `buffer` is `written`
+            // bytes of writable memory that outlives the call. The call
+            // writes at most `written` bytes there, the value's type to
+            // `kind` and the number of bytes it wrote to `written`.
+            let status = unsafe {
+                RegGetValueW(
+                    HKEY_CURRENT_USER,
+                    key.as_ptr(),
+                    name.as_ptr(),
+                    flags,
+                    &raw mut kind,
+                    buffer.as_mut_ptr().cast(),
+                    &raw mut written,
+                )
+            };
+            match status {
+                ERROR_SUCCESS => {}
+                // The value grew between the two calls: read it again.
+                ERROR_MORE_DATA => continue,
+                ERROR_FILE_NOT_FOUND => return Ok(None),
+                other => return Err(status_error(other)),
+            }
+            buffer.truncate(usize::try_from(written).unwrap_or(usize::MAX) / 2);
+            while buffer.last() == Some(&0) {
+                buffer.pop();
+            }
+            let text = String::from_utf16(&buffer).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("{subkey}\\{value} is not valid UTF-16, so gglib leaves it as it is"),
+                )
+            })?;
+            return Ok(Some((text, kind == REG_EXPAND_SZ)));
+        }
+    }
+
+    /// Store `text` as the string value `value` of the key `subkey` under
+    /// `HKEY_CURRENT_USER`, `REG_EXPAND_SZ` when `expandable` and `REG_SZ`
+    /// otherwise. An empty `text` is stored empty.
+    fn write_string(subkey: &str, value: &str, text: &str, expandable: bool) -> io::Result<()> {
+        let key = wide(subkey);
+        let name = wide(value);
+        let data = wide(text);
+        let bytes = u32::try_from(data.len() * 2)
+            .map_err(|_| io::Error::other("the value is too long to store"))?;
+        let kind = if expandable { REG_EXPAND_SZ } else { REG_SZ };
+        // SAFETY: the names are NUL-terminated UTF-16 that outlive the
+        // call. `data` is NUL-terminated UTF-16 of `bytes` bytes with the
+        // NUL counted, as "cbData must include the size of the terminating
+        // null character" for a string type (RegSetKeyValueW); the call only
+        // reads it. A missing key "is created".
+        let status = unsafe {
+            RegSetKeyValueW(
+                HKEY_CURRENT_USER,
+                key.as_ptr(),
+                name.as_ptr(),
+                kind,
+                data.as_ptr().cast(),
+                bytes,
+            )
+        };
+        match status {
+            ERROR_SUCCESS => Ok(()),
+            other => Err(status_error(other)),
+        }
+    }
+
+    /// Tell every top-level window that the user's variables changed.
+    /// Explorer reads them again, so a terminal it or the Start menu starts
+    /// from now on has the new `Path`. A program already running keeps the
+    /// environment it started with.
+    fn announce_environment_change() {
+        let area = wide(ENVIRONMENT);
+        let mut answer: usize = 0;
+        // SAFETY: "to effect a change in the environment variables for the
+        // system or the user, broadcast this message with lParam set to the
+        // string 'Environment'" (WM_SETTINGCHANGE). `area` is that string,
+        // NUL-terminated, and outlives the call, which returns once every
+        // window has answered or run out of time; it writes only `answer`.
+        // SMTO_ABORTIFHUNG skips a window that is not responding, and each
+        // other window has two seconds (SendMessageTimeoutW). A failure
+        // means only that some program reads the change later, so the
+        // result is not read.
+        unsafe {
+            SendMessageTimeoutW(
+                HWND_BROADCAST,
+                WM_SETTINGCHANGE,
+                0,
+                area.as_ptr() as isize,
+                SMTO_ABORTIFHUNG,
+                2_000,
+                &raw mut answer,
+            )
+        };
+    }
+
     pub(super) fn prepare() {
         for which in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
             // SAFETY: GetStdHandle takes one of the three constants, reads
@@ -177,7 +462,16 @@ mod windows {
 
     #[cfg(test)]
     mod tests {
-        use super::{GetErrorMode, QUIET, prepare};
+        use std::ptr;
+
+        use windows_sys::Win32::System::Registry::{
+            HKEY, KEY_QUERY_VALUE, RegCloseKey, RegDeleteKeyW, RegOpenKeyExW, RegQueryValueExW,
+        };
+
+        use super::{
+            ERROR_SUCCESS, GetErrorMode, HKEY_CURRENT_USER, QUIET, delete_value, prepare,
+            read_string, wide, write_string,
+        };
 
         #[test]
         fn prepare_switches_off_the_error_dialogs() {
@@ -185,6 +479,131 @@ mod windows {
             // SAFETY: GetErrorMode takes nothing and returns flags.
             let mode = unsafe { GetErrorMode() };
             assert_eq!(mode & QUIET, QUIET, "error mode {mode:#x}");
+        }
+
+        /// A key under `HKEY_CURRENT_USER` of this test run's own, removed
+        /// when it is dropped, so a failing assertion leaves nothing
+        /// behind. The user's real `Path` and record are never touched by a
+        /// test.
+        struct ScratchKey(String);
+
+        impl ScratchKey {
+            fn new(test: &str) -> Self {
+                Self(format!(
+                    r"Software\gglib-tests\{test}-{}",
+                    std::process::id()
+                ))
+            }
+
+            /// The bytes `value` takes as stored, read raw: `RegGetValueW`
+            /// adds a NUL to a string stored without one, `RegQueryValueExW`
+            /// does not.
+            fn stored_bytes(&self, value: &str) -> u32 {
+                let key = wide(&self.0);
+                let name = wide(value);
+                let mut handle: HKEY = ptr::null_mut();
+                // SAFETY: `key` is NUL-terminated UTF-16 that outlives the
+                // call, which writes the opened key's handle to `handle`.
+                let opened = unsafe {
+                    RegOpenKeyExW(
+                        HKEY_CURRENT_USER,
+                        key.as_ptr(),
+                        0,
+                        KEY_QUERY_VALUE,
+                        &raw mut handle,
+                    )
+                };
+                assert_eq!(opened, ERROR_SUCCESS, "opening {}", self.0);
+                let mut size: u32 = 0;
+                // SAFETY: `handle` was opened above with KEY_QUERY_VALUE;
+                // `name` is NUL-terminated UTF-16. With no buffer the call
+                // writes only the data's size to `size`.
+                let queried = unsafe {
+                    RegQueryValueExW(
+                        handle,
+                        name.as_ptr(),
+                        ptr::null(),
+                        ptr::null_mut(),
+                        ptr::null_mut(),
+                        &raw mut size,
+                    )
+                };
+                // SAFETY: `handle` is open and closed only here.
+                unsafe { RegCloseKey(handle) };
+                assert_eq!(queried, ERROR_SUCCESS, "querying {value}");
+                size
+            }
+        }
+
+        impl Drop for ScratchKey {
+            fn drop(&mut self) {
+                for made in [self.0.as_str(), r"Software\gglib-tests"] {
+                    let name = wide(made);
+                    // SAFETY: `name` is NUL-terminated UTF-16 that outlives
+                    // the call, which only reads it. The call removes a key
+                    // with no subkeys and refuses one with any, so the
+                    // parent goes only when no other run still has its key
+                    // there.
+                    unsafe { RegDeleteKeyW(HKEY_CURRENT_USER, name.as_ptr()) };
+                }
+            }
+        }
+
+        /// The bytes a string of `text` takes stored with exactly one NUL.
+        fn with_one_nul(text: &str) -> u32 {
+            u32::try_from((text.encode_utf16().count() + 1) * 2).expect("fits")
+        }
+
+        /// A long value is stored and read back whole, unexpanded, with its
+        /// type and one terminating NUL; an empty one is stored empty.
+        #[test]
+        fn a_long_string_value_is_stored_and_read_back_whole() {
+            let key = ScratchKey::new("user-path");
+            let long = (0..400)
+                .map(|n| format!(r"%USERPROFILE%\tools\number-{n:04}"))
+                .collect::<Vec<_>>()
+                .join(";");
+            assert!(long.len() > 8192);
+
+            write_string(&key.0, "Path", &long, true).expect("stored");
+            assert_eq!(key.stored_bytes("Path"), with_one_nul(&long));
+            assert_eq!(
+                read_string(&key.0, "Path").expect("read"),
+                Some((long, true))
+            );
+
+            write_string(&key.0, "Path", r"C:\plain", false).expect("stored");
+            assert_eq!(key.stored_bytes("Path"), with_one_nul(r"C:\plain"));
+            assert_eq!(
+                read_string(&key.0, "Path").expect("read"),
+                Some((r"C:\plain".to_owned(), false))
+            );
+
+            write_string(&key.0, "Path", "", true).expect("stored empty");
+            assert_eq!(key.stored_bytes("Path"), with_one_nul(""));
+            assert_eq!(
+                read_string(&key.0, "Path").expect("read"),
+                Some((String::new(), true))
+            );
+        }
+
+        /// The record's value is written as `REG_SZ`, read back, and
+        /// removed, and removing it again is no error.
+        #[test]
+        fn a_record_value_is_stored_read_and_removed() {
+            let key = ScratchKey::new("path-record");
+            let record = r"C:\Users\me\AppData\Local\gglib-gui;D:\gglib-gui";
+
+            write_string(&key.0, "PathEntriesAdded", record, false).expect("stored");
+            assert_eq!(key.stored_bytes("PathEntriesAdded"), with_one_nul(record));
+            assert_eq!(
+                read_string(&key.0, "PathEntriesAdded").expect("read"),
+                Some((record.to_owned(), false))
+            );
+
+            delete_value(&key.0, "PathEntriesAdded").expect("removed");
+            assert_eq!(read_string(&key.0, "PathEntriesAdded").expect("read"), None);
+            delete_value(&key.0, "PathEntriesAdded").expect("removing nothing is no error");
         }
     }
 }

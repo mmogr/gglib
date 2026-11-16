@@ -66,11 +66,20 @@ async fn admit(set: &ResidentSet) -> Result<bool, ModelRuntimeError> {
 
 /// Admits a request whose resident is recycled. The request goes on to a
 /// launch, and the server binary does not exist, so it ends at the spawn with
-/// the slot empty.
+/// the slot empty: refused as an engine that is not there.
 async fn assert_recycled(set: &ResidentSet) {
     let outcome = admit(set).await;
     assert!(
-        matches!(outcome, Err(ModelRuntimeError::SpawnFailed(_))),
+        matches!(
+            &outcome,
+            Err(ModelRuntimeError::LoadFailed(failure)) if matches!(
+                failure.cause,
+                gglib_core::ports::LoadCause::EngineNotWorking {
+                    failure: gglib_core::utils::process::bounded::Failure::NotFound,
+                    ..
+                }
+            )
+        ),
         "{outcome:?}"
     );
     assert!(set.queue().slot(PRIMARY_SLOT).is_none(), "recycled");

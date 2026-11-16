@@ -121,6 +121,36 @@ async fn a_refusal_carries_the_endpoints_status_and_words() {
         refusal.reason,
         r#"404 Not Found: {"error":"model not found: m"}"#
     );
+    assert!(!refusal.load_failed);
+}
+
+/// A model that did not load is refused in the endpoint's sentence alone,
+/// marked as a failed load, so `gglib up` prints the sentence and not the
+/// body it came in (#1959 C5).
+#[tokio::test]
+async fn a_model_that_did_not_load_is_refused_in_its_sentence() {
+    let (base, _served) = endpoint(
+        "500 Internal Server Error",
+        r#"{"error":{"message":"llama-server stopped while loading m: it exited with status 1. It printed: gguf_init_from_reader: invalid magic characters","type":"server_error","code":"model_load_failed"}}"#,
+    )
+    .await;
+    let refusal = prove(
+        &gglib_proxy::loopback::client(),
+        &base,
+        "m",
+        None,
+        &[],
+        Duration::from_secs(5),
+        Duration::from_secs(5),
+    )
+    .await
+    .expect_err("refused");
+    assert_eq!(
+        refusal.reason,
+        "llama-server stopped while loading m: it exited with status 1. It printed: \
+         gguf_init_from_reader: invalid magic characters"
+    );
+    assert!(refusal.load_failed);
 }
 
 #[tokio::test]
@@ -402,4 +432,150 @@ async fn a_proof_answered_by_a_file_path_says_the_model_id() {
     .expect("answered");
     assert_eq!(outcome.answered_by, "Q");
     assert_eq!(outcome.asked_for, "Q");
+}
+
+// ---------------------------------------------------------------------
+// What the daemon says of a proof whose model did not load (#1959 C5)
+// ---------------------------------------------------------------------
+
+/// A runtime that has kept, for each model id, the last load of it that
+/// failed and when, as the real one does; it runs nothing.
+#[derive(Debug, Default)]
+struct Kept(std::collections::HashMap<u32, (Instant, gglib_core::ports::LoadFailure)>);
+
+#[async_trait::async_trait]
+impl gglib_core::ports::ModelRuntimePort for Kept {
+    async fn admit(
+        &self,
+        _model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: Option<u64>,
+        _overrides: gglib_core::ports::LaunchOverrides,
+    ) -> Result<gglib_core::ports::Admission, gglib_core::ports::ModelRuntimeError> {
+        Err(gglib_core::ports::ModelRuntimeError::Internal(
+            "nothing runs here".to_owned(),
+        ))
+    }
+    async fn current_model(&self) -> Option<gglib_core::ports::RunningTarget> {
+        None
+    }
+    async fn stop_current(&self) -> Result<(), gglib_core::ports::ModelRuntimeError> {
+        Ok(())
+    }
+    async fn stop_model(
+        &self,
+        _model_id: u32,
+    ) -> Result<bool, gglib_core::ports::ModelRuntimeError> {
+        Ok(false)
+    }
+    fn last_load_failure(
+        &self,
+        model_id: u32,
+    ) -> Option<(Instant, gglib_core::ports::LoadFailure)> {
+        self.0.get(&model_id).cloned()
+    }
+}
+
+/// Model `name`'s load, stopped with exit 1 after printing `line`.
+fn stopped(name: &str, line: &str) -> gglib_core::ports::LoadFailure {
+    gglib_core::ports::LoadFailure {
+        model: name.to_owned(),
+        runtime: gglib_core::domain::RuntimeKind::Llama,
+        cause: gglib_core::ports::LoadCause::Stopped {
+            failure: Some(gglib_core::utils::process::bounded::Failure::Failed { code: 1 }),
+            said: Some(line.to_owned()),
+        },
+        fitted_context: None,
+    }
+}
+
+/// What the endpoint refused the proof of `qwen` with: the short form.
+fn short_refusal() -> ProofRefusal {
+    ProofRefusal {
+        reason: stopped("qwen", "gguf_init_from_reader: invalid magic").remote_sentence(),
+        load_failed: true,
+    }
+}
+
+/// The daemon's sentence for `refused`, or a panic naming what came back.
+fn load_failed_sentence(refused: crate::GuiError) -> String {
+    match refused {
+        crate::GuiError::LoadFailed(sentence) => sentence,
+        other => panic!("a failed load, not {other:?}"),
+    }
+}
+
+/// (a) This model's load, failed after the proof was asked: its whole
+/// sentence, with the line the engine printed.
+#[test]
+fn a_failure_of_this_proofs_load_is_said_in_full() {
+    let asked = Instant::now();
+    let failure = stopped("qwen", "gguf_init_from_reader: invalid magic");
+    let runtime = Kept([(3, (Instant::now(), failure.clone()))].into());
+
+    let said = load_failed_sentence(refused(short_refusal(), &runtime, 3, asked));
+
+    assert_eq!(said, failure.sentence());
+    assert!(said.contains("It printed: gguf_init_from_reader"), "{said}");
+}
+
+/// (b) A failure of this model kept from before the proof was asked is an
+/// earlier load's, not this one's: the endpoint's own words stand.
+#[test]
+fn a_failure_from_before_the_proof_is_not_its_reason() {
+    let earlier = Instant::now();
+    let runtime = Kept([(3, (earlier, stopped("qwen", "an earlier load's line")))].into());
+    std::thread::sleep(Duration::from_millis(5));
+    let asked = Instant::now();
+
+    let said = load_failed_sentence(refused(short_refusal(), &runtime, 3, asked));
+
+    assert_eq!(said, short_refusal().reason);
+}
+
+/// (c) Another model's failure, however recent, is never said as the reason
+/// this model did not answer.
+#[test]
+fn another_models_failure_is_not_its_reason() {
+    let asked = Instant::now();
+    let runtime = Kept(
+        [(
+            7,
+            (
+                Instant::now(),
+                stopped("llama-3-8b", "another model's line"),
+            ),
+        )]
+        .into(),
+    );
+
+    let said = load_failed_sentence(refused(short_refusal(), &runtime, 3, asked));
+
+    assert_eq!(said, short_refusal().reason);
+    assert!(!said.contains("another model's line"), "{said}");
+}
+
+/// (d) Nothing kept: the endpoint's own words; and a refusal that is not a
+/// failed load stays what it was.
+#[test]
+fn with_nothing_kept_the_endpoints_words_stand() {
+    let asked = Instant::now();
+    let runtime = Kept::default();
+
+    let said = load_failed_sentence(refused(short_refusal(), &runtime, 3, asked));
+    let other = refused(
+        ProofRefusal {
+            reason: "404 Not Found: {}".to_owned(),
+            load_failed: false,
+        },
+        &runtime,
+        3,
+        asked,
+    );
+
+    assert_eq!(said, short_refusal().reason);
+    assert!(
+        matches!(&other, crate::GuiError::ValidationFailed(r) if r == "404 Not Found: {}"),
+        "{other:?}"
+    );
 }

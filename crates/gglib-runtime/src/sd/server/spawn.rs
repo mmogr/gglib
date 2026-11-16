@@ -53,5 +53,7 @@ pub(crate) fn build_and_spawn_sd(
 
     command
         .spawn()
-        .map_err(|e| anyhow::anyhow!("Failed to spawn sd-server: {e}"))
+        // The system's error is kept as the source, so a launch can read
+        // why with `failure_kind`.
+        .map_err(|e| anyhow::Error::new(e).context("Failed to spawn sd-server"))
 }
