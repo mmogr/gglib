@@ -71,7 +71,7 @@ describe('the model registry', () => {
 
   it('is empty and loading until init reads the library, then holds what was read', async () => {
     const { result } = renderHook(() => useModelLibrary());
-    expect(result.current).toEqual({ models: [], loading: true, error: null });
+    expect(result.current).toEqual({ models: [], loading: true, heard: false, error: null });
 
     act(() => initModelEvents());
     await settle();
@@ -87,7 +87,7 @@ describe('the model registry', () => {
 
     act(() => initModelEvents());
     await settle();
-    expect(result.current).toEqual({ models: [], loading: false, error: 'daemon away' });
+    expect(result.current).toEqual({ models: [], loading: false, heard: false, error: 'daemon away' });
 
     await act(() => refreshModels());
     expect(result.current.error).toBeNull();
@@ -165,7 +165,7 @@ describe('the model registry', () => {
     await act(() => refreshModels());
     await act(() => addModel('/models/after.gguf'));
 
-    expect(result.current).toEqual({ models: [], loading: true, error: null });
+    expect(result.current).toEqual({ models: [], loading: true, heard: false, error: null });
     expect(transport.listModels).toHaveBeenCalledTimes(2);
   });
 
@@ -211,7 +211,7 @@ describe('the model registry', () => {
 
     expect(unsubscribe).toHaveBeenCalledTimes(1);
     expect(transport.listModels).toHaveBeenCalledTimes(1);
-    expect(result.current).toEqual({ models: [], loading: true, error: null });
+    expect(result.current).toEqual({ models: [], loading: true, heard: false, error: null });
   });
 
   it('adds, removes and updates through the transport, and reads again after each', async () => {

@@ -230,31 +230,32 @@ describe('the chat routes', () => {
       await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '5031'));
     });
 
-    it('reads the list again after reads that failed, waiting longer each time, rather than wait for ever', async () => {
+    // No timer: the stream opening (the service answering) is what reads again.
+    it('reads the list again when the stream opens after a read that failed, rather than wait for ever', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       cleanupServerEvents();
       forgetServerList();
-      const busy = async () => {
-        throw new Error('daemon busy');
-      };
-      // The first read and the first retry fail; the second retry lands.
       transport.listServers.mockClear();
-      transport.listServers.mockImplementationOnce(busy).mockImplementationOnce(busy).mockImplementation(async () => [listed(32, 5032)]);
+      transport.listServers
+        .mockImplementationOnce(async () => {
+          throw new Error('daemon busy');
+        })
+        .mockImplementation(async () => [listed(32, 5032)]);
       initServerEvents();
       served.push(32);
       const { at } = renderApp('/chat/new?model=32');
       await act(async () => {});
       expect(at()).toBe('/chat/new?model=32');
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1100);
+        await vi.advanceTimersByTimeAsync(20_000);
       });
-      expect(transport.listServers).toHaveBeenCalledTimes(2);
-      // The chat is open meanwhile: it needs no port to send.
+      // Time alone reads nothing; the chat is open meanwhile, needing no port to send.
+      expect(transport.listServers).toHaveBeenCalledTimes(1);
       expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '');
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(2100);
-      });
+
+      await openStream();
       expect(await page()).toHaveAttribute('data-port', '5032');
+      expect(transport.listServers).toHaveBeenCalledTimes(2);
       expect(at()).toBe('/chat/new?model=32');
       vi.useRealTimers();
     });

@@ -55,6 +55,8 @@ vi.mock('../../../src/services/transport', async (importOriginal) => {
       tokenRefusal: async () => null,
       subscribe: sse.subscribeSseEvent,
       onEventStreamOpen: sse.onEventStreamOpen,
+      onEventStreamClose: sse.onEventStreamClose,
+      isEventStreamOpen: sse.isEventStreamOpen,
       reconnectEventStreamNow: sse.reconnectEventStreamNow,
     }),
   };
@@ -193,8 +195,8 @@ describe('the window after a long outage', () => {
 });
 
 describe('the window on a healthy start', () => {
-  // Today each store reads once, and the download queue again when the
-  // stream first opens.
+  // Each store reads now, and again when the stream first opens, since a
+  // read answered before the stream was open may have missed an event.
   it('reads each store as many times as recorded here, and opens one stream', async () => {
     daemon.up = true;
     const view = renderWindow();
@@ -205,12 +207,12 @@ describe('the window on a healthy start', () => {
     expect(screen.getByTestId('settings')).toHaveTextContent('context 8192');
     expect(screen.getByTestId('library')).toHaveTextContent('Qwen3-4B');
     expect(daemon.reads).toEqual({
-      settings: 1,
-      models: 1,
-      'builtin tools': 1,
-      proxy: 1,
-      servers: 1,
-      remote: 1,
+      settings: 2,
+      models: 2,
+      'builtin tools': 2,
+      proxy: 2,
+      servers: 2,
+      remote: 2,
       downloads: 2,
     });
     expect(daemon.streams.filter((signal) => !signal.aborted)).toHaveLength(1);

@@ -21,10 +21,12 @@
  * dashboard stream as the main window. They stay up for the panel's life,
  * so there is one event stream however often the daemon comes and goes
  * (TX-1): when it goes, what the registries held is let go; when it comes
- * back, each is read again, and the stream connects at once rather than
- * sleeping out a reconnect wait that grew while the daemon was gone. A list
- * read that failed, or that an event overtook, is tried again each poll
- * until one lands, since only a landed read tells "nothing running" from
+ * back, the stream connects at once rather than sleeping out a reconnect
+ * wait that grew while the daemon was gone, and its opening reads each
+ * registry again (`keptCurrent`). A list read that failed, or that an
+ * event overtook, is followed by the next opening, the next server event
+ * (`serverEvents`) or, while the stream is open, `keptCurrent`'s own
+ * retry, since only a landed read tells "nothing running" from
  * "not known". Everything it does is HTTP except Open gglib,
  * its one window action (`show_main_window`, TM-9).
  *
@@ -43,17 +45,14 @@ import { cleanupProxyEvents, initProxyEvents } from '../services/proxyEvents';
 import { useEndpointFacts, useProxyState } from '../services/proxyRegistry';
 import { cleanupRemoteEvents, initRemoteEvents } from '../services/remoteEvents';
 import { useRemoteState } from '../services/remoteRegistry';
-import { cleanupServerEvents, initServerEvents, refreshServers, useServerListHeard } from '../services/serverEvents';
+import { cleanupServerEvents, initServerEvents, useServerListHeard } from '../services/serverEvents';
 import { Devices } from './Devices';
 import { Endpoint } from './Endpoint';
 import { Loaded, trayLoadedRows } from './Loaded';
 
-/** How often an unheard server list is read again: the probe's own poll. */
-const LIST_RETRY_MS = 2000;
-
 export const TrayPanel: FC = () => {
   // The daemon going lets go of what the registries held; its coming back
-  // reads them again and wakes the stream (`useDaemonRecovery`).
+  // wakes the stream, whose opening reads them again (`useDaemonRecovery`).
   const reachable = useDaemonRecovery();
   const facts = useEndpointFacts();
   const dash = useEndpointDashboard();
@@ -76,14 +75,6 @@ export const TrayPanel: FC = () => {
   }, []);
 
   const live = reachable === true;
-
-  // Until a list read lands, ask again each poll: a read that failed or that
-  // a server event overtook is dropped, and would leave Loaded unknown.
-  useEffect(() => {
-    if (!live || listHeard) return;
-    const timer = setInterval(refreshServers, LIST_RETRY_MS);
-    return () => clearInterval(timer);
-  }, [live, listHeard]);
 
   // The probe answering is not the registries having heard: until the
   // bridge's own read lands they hold nothing, which would draw a running

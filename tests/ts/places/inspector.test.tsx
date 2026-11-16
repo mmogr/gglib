@@ -49,6 +49,8 @@ vi.mock('../../../src/services/transport', async () => {
       getSettings: vi.fn(async () => ({})),
       subscribe: vi.fn(() => () => {}),
       onEventStreamOpen: vi.fn(() => () => {}),
+      onEventStreamClose: vi.fn(() => () => {}),
+      isEventStreamOpen: vi.fn(() => false),
       revealSecret: vi.fn(async () => null),
     }),
   };

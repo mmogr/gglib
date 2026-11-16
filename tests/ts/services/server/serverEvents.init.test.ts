@@ -133,7 +133,7 @@ describe('initServerEvents', () => {
    * A live event during the hydration fetch is newer than the fetch. Applying
    * the snapshot afterwards would resurrect a server that had just stopped.
    */
-  it('drops hydration that a live event has already overtaken', async () => {
+  it('drops hydration that a live event has already overtaken, and lands the read the event set going', async () => {
     // Typed on both sides deliberately. `ServerWireEvent` and `ServerInfo` are
     // otherwise read by nothing in a checked position — the subscription hands
     // its payload to a normalizer taking `unknown` — so corrupting either
@@ -155,6 +155,8 @@ describe('initServerEvents', () => {
     const { initServerEvents, cleanupServerEvents } = await loadFresh();
     initServerEvents();
 
+    // The read the event sets going answers with nothing running.
+    listServers.mockResolvedValue([]);
     // `server_stopped` carries no port — the Rust variant has `modelId` and
     // `modelName` only.
     deliver?.({ type: 'server_stopped', modelId: 1, modelName: 'Loaded' });
@@ -168,12 +170,15 @@ describe('initServerEvents', () => {
         runtime: 'llama',
       },
     ]);
-    await vi.waitFor(() => expect(ingestServerEvent).toHaveBeenCalled());
+    await vi.waitFor(() => expect(ingestServerEvent).toHaveBeenCalledTimes(2));
 
-    expect(ingestServerEvent).toHaveBeenCalledTimes(1);
-    expect(ingestServerEvent).toHaveBeenCalledWith(
+    // The overtaken hydration is dropped; the read the event set going (the
+    // list still unheard) is the one that lands.
+    expect(listServers).toHaveBeenCalledTimes(2);
+    expect(ingestServerEvent.mock.calls.map(([evt]) => evt)).toEqual([
       expect.objectContaining({ type: 'stopped' }),
-    );
+      { type: 'snapshot', servers: [] },
+    ]);
 
     cleanupServerEvents();
   });

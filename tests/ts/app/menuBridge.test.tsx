@@ -20,6 +20,9 @@ const menu = vi.hoisted(() => ({
 }));
 const transport = vi.hoisted(() => ({
   subscribe: vi.fn(() => () => {}),
+  onEventStreamOpen: vi.fn(() => () => {}),
+  onEventStreamClose: vi.fn(() => () => {}),
+  isEventStreamOpen: vi.fn(() => false),
   listModels: vi.fn(async () => [guiModel({ id: 7, name: 'qwen3-8b' }), guiModel({ id: 9, name: 'gemma-3-12b' })]),
   removeModel: vi.fn(async (_id: number) => {}),
   stopServer: vi.fn(async (_id: number) => {}),
