@@ -77,6 +77,13 @@ impl ModelRuntimePort for Scripted {
         }
         self.stop_fails.clone().map_or(Ok(true), Err)
     }
+
+    /// No pin is held; clearing one, as an unpinned start does, is fine.
+    fn set_pin(&self, pin: Option<gglib_core::ports::PinnedSpec>) -> Result<(), ModelRuntimeError> {
+        pin.map_or(Ok(()), |_| {
+            Err(ModelRuntimeError::Internal("no pinning here".to_owned()))
+        })
+    }
 }
 
 /// A loopback port nothing is listening on.
@@ -98,6 +105,8 @@ struct Fixture {
     model_id: i64,
     /// The port the scripted runtime says [`MODEL`] is on.
     model_port: u16,
+    /// The port the settings give the endpoint, where a start brings it up.
+    proxy_port: u16,
     _model_file: tempfile::TempDir,
 }
 
@@ -173,9 +182,10 @@ impl Fixture {
             }),
         );
         // Off 8080, where a developer's own daemon usually is.
+        let proxy_port = free_port().await;
         core.settings()
             .update(SettingsUpdate {
-                proxy_port: Some(Some(free_port().await)),
+                proxy_port: Some(Some(proxy_port)),
                 ..SettingsUpdate::default()
             })
             .await
@@ -193,6 +203,7 @@ impl Fixture {
             emitter,
             model_id,
             model_port,
+            proxy_port,
             _model_file: dir,
         }
     }
@@ -332,3 +343,6 @@ async fn stopping_an_image_model_in_the_second_slot_stops_it_by_id() {
 
     assert_eq!(fx.frames(), Vec::<String>::new());
 }
+
+#[path = "servers_proxy_events_tests.rs"]
+mod proxy_events;
