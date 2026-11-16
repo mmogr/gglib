@@ -45,6 +45,10 @@ tracing = { workspace = true }
 # never answers is waited out on the virtual clock.
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
 tempfile = { workspace = true }
+# A stand-in server behind a shim, and whether the process behind it still
+# runs once the client has stopped it (client_stop_tests.rs).
+gglib-test-proc = { workspace = true }
+sysinfo = { workspace = true }
 
 [lints]
 workspace = true

@@ -29,6 +29,7 @@ pub use builtin::{
     BUILTIN_PREFIX, BuiltinToolExecutorAdapter, DRAW_NO_WORDS, DRAW_NOT_ASKED, DRAW_THEN_SAY,
     DRAW_THEN_SAY_FAILED, DrawArm, DrawWith, DrawingTool, FILE_TOOLS, image_request_of,
 };
+pub use client::SERVER_EXIT_GRACE;
 pub use combined::CombinedToolExecutor;
 pub use service::{McpServerInfo, McpService};
 pub use tool_images::describe_item;

@@ -88,7 +88,8 @@ comment).
 > it ends: `taskkill /F`, a crash, a console window closed during a
 > teardown (which still ends the service at once), a logoff. The owner call
 > is `gglib_core::utils::process::tied::tie_to_this_process`, made after
-> each llama-server, `sd-server` and MCP server is started. On Windows it
+> each llama-server and `sd-server` is started (and after each MCP server,
+> until the next amendment started those as trees). On Windows it
 > puts the child in a job object the process makes on first use with
 > `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and never closes; the handle cannot
 > be inherited, so when the process ends Windows closes the last handle and
@@ -102,7 +103,7 @@ comment).
 > engines keep their process groups, the teardown and the orphan sweep at
 > the next start, by the owner's decision. A child is tied just after it
 > starts, so what it starts in that moment is not; the engines start
-> nothing, and an MCP server's shim is the one case.
+> nothing.
 > `crates/gglib-core/tests/tied_child.rs` kills a stand-in service outright
 > and requires its two tied children gone within 2 s where the call says
 > `Tied::ByJob`.
@@ -124,6 +125,39 @@ comment).
 > uses, and a longer `Path` read into one and written back would be cut
 > short. What the edit does to the text is `gglib_core::paths::user_path`,
 > tested on every OS.
+
+> **Amendment, 2026-11-16 ([#2012](https://github.com/mmogr/gglib/issues/2012)).**
+> An MCP server whose command is a shim is more than one process (`npx.cmd`
+> is `cmd.exe` running `node.exe`; a wrapper script is `sh` running its
+> program), and stopping the server ended only the first. An MCP server is
+> now started with `gglib_core::utils::process::tree::spawn`, a child
+> stopped with everything it started. On Windows the child is started
+> suspended (`CREATE_SUSPENDED`), put in a kill-on-close job object of its
+> own, then resumed, so nothing it starts escapes the job; stopping it calls
+> `TerminateJobObject`. Only gglib holds the job's handle, so the tree also
+> ends when gglib ends, however it ends, which is what
+> `tie_to_this_process` gave MCP servers before. If the job cannot be made
+> the child runs on, a warning is logged and stopping ends the child alone;
+> if it cannot be resumed it is ended and the start fails. The calls
+> (`CreateJobObjectW`, `SetInformationJobObject`,
+> `AssignProcessToJobObject`, `TerminateJobObject`,
+> `CreateToolhelp32Snapshot`, `Thread32First`, `Thread32Next`, `OpenThread`,
+> `ResumeThread`) are in `host.rs`, in a section of their own. On macOS and
+> Linux the child leads a process group of its own and stopping sends
+> `SIGKILL` to the group while the child is unreaped (`nix`, not linked into
+> an iOS build: gglib starts no process on a phone, and there a tree is its
+> child alone). A server in its own
+> group no longer gets a signal sent to gglib's group (the terminal's
+> Ctrl-C or hangup, `kill -9 %1`), so the daemon's teardown now stops
+> every MCP server explicitly, and `gglib mcp test` stops the server it is
+> testing when it hears a stop. A stop other than a `Drop` follows the MCP
+> stdio transport: it closes the server's input, gives it
+> `gglib_mcp::SERVER_EXIT_GRACE` (1 s) to exit by itself, writing what it
+> keeps, and only then ends the tree; every server is stopped together. Nothing ties a tree to gglib on
+> macOS and Linux, as nothing ties the engines. Each test starts a stand-in
+> through a shim: `crates/gglib-core/tests/stopped_with_what_it_started.rs`
+> (the tree, ten starts and stops), `gglib-mcp`'s `client_stop_tests.rs`
+> (the client) and `gglib-axum`'s `teardown_stops_every_mcp_server_and_what_it_started`.
 
 ## Consequences
 
@@ -148,11 +182,13 @@ comment).
 
 ## Kill criteria
 
-- **A program started outside the module.** On 2026-11-16,
-  `rg -c 'disallowed_methods' crates src-tauri -g '*.rs'` reads 8. Two are
-  `gglib-test-http`'s own, for its rule on accepting connections; the six
-  for this rule are two in `utils/process/mod.rs`, one in `detached.rs` and
-  three in `gglib-test-proc`. A higher count means the rule is being excused
+- **A program started outside the module.** On 2026-11-16, after #2012,
+  `rg -c 'disallowed_methods' crates src-tauri -g '*.rs'` counts 12 in nine
+  files. Two are `gglib-test-http`'s own, for its rule on accepting
+  connections, and one is `paths/canonical.rs`'s, for the canonicalize
+  rule; the nine for this rule are two in `utils/process/mod.rs`, two in
+  `detached.rs`, one in `tree.rs`, one in `host.rs` and three in
+  `gglib-test-proc`. A higher count means the rule is being excused
   rather than followed, and the exceptions are reviewed against decision 1.
 - **Windows called from a second place.**
   `rg -l 'windows_sys' crates src-tauri -g '*.rs'` reads one file,

@@ -2,6 +2,7 @@
 
 use super::env::EnvProvider;
 use super::fs::FsProvider;
+use super::node_managers::NodeDir;
 use super::platform::Platform;
 use super::types::{Attempt, AttemptOutcome};
 use std::path::{Path, PathBuf};
@@ -113,7 +114,8 @@ impl<'a> ExecutableSearcher<'a> {
         self.probe_dirs(self.platform.default_dirs(), command, attempts)
     }
 
-    /// Search in Node.js version manager shims.
+    /// Search where Node's version managers keep `node`, `npm` and `npx`,
+    /// in the places and order the platform gives.
     pub(crate) fn search_node_managers(
         &self,
         command: &str,
@@ -124,47 +126,56 @@ impl<'a> ExecutableSearcher<'a> {
             return None;
         }
 
-        let home = self.env.get("HOME")?;
-        let home = Path::new(home.to_str()?);
-
-        // Try asdf first (shim takes precedence), then volta, then nvm
-        let shims = [home.join(".asdf/shims"), home.join(".volta/bin")];
-        self.probe_dirs(shims, command, attempts)
-            .or_else(|| self.search_nvm(&home.join(".nvm"), command, attempts))
+        self.platform
+            .node_dirs(self.env)
+            .into_iter()
+            .find_map(|dir| match dir {
+                NodeDir::Holding(dir) => self.probe_dirs([dir], command, attempts),
+                NodeDir::Versions { root, bin, default } => {
+                    self.search_versions(&root, bin, default.as_deref(), command, attempts)
+                }
+            })
     }
 
-    /// Search nvm's versions: the default alias's, then each from the newest.
-    fn search_nvm(
+    /// Search a manager's installed versions under `root`: the one the
+    /// `default` file names, then each from the newest. A version's
+    /// programs are in its `bin` folder, or in its own folder without one.
+    fn search_versions(
         &self,
-        nvm_dir: &Path,
+        root: &Path,
+        bin: Option<&str>,
+        default: Option<&Path>,
         command: &str,
         attempts: &mut Vec<Attempt>,
     ) -> Option<PathBuf> {
-        if !nvm_dir.exists() {
-            return None;
-        }
-        let bin = |version: &str| [nvm_dir.join(format!("versions/node/{version}/bin"))];
+        let dir = |version: &str| {
+            let version = root.join(version);
+            [match bin {
+                Some(bin) => version.join(bin),
+                None => version,
+            }]
+        };
 
         // Check for default alias
-        if let Ok(default_version) = std::fs::read_to_string(nvm_dir.join("alias/default")) {
-            if let Some(found) = self.probe_dirs(bin(default_version.trim()), command, attempts) {
+        if let Some(Ok(default_version)) = default.map(std::fs::read_to_string) {
+            if let Some(found) = self.probe_dirs(dir(default_version.trim()), command, attempts) {
                 return Some(found);
             }
         }
 
-        // Fall back to scanning for latest version
-        let mut versions: Vec<String> = std::fs::read_dir(nvm_dir.join("versions/node"))
+        // Fall back to scanning for latest version. Only folders: nvm-windows
+        // keeps its own program and settings beside its versions.
+        let mut versions: Vec<String> = std::fs::read_dir(root)
             .ok()?
             .filter_map(std::result::Result::ok)
+            .filter(|e| e.path().is_dir())
             .filter_map(|e| e.file_name().into_string().ok())
             .collect();
-        versions.sort();
+        newest_first(&mut versions);
 
-        // Try versions from newest to oldest
         versions
             .iter()
-            .rev()
-            .find_map(|version| self.probe_dirs(bin(version), command, attempts))
+            .find_map(|version| self.probe_dirs(dir(version), command, attempts))
     }
 
     /// Search in user-provided additional paths.
@@ -177,6 +188,32 @@ impl<'a> ExecutableSearcher<'a> {
         self.probe_dirs(user_paths, command, attempts)
     }
 }
+
+/// Order version folders from the newest: `v<major>.<minor>.<patch>` by
+/// each number as a number, so `v18.10.0` comes before `v18.9.0` and
+/// `v9.0.0` after both. A name that is not a version comes last, in name
+/// order.
+fn newest_first(versions: &mut [String]) {
+    versions.sort_by(|a, b| match (version_numbers(a), version_numbers(b)) {
+        (Some(a), Some(b)) => b.cmp(&a),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => a.cmp(b),
+    });
+}
+
+/// The numbers of a version folder's name, `v<major>.<minor>.<patch>` (the
+/// `v` optional), or `None` when it is not one.
+fn version_numbers(name: &str) -> Option<(u64, u64, u64)> {
+    let mut numbers = name.strip_prefix('v').unwrap_or(name).split('.');
+    let mut next = || numbers.next()?.parse::<u64>().ok();
+    let version = (next()?, next()?, next()?);
+    numbers.next().is_none().then_some(version)
+}
+
+#[cfg(test)]
+#[path = "node_managers_tests.rs"]
+mod node_managers_tests;
 
 #[cfg(test)]
 mod tests {
