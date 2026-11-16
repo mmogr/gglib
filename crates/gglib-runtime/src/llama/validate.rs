@@ -210,6 +210,7 @@ mod tests {
             config_path: "/data/.llama/llama-config.json".to_owned(),
             healthy: installed && health_error.is_none(),
             health_error: health_error.map(str::to_owned),
+            fix: None,
             build: None,
             build_error: None,
             prebuilt: installed.then(|| super::super::LlamaPrebuiltInfo {

@@ -12,7 +12,7 @@ use gglib_core::domain::{EngineState, RuntimeKind};
 use gglib_core::paths::{LLAMA_INSTALL_COMMAND, SD_INSTALL_COMMAND};
 use gglib_core::ports::ModelRuntimePort;
 use gglib_runtime::engine::{
-    InstallPlan, PinStanding, PinState, pin_state, plan_install, standing_line,
+    FixOffer, InstallPlan, PinStanding, PinState, pin_state, plan_install, standing_line,
 };
 use gglib_runtime::llama::{LlamaProgressEvent, LlamaStatus, llama_status};
 use gglib_runtime::sd::{SdStatus, sd_status};
@@ -35,6 +35,10 @@ pub struct EngineStatus {
     /// Installed, installed and not working, or not installed: `installed`
     /// and `broken` as the one state every surface words.
     pub state: EngineState,
+    /// What gglib can do about a binary that does not work, with its words;
+    /// null when it works, or when gglib has no repair for why. A reinstall
+    /// is offered only where it is a download, which the daemon runs.
+    pub fix: Option<FixOffer>,
     pub binary_path: String,
     /// How it got there, from the install's record; null with no readable
     /// record.
@@ -151,6 +155,7 @@ fn common_status(
         installed,
         broken: None,
         state: EngineState::of(installed, false),
+        fix: None,
         binary_path,
         install: None,
         record_error: None,
