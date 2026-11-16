@@ -14,6 +14,7 @@
 use std::fmt::Write as _;
 
 use gglib_core::domain::{ContextFit, LaunchPlan};
+use gglib_core::host::Shell;
 
 /// Width of the flag column: `--spec-draft-n-max` and `--reasoning-format`
 /// are 18 characters, and the column keeps one space after them.
@@ -32,7 +33,7 @@ const ARROW: &str = "\u{2190}";
 pub(crate) fn launch_text(name: &str, id: i64, plan: &LaunchPlan) -> String {
     let mut out = format!(
         "\n  Launch for {name} (id {id})\n  {}\n\n",
-        plan.command_line()
+        plan.command_line(Shell::Posix).line
     );
     for line in argument_lines(plan) {
         let _ = writeln!(out, "  {line}");
@@ -350,7 +351,7 @@ mod tests {
         let recorded: Vec<RecordedLine> = recorded_plans()
             .into_iter()
             .map(|plan| RecordedLine {
-                line: plan.command_line(),
+                line: plan.command_line(Shell::Posix).line,
                 plan,
             })
             .collect();

@@ -12,6 +12,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use super::launch_narration::{LaunchDecision, LaunchNarration};
+use crate::host::Shell;
 use crate::server_config::ContextSizeSource;
 
 /// Whose choice an argument is.
@@ -220,21 +221,51 @@ pub struct LaunchPlan {
     pub fit: Option<ContextFit>,
 }
 
+/// A launch's command line, written for one shell: what a person on the
+/// machine that would run it pastes into that shell to make the same launch.
+///
+/// The daemon writes it for its own machine's shell
+/// ([`HostOs::shell`](crate::host::HostOs::shell)) and serves it beside the
+/// plan, so every surface shows the same line and none quotes one itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct CommandLine {
+    /// The shell the line is written for.
+    pub shell: Shell,
+    /// The program, as the shell takes it.
+    pub program: String,
+    /// One entry per [`LaunchPlan::args`] entry, in order: its flag, then its
+    /// value as the shell takes it when it has one.
+    pub args: Vec<String>,
+    /// The whole line: the program, then each argument, joined by spaces.
+    pub line: String,
+}
+
 impl LaunchPlan {
-    /// The command line, one token per argument, a value with a space in
-    /// it quoted: what a person would type to make the same launch.
+    /// The command line written for `shell`: the program, then one token per
+    /// argument, each value quoted as that shell needs.
     #[must_use]
-    pub fn command_line(&self) -> String {
-        let mut line = self.program.clone();
-        for arg in &self.args {
-            line.push(' ');
-            line.push_str(&arg.flag);
-            if let Some(value) = &arg.value {
-                line.push(' ');
-                line.push_str(&quote(value));
-            }
+    pub fn command_line(&self, shell: Shell) -> CommandLine {
+        let program = self.program.clone();
+        let args: Vec<String> = self
+            .args
+            .iter()
+            .map(|arg| match &arg.value {
+                Some(value) => format!("{} {}", arg.flag, quote(value)),
+                None => arg.flag.clone(),
+            })
+            .collect();
+        let line = std::iter::once(program.as_str())
+            .chain(args.iter().map(String::as_str))
+            .collect::<Vec<_>>()
+            .join(" ");
+        CommandLine {
+            shell,
+            program,
+            args,
+            line,
         }
-        line
     }
 }
 
@@ -255,6 +286,10 @@ fn quote(value: &str) -> String {
 }
 
 #[cfg(test)]
+#[path = "launch_plan_shell_tests.rs"]
+mod shell_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -266,55 +301,6 @@ mod tests {
             source: ChoiceSource::Gglib,
             reason: String::new(),
         }
-    }
-
-    fn plan(args: Vec<LaunchArg>) -> LaunchPlan {
-        LaunchPlan {
-            program: "llama-server".to_owned(),
-            args,
-            narration: LaunchNarration::new("m", None, 0),
-            unloads: None,
-            fit: None,
-        }
-    }
-
-    #[test]
-    fn the_command_line_is_the_program_and_each_token_in_order() {
-        let plan = plan(vec![
-            arg("-m", Some("/models/qwen.gguf")),
-            arg("--metrics", None),
-            arg("--port", Some("auto")),
-        ]);
-        assert_eq!(
-            plan.command_line(),
-            "llama-server -m /models/qwen.gguf --metrics --port auto"
-        );
-    }
-
-    #[test]
-    fn a_value_with_a_space_or_a_quote_is_quoted_for_a_shell() {
-        let plan = plan(vec![
-            arg("-m", Some("/Users/m/Library/Application Support/g/a.gguf")),
-            arg("--mmproj", Some("/it's/p.gguf")),
-        ]);
-        assert_eq!(
-            plan.command_line(),
-            "llama-server -m '/Users/m/Library/Application Support/g/a.gguf' --mmproj '/it'\\''s/p.gguf'"
-        );
-    }
-
-    #[test]
-    fn a_value_a_shell_would_expand_is_quoted() {
-        let plan = plan(vec![
-            arg("--alias", Some("$HOME")),
-            arg("-ot", Some(r"blk\.\d+\.ffn_.*=CPU")),
-            arg("--host", Some("127.0.0.1")),
-            arg("--override-kv", Some("k=v,a+b%c:d@e")),
-        ]);
-        assert_eq!(
-            plan.command_line(),
-            r"llama-server --alias '$HOME' -ot 'blk\.\d+\.ffn_.*=CPU' --host 127.0.0.1 --override-kv k=v,a+b%c:d@e"
-        );
     }
 
     #[test]
