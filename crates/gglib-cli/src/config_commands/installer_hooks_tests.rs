@@ -1,14 +1,17 @@
 //! The desktop app's Windows installer runs the `gglib.exe` it installs to
 //! put that folder on the user's `PATH`, and its uninstaller runs it to take
-//! the folder off: `src-tauri/windows/installer-hooks.nsh`. These read that
-//! file and the config that hands it to Tauri, and parse each `gglib`
-//! command line in it with the CLI's own parser, so the installer cannot
-//! name a command this gglib does not have.
+//! the folder off; both run the `gglib.exe` already installed to stop its
+//! service before they replace or remove its files:
+//! `src-tauri/windows/installer-hooks.nsh`. These read that file and the
+//! config that hands it to Tauri, and parse each `gglib` command line in it
+//! with the CLI's own parser, so the installer cannot name a command this
+//! gglib does not have.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use super::{ConfigCommand, PathEntryCommand};
-use crate::commands::Commands;
+use crate::commands::{Commands, DaemonCommand};
 use crate::remote_flag::parse_from;
 
 /// The desktop app's folder, `src-tauri`.
@@ -136,15 +139,131 @@ fn the_uninstall_takes_its_folder_off_the_path() {
     assert_eq!(branches(&body, remove), ["${If} $UpdateMode <> 1"]);
 
     // Not before the uninstall can no longer be cancelled: the question
-    // whether to close a running app comes first, in the same branch.
-    let check = body
+    // whether to close a running app comes first, and so does the stop of
+    // the service, either of which can end the uninstall.
+    assert!(position(&body, APP_CHECK) < remove, "the app closes first");
+    assert!(position(&body, STOP) < remove, "the service stops first");
+}
+
+/// The line that asks whether to close the running desktop app, and closes
+/// it: Tauri's own macro, which the template runs again after the pre-hooks.
+const APP_CHECK: &str =
+    r#"!insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}""#;
+
+/// The line that stops the service, defined once in the hooks file.
+const STOP: &str = "!insertmacro GGLIB_STOP_SERVICE";
+
+/// Where `line` is in `lines`, which hold it once.
+fn position(lines: &[&str], line: &str) -> usize {
+    let found: Vec<usize> = (0..lines.len()).filter(|at| lines[*at] == line).collect();
+    assert_eq!(found.len(), 1, "{line} once in {lines:?}");
+    found[0]
+}
+
+/// Before an install writes a file and before an uninstall removes one, the
+/// app is closed and then the service is stopped: the app is the service's
+/// client and starts it again when it finds none, so it goes first. In
+/// every mode, an update (`/UPDATE`) too: each replaces or removes
+/// `gglib.exe`.
+#[test]
+fn the_app_closes_then_the_service_stops_before_a_file_changes() {
+    let hooks = read(&src_tauri().join("windows/installer-hooks.nsh"));
+    for hook in ["NSIS_HOOK_PREINSTALL", "NSIS_HOOK_PREUNINSTALL"] {
+        let body = macro_body(&hooks, hook);
+        let check = position(&body, APP_CHECK);
+        let stop = position(&body, STOP);
+        assert!(
+            check < stop,
+            "{hook}: the app closes before the service stops"
+        );
+        assert_eq!(branches(&body, check), Vec::<&str>::new(), "{hook}");
+        assert_eq!(branches(&body, stop), Vec::<&str>::new(), "{hook}");
+    }
+}
+
+/// The service is stopped by the `gglib.exe` already installed, the one
+/// program there before an install: on an upgrade that is the previous
+/// release, so the command line is exactly one every release has, with no
+/// flag a newer gglib might add. On a first install there is no `gglib.exe`,
+/// and nothing to stop.
+#[test]
+fn the_installed_gglib_stops_its_service_in_bounded_time() {
+    let hooks = read(&src_tauri().join("windows/installer-hooks.nsh"));
+    let body = macro_body(&hooks, "GGLIB_STOP_SERVICE");
+    let runs = gglib_runs(&body);
+    assert_eq!(runs, [["daemon", "stop"]]);
+    let line = std::iter::once("gglib".to_owned()).chain(runs[0].iter().cloned());
+    let Ok((cli, remote)) = parse_from(line) else {
+        panic!("daemon stop does not parse");
+    };
+    assert!(!remote, "this machine's service");
+    assert!(matches!(
+        cli.command,
+        Some(Commands::Daemon {
+            command: DaemonCommand::Stop { yes: false, .. }
+        })
+    ));
+
+    let stop = gglib_line(&body);
+    assert_eq!(
+        branches(&body, stop),
+        [r#"${If} ${FileExists} "$INSTDIR\gglib.exe""#]
+    );
+
+    // `daemon stop` waits for the service a little past the service's own
+    // watchdog; the installer waits longer than that, and not a minute more.
+    let millis: u64 = body[stop]
+        .split_whitespace()
+        .find_map(|word| word.strip_prefix("/TIMEOUT="))
+        .expect("the stop has a time limit")
+        .parse()
+        .expect("milliseconds");
+    let limit = Duration::from_millis(millis);
+    let floor = gglib_axum::SHUTDOWN_WATCHDOG + Duration::from_secs(10);
+    assert!(limit >= floor, "{limit:?} is under {floor:?}");
+    assert!(limit <= floor + Duration::from_mins(1), "{limit:?}");
+}
+
+/// Whether the service stopped is judged by what the install needs: that
+/// nothing still runs the installed `gglib.exe`. When something does, the
+/// hook says so in the log, and in a message box unless silent, and aborts
+/// before the template writes or removes a file, never half replacing the
+/// install.
+#[test]
+fn a_service_that_will_not_stop_aborts_before_a_file_changes() {
+    let hooks = read(&src_tauri().join("windows/installer-hooks.nsh"));
+    let body = macro_body(&hooks, "GGLIB_STOP_SERVICE");
+    let stop = gglib_line(&body);
+    let tried = body
         .iter()
         .position(|line| {
-            *line == r#"!insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}""#
+            line.starts_with("FileOpen $") && line.ends_with(r#" "$INSTDIR\gglib.exe" a"#)
         })
-        .expect("the hook asks whether to close a running app");
-    assert!(check < remove, "the question comes before the PATH edit");
-    assert_eq!(branches(&body, check), branches(&body, remove));
+        .expect("the hook tries the installed gglib.exe for writing");
+    assert!(stop < tried, "it is tried after the stop");
+
+    let abort = body
+        .iter()
+        .rposition(|line| *line == "Abort" || line.starts_with("Abort "))
+        .expect("the hook aborts");
+    assert!(tried < abort, "the abort follows the try");
+    let said = &body[tried..abort];
+    assert!(
+        said.iter().any(|line| line.starts_with("DetailPrint ")),
+        "in the log"
+    );
+    assert!(
+        said.iter().any(|line| line.starts_with("MessageBox ")),
+        "in a box"
+    );
+    assert!(said.contains(&"${If} ${Silent}"), "no box when silent");
+    // LogicLib only: a label in a macro inserted twice is defined twice.
+    assert!(
+        !body
+            .iter()
+            .any(|line| line.ends_with(':') || line.starts_with("Goto ")),
+        "a label"
+    );
 }
 
 #[test]
@@ -162,6 +281,17 @@ fn the_installer_commands_run_before_anything_is_set_up() {
             "{action}"
         );
     }
+    // The stop of this machine's service, which the installer runs before
+    // it replaces the files and the uninstaller before it removes them.
+    let stop = command(&["daemon", "stop"]);
+    assert!(
+        crate::dispatch::leaves_nothing_behind(stop.as_ref()),
+        "stop"
+    );
+    let far = command(&["daemon", "stop", "--remote", "--yes"]);
+    assert!(!crate::dispatch::leaves_nothing_behind(far.as_ref()));
+    let status = command(&["daemon", "status"]);
+    assert!(!crate::dispatch::leaves_nothing_behind(status.as_ref()));
     let paths = command(&["config", "paths"]);
     assert!(!crate::dispatch::leaves_nothing_behind(paths.as_ref()));
     assert!(!crate::dispatch::leaves_nothing_behind(None));

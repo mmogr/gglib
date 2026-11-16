@@ -131,6 +131,11 @@ pub fn install(dir: &Path, name: &str, instructions: &str) -> PathBuf {
 /// elsewhere. Neither hands its process over to the program, so the program
 /// runs as the wrapper's child.
 ///
+/// The `sh` script is written by a child `sh`, never through a descriptor of
+/// this process, so it can be started the moment this returns: Linux would
+/// refuse it as "text file busy" while a process another thread was just
+/// starting still held such a descriptor.
+///
 /// # Panics
 ///
 /// When the script cannot be written or made executable.
@@ -147,21 +152,59 @@ pub fn wrap(dir: &Path, name: &str, program: &Path) -> PathBuf {
             format!("#!/bin/sh\n\"{program}\" \"$@\"\nstatus=$?\nexit $status\n"),
         )
     };
-    std::fs::write(&wrapper, script)
-        .unwrap_or_else(|e| panic!("gglib-test-proc: writing {}: {e}", wrapper.display()));
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap_or_else(
-            |e| {
-                panic!(
-                    "gglib-test-proc: making {} executable: {e}",
-                    wrapper.display()
-                )
-            },
-        );
-    }
+    write_script(&wrapper, &script);
     wrapper
+}
+
+/// Writes `script` to `path` as an executable file, by a child `sh`.
+///
+/// Linux will not start a program from a file any process holds open for
+/// writing ("text file busy"). A file this process wrote itself can be held
+/// so after it is closed: a process another thread starts at that moment
+/// begins as a copy of this one, holding every descriptor open then, until
+/// it starts its own program. [`install`] waits that out by running its
+/// copy once; a wrapper cannot be run once, since that runs the program. So
+/// the wrapper is written by a child, and only that child and the `cat` it
+/// starts ever hold it open for writing. Both have exited when this
+/// returns, and no descriptor to it was ever in this process to be copied.
+#[cfg(unix)]
+fn write_script(path: &Path, script: &str) {
+    use std::io::Write;
+
+    let mut writer = command("/bin/sh")
+        .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+        .arg(path)
+        .stdin(Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| {
+            panic!(
+                "gglib-test-proc: starting sh to write {}: {e}",
+                path.display()
+            )
+        });
+    writer
+        .stdin
+        .take()
+        .expect("sh's stdin")
+        .write_all(script.as_bytes())
+        .unwrap_or_else(|e| panic!("gglib-test-proc: writing {}: {e}", path.display()));
+    let status = writer
+        .wait()
+        .unwrap_or_else(|e| panic!("gglib-test-proc: writing {}: {e}", path.display()));
+    assert!(
+        status.success(),
+        "gglib-test-proc: writing {}: sh {status}",
+        path.display()
+    );
+}
+
+/// Writes `script` to `path`. Windows runs a `.cmd` through `cmd.exe`,
+/// which reads it; nothing refuses to start a file that was open for
+/// writing.
+#[cfg(not(unix))]
+fn write_script(path: &Path, script: &str) {
+    std::fs::write(path, script)
+        .unwrap_or_else(|e| panic!("gglib-test-proc: writing {}: {e}", path.display()));
 }
 
 /// Removes `path`, if there is one.
@@ -189,14 +232,19 @@ fn built() -> &'static Path {
     PROGRAM.get_or_init(build)
 }
 
+/// A command that starts `program`: the one place this crate starts one.
 #[expect(
     clippy::disallowed_methods,
     reason = "gglib-test-proc has no dependencies, so it cannot take gglib_core::utils::process; a test program needs no Windows console flag"
 )]
+fn command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    Command::new(program)
+}
+
 fn build() -> PathBuf {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
-    let output = Command::new(&cargo)
+    let output = command(&cargo)
         .args([
             "build",
             "--locked",
@@ -233,15 +281,12 @@ fn build() -> PathBuf {
 /// On Linux a copy can be refused for a moment as "text file busy", while a
 /// process forked elsewhere in the test binary still holds the descriptor it
 /// was written through; that is retried. Once a run has started, no such
-/// descriptor is left to reach the test's own.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "gglib-test-proc has no dependencies, so it cannot take gglib_core::utils::process; a test program needs no Windows console flag"
-)]
+/// descriptor is left to reach the test's own, and the copy is never opened
+/// for writing again.
 fn run_once(program: &Path) {
     let mut busy = 0;
     let ran = loop {
-        match Command::new(program).stdin(Stdio::null()).output() {
+        match command(program).stdin(Stdio::null()).output() {
             Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy && busy < 100 => {
                 busy += 1;
                 std::thread::sleep(std::time::Duration::from_millis(10));

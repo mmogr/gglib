@@ -8,6 +8,7 @@ Safe action wrappers around server lifecycle operations. A stop of a server that
 
 | File | Role |
 |------|------|
+| `endpointOff.ts` | `sayEndpointOff(answer, say)` — a load that left the endpoint off (its port held by another program) is a success; the answer's `endpoint_off`, the status's own sentence, is said as a warning beside it, the same from every place that loads |
 | `safeActions.ts` | `safeStopServer(modelId)` — wraps `getTransport().stopServer()`, treats `NOT_FOUND`, `CONFLICT` or "not running" as success, rethrows anything else |
 
 ## Flow

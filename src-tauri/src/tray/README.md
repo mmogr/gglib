@@ -66,7 +66,8 @@ window left it wrong for the rest of the session.
 `sync` is called from `menu::state_sync::sync_all_state` rather than directly,
 so the tray cannot fall out of step with the macOS application menu — and only
 when the snapshot actually changed, because a repaint re-decodes the icon on
-macOS and makes `ksni` rebuild the whole menu over D-Bus on Linux.
+macOS and makes `ksni` rebuild the whole menu over D-Bus on Linux. The one
+other repaint is for a change of the system's theme (see the end of this page).
 
 Turn Endpoint On / Off goes through [`crate::proxy_actions`] rather than
 emitting an event for the frontend to act on, and so does the macOS menu's.
@@ -231,8 +232,34 @@ dark menu bar.
 
 Windows and Linux recolour nothing: they show the icon's own pixels, and black
 all but vanishes on a dark taskbar or panel. So there `icon::for_state` hands
-over the same glyph in the app icon's blue, which reads on light and dark bars
-alike. It is the same file recoloured, not a second asset.
+over the same glyph recoloured, never a second asset:
+
+| Bar | Glyph | Outline's opacity | Contrast, outline / solid |
+|---|---|---|---|
+| Windows, light taskbar | black | 45% (alpha 114) | 3.27 to 3.29:1 / 18.9 to 20.0:1 on `#F3F3F3` and `#F9F9F9` |
+| Windows, dark taskbar | white | 45% (alpha 114) | 4.06 to 4.34:1 / 14.0 to 16.3:1 on `#2C2C2C` and `#202020` |
+| Linux, colour unknown | the app icon's blue | 35% (alpha 89) | 1.45 to 1.66:1 / 3.17 to 4.63:1 on the same four greys |
+
+The outline's opacity is the alpha `fade` really produces from the glyph's
+full 255, and `icon`'s tests read the contrast from the pixels it returns.
+45% leaves a little room over WCAG's 3:1 for a graphic; 43% is the least
+that reaches it on the light taskbar.
+
+Windows' taskbar, its notification area and the overflow flyout follow the
+*system* mode ("Choose your default Windows mode"), not the app mode a window
+follows, and the two can differ. `icon` asks
+`gglib_core::utils::process::host::taskbar_is_light`, the one place gglib reads
+Windows' registry, at every repaint; Linux has no such answer, and keeps the
+blue. Switching Windows between Light and Dark changes both modes and sends
+the main window a `ThemeChanged`, on which the tray repaints, reading the
+taskbar's mode then, where its paint follows the taskbar at all
+(`icon::follows_the_bar`, true only when Windows answers): on macOS and
+Linux the event repaints nothing, so `ksni` does not rebuild its menu for
+it; a taskbar changed on its own (Custom) is followed at
+the next repaint, when the service's state next changes. Unverified: that
+the repaint on `ThemeChanged` sees the new taskbar mode. If Windows writes
+the app's mode, and sends the event, before it writes the taskbar's, the
+icon keeps the old colour until the next repaint.
 
 That is also why there are two files for three states. The outline icon is the
 bubble with its alpha scaled down, derived at runtime in `icon` rather than

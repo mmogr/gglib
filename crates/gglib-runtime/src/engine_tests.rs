@@ -440,3 +440,42 @@ fn an_uninstall_answers_in_the_apps_keys() {
         serde_json::json!({ "wasInstalled": true, "removedPaths": ["/data/.sd/bin"] })
     );
 }
+
+/// A binary the system calls busy is asked again until a run starts, and
+/// what that run answers is the check's.
+#[test]
+fn a_busy_binary_is_asked_again_until_it_starts() {
+    let mut runs = 0;
+
+    let answer = super::check::once_not_busy(std::time::Duration::from_secs(2), || {
+        runs += 1;
+        if runs < 3 {
+            Err(std::io::ErrorKind::ExecutableFileBusy.into())
+        } else {
+            Ok(runs)
+        }
+    });
+
+    assert_eq!(answer.expect("the third run starts"), 3);
+}
+
+/// Only a busy binary is asked again, and only until the limit: any other
+/// failure is the answer at once, and a binary still busy then is busy.
+#[test]
+fn only_a_busy_binary_is_asked_again_and_not_for_ever() {
+    let mut runs = 0;
+    let missing = super::check::once_not_busy(std::time::Duration::from_secs(2), || {
+        runs += 1;
+        Err::<(), _>(std::io::ErrorKind::NotFound.into())
+    });
+    assert_eq!(missing.unwrap_err().kind(), std::io::ErrorKind::NotFound);
+    assert_eq!(runs, 1);
+
+    let busy = super::check::once_not_busy(std::time::Duration::from_millis(50), || {
+        Err::<(), _>(std::io::ErrorKind::ExecutableFileBusy.into())
+    });
+    assert_eq!(
+        busy.unwrap_err().kind(),
+        std::io::ErrorKind::ExecutableFileBusy
+    );
+}

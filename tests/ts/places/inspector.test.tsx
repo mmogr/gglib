@@ -303,6 +303,16 @@ describe('the inspector, a model on this machine', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent("Didn't load: out of memory (needs 9.1 GB, 6.0 free)");
   });
 
+  it('says why the endpoint is off beside a load that left it off, and no failure', async () => {
+    const off = 'The endpoint is off: port 8080 is in use by another program. Stop it, or choose another port.';
+    post.mockResolvedValueOnce({ port: 9456, message: 'Server started on port 9456', endpoint_off: off });
+    renderInspector();
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Load' }));
+
+    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent(off));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('loads a model that is not loaded for Chat, then opens the chat on its port', async () => {
     renderInspector();
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Chat' }));

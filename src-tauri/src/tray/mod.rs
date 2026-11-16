@@ -63,6 +63,14 @@ impl Tray {
     }
 }
 
+/// Whether a change of the system's theme can change the tray icon: only
+/// where its colour follows the taskbar's, which is Windows. Elsewhere the
+/// theme is left to the system (macOS) or not known (Linux), and a repaint
+/// for it would be work for nothing.
+pub(crate) fn follows_the_theme() -> bool {
+    icon::follows_the_bar()
+}
+
 /// Apply the daemon's state to the tray, if one was built.
 ///
 /// A no-op until then, so the initial sync during setup is harmless. Called

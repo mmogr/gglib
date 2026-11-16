@@ -241,6 +241,17 @@ describe('the Load palette', () => {
     await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent("Didn't load: llama-server exited: out of memory"));
   });
 
+  it('a load that left the endpoint off is no failure: why is one toast, in the daemon’s words', async () => {
+    const off = 'The endpoint is off: port 8080 is in use by another program. Stop it, or choose another port.';
+    const answer = { port: 9001, message: 'Server started on port 9001', endpoint_off: off };
+    transport.serveModel.mockResolvedValueOnce(answer);
+    const { user } = await renderPalette([QWEN]);
+    await user.click(button());
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByTestId('toasts')).toHaveTextContent(off));
+    expect(screen.getByTestId('toasts')).not.toHaveTextContent("Didn't load");
+  });
+
   it('⌥⏎ opens Load with options for the highlighted model instead of loading it', async () => {
     explain.auto = () => fitting();
     const { user, at } = await renderPalette([QWEN, GEMMA]);

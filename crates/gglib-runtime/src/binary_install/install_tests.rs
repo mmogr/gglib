@@ -434,6 +434,63 @@ async fn an_install_whose_server_cannot_start_fails_its_verify_saying_why() {
     );
 }
 
+/// A server something still holds open for writing when Verify runs it is
+/// run again once it is let go, and the install succeeds (#2045).
+///
+/// Linux will not run a file any process holds open for writing ("text
+/// file busy"). A process started on another thread just as the server was
+/// written holds a copy of the descriptor it was written through until it
+/// starts its own program, so an install's Verify, run at once, can meet
+/// one. This test holds such a descriptor itself from the moment the record
+/// is saved, just before Verify, and lets go of it 200 ms later. Where the
+/// system runs a file open for writing, as macOS does, there is nothing to
+/// wait out, and it lets go at once.
+#[tokio::test]
+async fn a_server_held_open_for_writing_is_verified_once_it_is_let_go() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let dirs = dirs();
+    let zip = zip_of(&["widget-server", "libwidget.so"]);
+    let fake = serve(&["w-v1-bin-Linux-Ubuntu-24.04-x86_64.zip"], &zip).await;
+    let let_go = Arc::new(AtomicBool::new(false));
+    let mut holder = None;
+    let (tx, _rx) = mpsc::channel(256);
+
+    let result = install_prebuilt_from(
+        &fake.base,
+        &pinned(),
+        &spec(AssetChoice::First),
+        target(&dirs, LINUX),
+        |_| {
+            let held = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&dirs.server)?;
+            let run = gglib_core::utils::process::cmd(&dirs.server)
+                .arg("--version")
+                .output();
+            // Where the system runs it anyway, `held` is dropped here.
+            if matches!(&run, Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy) {
+                let let_go = Arc::clone(&let_go);
+                holder = Some(std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    let_go.store(true, Ordering::SeqCst);
+                    drop(held);
+                }));
+            }
+            Ok(())
+        },
+        &tx,
+    )
+    .await;
+
+    result.expect("the install succeeds once the server is let go");
+    if let Some(holder) = holder {
+        assert!(let_go.load(Ordering::SeqCst), "verified while still held");
+        holder.join().expect("the holder lets go");
+    }
+}
+
 #[tokio::test]
 async fn a_failed_download_says_so() {
     let dirs = dirs();
