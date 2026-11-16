@@ -66,8 +66,20 @@ pub(crate) fn second_launch(args: Vec<String>, cwd: String) -> SecondLaunch {
 
 /// The single-instance plugin, calling [`on_second_launch`]. `main`
 /// registers it before every other plugin, as the plugin requires.
-pub(crate) fn plugin() -> TauriPlugin<Wry> {
+fn plugin() -> TauriPlugin<Wry> {
     tauri_plugin_single_instance::init(on_second_launch)
+}
+
+/// `builder` with the single-instance guard as its first plugin, in a
+/// release build. A debug build gets none: the guard is keyed on the app's
+/// identifier alone, so a build under development started beside an
+/// installed gglib would exit and raise that one.
+pub(crate) fn guarded(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
+    if cfg!(debug_assertions) {
+        builder
+    } else {
+        builder.plugin(plugin())
+    }
 }
 
 /// The single-instance plugin's callback: carry out [`second_launch`].

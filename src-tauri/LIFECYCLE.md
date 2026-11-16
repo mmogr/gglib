@@ -16,7 +16,9 @@ D-Bus name on Linux, a socket in `/tmp` on macOS, all keyed on the bundle
 identifier). If one answers, this launch hands it its arguments and working
 directory and exits, before it has a window or a daemon connection; the
 running copy shows its main window and tells the page
-(`second_launch.rs`).
+(`second_launch.rs`). A debug build registers no such guard: keyed on the
+identifier alone, it would make a build under development exit and raise an
+installed gglib running beside it.
 
 `main.rs`'s setup hook, in order:
 
