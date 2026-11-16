@@ -580,9 +580,9 @@ jobs:
         uses: actions/checkout@v7
 
       # Its own shared-key per target, and only main saves; the rust-prelude
-      # action says why. Main runs this job when Cargo.lock or the toolchain
-      # moves, so the key the next pull requests restore is saved there. The
-      # Linux leg builds one crate and needs no disk freed.
+      # action says why. Main runs this job when Cargo.lock, the toolchain or
+      # .cargo/config.toml moves, so the key the next pull requests restore is
+      # saved there. The Linux leg builds one crate and needs no disk freed.
       - name: Rust prelude
         uses: ./.github/actions/rust-prelude
         with:
@@ -593,6 +593,14 @@ jobs:
 
       - name: Check gglib-cli compilation
         run: cargo test -p gglib-cli --no-run
+
+      # A Windows machine without the Visual C++ Redistributable does not
+      # start a program that imports its DLLs (#1959, A1). This is the debug
+      # build, linked as the release one is; release.yml checks the shipped
+      # files themselves.
+      - name: Check gglib.exe needs no Visual C++ runtime
+        if: runner.os == 'Windows'
+        run: python scripts/check_pe_imports.py target/debug/gglib.exe
 
       # The pinned engines themselves, on all three platforms. The `gglib`
       # just built installs each one as a user's
@@ -835,8 +843,9 @@ jobs:
   # printed no result, which crashed or was stopped by the step's time limit.
   #
   # As `clippy-cross-os`: when `scope` says so, and after ubuntu clippy. Main
-  # runs it when Cargo.lock or the toolchain moves, which is when its cache
-  # is saved, so the 90 minutes are for a pull request's cold build.
+  # runs it when Cargo.lock, the toolchain or .cargo/config.toml moves, which
+  # is when its cache is saved, so the 90 minutes are for a pull request's
+  # cold build.
   test-cross-os:
     name: Test (${{ matrix.target }})
     runs-on: ${{ matrix.os }}

@@ -19,7 +19,8 @@ $GITHUB_OUTPUT. Its reasons go to stderr.
   change reaches what `ffi-apple` builds. That script needs cargo.
 * `ios`: `rust`. The Makefile's PHONE_CRATES holds gglib-agent, which is
   outside gglib-ffi's closure, so `ffi` is not enough.
-* `lock`: not `version_only`, and Cargo.lock or rust-toolchain.toml changed.
+* `lock`: not `version_only`, and Cargo.lock, rust-toolchain.toml or
+  .cargo/config.toml changed: the files the Rust caches' keys hash.
 * `cross_os`: on a pull request, `rust`. On a push, `lock`, so main saves the
   cross-OS caches for the lockfile the next pull requests restore; or `rust`
   when no pull request is behind the commit (`--pr-count 0`), since an admin
@@ -75,6 +76,8 @@ REACHES = [
     "scripts/known-failures/**",
     "scripts/known_failures.py",
     "scripts/split_test_output.py",
+    # `cli-cross-os` reads the Windows gglib.exe's imports with it.
+    "scripts/check_pe_imports.py",
 ]
 
 # Paths that cannot reach a Rust build on macOS, Windows or iOS. A path ending
@@ -243,7 +246,7 @@ def decide(
     if not version_only:
         say(f"rust: {len(reaching)} of them reach a Rust build" + "".join(f"\n  {path}" for path in reaching[:20]))
     ffi = not version_only and ffi_changed(repo, base, head)
-    lock = not version_only and any(path in ("Cargo.lock", "rust-toolchain.toml") for path in paths)
+    lock = not version_only and any(path in ("Cargo.lock", "rust-toolchain.toml", ".cargo/config.toml") for path in paths)
     if event == "pull_request":
         cross_os = rust
     else:
@@ -388,6 +391,7 @@ CASES = [
     ("rust-toolchain.toml", RC2, edit(RC2, {"rust-toolchain.toml": '[toolchain]\nchannel = "1.98.0"\n'}), "pull_request", None, True, "rust ffi ios lock cross_os apple"),
     ("a push of code a pull request tested", RC2, edit(RC2, {"crates/gglib-core/src/lib.rs": CODE_CHANGE}), "push", 1, False, "rust ios"),
     ("a push that moves the lockfile", RC2, tree("0.29.0-rc.2", foo="1.2.4", foo_sum="dddd"), "push", 1, True, "rust ffi ios lock cross_os apple"),
+    ("a push that moves the cargo config", RC2, edit(RC2, {".cargo/config.toml": "[build]\n"}), "push", 1, True, "rust ffi ios lock cross_os apple"),
     ("a push of code with no pull request", RC2, edit(RC2, {"crates/gglib-core/src/lib.rs": CODE_CHANGE}), "push", 0, False, "rust ios cross_os"),
     ("a push of the frontend with no pull request", RC2, edit(RC2, {"src/main.tsx": "export const one = 2;\n"}), "push", 0, False, ""),
     ("a push of a release with no pull request", RC2, RELEASE_RC3, "push", 0, None, "version_only"),
@@ -404,6 +408,7 @@ PATHS = [
     ("src-tauri/tauri.conf.json", True),
     ("contracts/upstream/llama/shape.txt", True),
     ("Cargo.toml", True),
+    (".cargo/config.toml", True),
     ("Makefile", True),
     ("clippy.toml", True),
     ("scripts/apple/build-xcframework.sh", True),
@@ -426,6 +431,7 @@ PATHS = [
     ("scripts/known-failures/windows.txt", True),
     ("scripts/known_failures.py", True),
     ("scripts/split_test_output.py", True),
+    ("scripts/check_pe_imports.py", True),
     ("scripts/status_card/requirements.txt", False),
     (".github/workflows/coverage.yml", False),
     (".github/dependabot.yml", False),

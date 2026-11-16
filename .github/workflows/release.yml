@@ -257,6 +257,13 @@ jobs:
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }} -p gglib-cli
 
+      # A Windows machine without the Visual C++ Redistributable does not
+      # start a program that imports its DLLs (#1959, A1), so no zip ships
+      # one that does.
+      - name: Check gglib.exe needs no Visual C++ runtime
+        if: runner.os == 'Windows'
+        run: python scripts/check_pe_imports.py target/${{ matrix.target }}/release/gglib.exe
+
       # Everything that ships lands in dist/. One staging directory means the
       # attest and upload steps take `dist/*` rather than a per-OS list, and
       # what they take is exactly the release assets — not whatever else is
@@ -475,6 +482,15 @@ jobs:
             npm run tauri:build -- --target ${{ matrix.target }} --config "$sidecar"
           fi
         shell: bash
+
+      # The installer and the zip carry both programs, and neither may need
+      # the Visual C++ Redistributable (#1959, A1). tauri-build links the
+      # app's Visual C++ runtime statically by default
+      # (`build > windows > staticVCRuntime`), and .cargo/config.toml links
+      # the CLI's whole C runtime statically.
+      - name: Check the app and its CLI need no Visual C++ runtime
+        if: runner.os == 'Windows'
+        run: python scripts/check_pe_imports.py target/${{ matrix.target }}/release/gglib.exe target/${{ matrix.target }}/release/gglib-gui.exe
 
       # Proof, before anything ships, that each artifact has the CLI the app
       # will look for, and that the deb names the package that supplies it.
