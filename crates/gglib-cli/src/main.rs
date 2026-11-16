@@ -17,10 +17,10 @@ async fn main() -> anyhow::Result<()> {
     gglib_core::utils::process::host::prepare();
     let (cli, remote) = parse();
     if leaves_nothing_behind(cli.command.as_ref()) {
-        return dispatch_without_library(cli.command).map(drop);
+        return dispatch_without_library(cli.command).await.map(drop);
     }
     gglib_core::telemetry::init_tracing(cli.verbose)?;
-    let Some(command) = dispatch_without_library(cli.command)? else {
+    let Some(command) = dispatch_without_library(cli.command).await? else {
         return Ok(());
     };
     let ctx = bootstrap().await?;

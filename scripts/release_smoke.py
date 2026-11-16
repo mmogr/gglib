@@ -30,9 +30,19 @@ Windows by hand:
  9. one chat request to the endpoint gets a reply with text in it;
 10. `gglib daemon stop`, then no gglib, gglib-gui, llama-server or sd-server
     process is left, and no lock or pid file is left in the data folder;
-11. uninstalling, where PLATFORMS says how, removes what was installed and
-    leaves no gglib process, and the user's own PATH is again what it was
-    before the install. Steps 10 and 11 run after an earlier failure too;
+11. where a running program's file cannot be replaced (Windows: PLATFORMS'
+    `over_a_running_service`), `gglib up` starts the service and its engine
+    again and the installer is run again over them: it must exit 0, the
+    installed `gglib --version` still answer, and no gglib process or lock
+    be left, the installer having stopped the service in order
+    (src-tauri/windows/installer-hooks.nsh). It is the same build, so this
+    proves the service was stopped and gglib.exe left free to replace, not
+    that it was replaced. Then `gglib up` starts it once more, for the
+    uninstall to run over;
+12. uninstalling, where PLATFORMS says how, removes what was installed and
+    leaves no gglib process and no lock in the data folder, and the user's
+    own PATH is again what it was
+    before the install. Steps 10 and 12 run after an earlier failure too;
     an uninstall that then fails is reported, not counted as the cause.
 
 A step PLATFORMS lists under `pending` is expected to fail on that OS until
@@ -56,7 +66,10 @@ each target release.yml builds and names no value the run does not give;
 that the leftover-process check finds a planted gglib program and ignores
 everything else; that the PATH checks refuse a folder added twice or not at
 all, another entry changed, and a value not given back whole; that the reply check refuses an empty reply and an error
-body; that the version check refuses another version or commit; and the
+body; that the version check refuses another version or commit; that
+Windows alone installs and uninstalls over a running service, between the
+stop's checks and the uninstall; that an installer's exit code is read in
+words; and the
 readers of a process list, of `gglib config paths`, of `gglib model list`
 (on what `model add` printed on Windows, which has no ID, and on a list
 with spaces in its paths), of what `gglib up` says, and of the data folder.
@@ -151,6 +164,11 @@ class Platform:
     installed_cli: str
     # The commands that uninstall it as a user would; () for none.
     uninstall: tuple[tuple[str, ...], ...]
+    # Whether the install is run again, and the uninstall run, while the
+    # service from the install runs: where a running program's file cannot
+    # be replaced or deleted (Windows), so the installer must stop the
+    # service first (src-tauri/windows/installer-hooks.nsh).
+    over_a_running_service: bool
     # A command listing every process, and which reader reads it.
     processes: tuple[str, ...]
     process_listing: str
@@ -182,6 +200,9 @@ PLATFORMS: dict[str, Platform] = {
         # An NSIS uninstaller copies itself to %TEMP% and returns at once, so
         # the run waits for the folder to go rather than for this command.
         uninstall=(("{LOCALAPPDATA}/gglib-gui/uninstall.exe", "/S"),),
+        # The service is the gglib.exe the install put there, which Windows
+        # will not replace or delete while it runs.
+        over_a_running_service=True,
         processes=("tasklist", "/FO", "CSV", "/NH"),
         process_listing="tasklist",
         kill=("taskkill", "/F", "/T", "/IM", "{name}.exe"),
@@ -225,6 +246,7 @@ PLATFORMS: dict[str, Platform] = {
         installed="/Applications/gglib.app",
         installed_cli="/Applications/gglib.app/Contents/MacOS/gglib",
         uninstall=(("rm", "-rf", "/Applications/gglib.app"),),
+        over_a_running_service=False,
         processes=("ps", "-A", "-o", "comm="),
         process_listing="ps",
         kill=("pkill", "-KILL", "-x", "{name}"),
@@ -251,6 +273,7 @@ PLATFORMS: dict[str, Platform] = {
         installed="/usr/bin/gglib",
         installed_cli="/usr/bin/gglib",
         uninstall=(("sudo", "apt-get", "remove", "-y", "gglib-gui", "gglib"),),
+        over_a_running_service=False,
         processes=("ps", "-A", "-o", "comm="),
         process_listing="ps",
         kill=("pkill", "-KILL", "-x", "{name}"),
@@ -280,9 +303,9 @@ def platform_templates(platform: Platform) -> list[str]:
     """Every string of a platform's entry that the run expands."""
     found: list[str] = []
     for field in fields(Platform):
-        if field.name == "pending":
-            continue
         value = getattr(platform, field.name)
+        if field.name == "pending" or isinstance(value, bool):
+            continue
         if isinstance(value, str):
             found.append(value)
         else:
@@ -314,6 +337,8 @@ def check_table(platforms: Mapping[str, Platform], targets: list[str]) -> list[s
             problems.append(f"{name}: no reader for a {platform.process_listing!r} process list")
         if "{name}" not in " ".join(platform.kill):
             problems.append(f"{name}: kill does not name {{name}}")
+        if platform.over_a_running_service and not platform.uninstall:
+            problems.append(f"{name}: over_a_running_service, with no uninstall to run over one")
         for step, reason in platform.pending:
             if step not in STEPS:
                 problems.append(f"{name}: pending names {step!r}, which is no step")
@@ -520,6 +545,23 @@ def leftover_locks(paths: list[str]) -> list[str]:
     return sorted(path for path in (p.replace("\\", "/") for p in paths) if held.match(path))
 
 
+def installer_exit(code: int) -> str | None:
+    """Why an installer's exit code is a failure, in words; None for 0.
+
+    An NSIS installer or uninstaller exits 1 when the user cancelled it and 2
+    when a step aborted it: installer-hooks.nsh finding gglib.exe still
+    running, or Tauri's check failing to close the app. A file it cannot
+    replace or remove because it is in use does not abort it: measured on
+    Windows 11, a silent run then exits 0 and leaves the old file."""
+    if code == 0:
+        return None
+    if code == 1:
+        return "it exited 1: cancelled"
+    if code == 2:
+        return "it exited 2: aborted, as when gglib.exe still runs after the hook's stop or the app would not close"
+    return f"it exited {code}"
+
+
 def release_targets(workflow: str) -> list[str]:
     """The targets release.yml's `meta` job lists for the desktop builds."""
     match = re.search(r"^\s*gui='(\[.*\])'\s*$", workflow, re.MULTILINE)
@@ -567,9 +609,41 @@ STEPS = (
     "gglib daemon stop",
     "no gglib process is left",
     "no lock is left in the data folder",
+    "install again over a running service",
+    "the service runs again before the uninstall",
     "uninstall",
     "the uninstall gave the user's PATH back as it was",
 )
+
+# Each step: its name, the Smoke method that runs it, whether it runs after
+# an earlier failure, whether its failure is then reported and not counted
+# (it may be that failure's consequence), and on which OSes it is kept.
+PLAN: tuple[tuple[str, str, bool, bool, Callable[[Platform], bool]], ...] = (
+    (STEPS[0], "nothing_running", False, False, lambda p: True),
+    (STEPS[1], "path_before_install", False, False, lambda p: bool(p.user_path)),
+    (STEPS[2], "install", False, False, lambda p: True),
+    (STEPS[3], "installed_version", False, False, lambda p: True),
+    (STEPS[4], "archive_version", False, False, lambda p: True),
+    (STEPS[5], "path_added", False, False, lambda p: bool(p.user_path)),
+    (STEPS[6], "clean_data", False, False, lambda p: True),
+    (STEPS[7], "engine", False, False, lambda p: True),
+    (STEPS[8], "add_model", False, False, lambda p: True),
+    (STEPS[9], "up", False, False, lambda p: True),
+    (STEPS[10], "chat", False, False, lambda p: True),
+    (STEPS[11], "stop", True, False, lambda p: True),
+    (STEPS[12], "no_leftovers", True, False, lambda p: True),
+    (STEPS[13], "no_locks", True, False, lambda p: True),
+    (STEPS[14], "install_again", False, False, lambda p: p.over_a_running_service),
+    (STEPS[15], "serve_again", False, False, lambda p: p.over_a_running_service),
+    # After a failure too, so one run says as much as it can.
+    (STEPS[16], "uninstall", True, True, lambda p: True),
+    (STEPS[17], "path_removed", True, True, lambda p: bool(p.user_path)),
+)
+
+
+def step_plan(platform: Platform) -> list[str]:
+    """The steps the run takes on `platform`, in order."""
+    return [name for name, _, _, _, kept in PLAN if kept(platform)]
 
 
 def slug(text: str) -> str:
@@ -838,15 +912,28 @@ class Smoke:
         # the one named, and it opens no browser and attaches no dashboard.
         # It exits non-zero only when the chat engine does not work or the
         # endpoint does not start; its warm-up's outcome is a line it prints.
+        self.up_said = self.serve("gglib up")
+        base = self.up_said.get("base", f"http://127.0.0.1:{ENDPOINT_PORT}/v1 (assumed; up named no URL)")
+        return f"{base}; warm-up: {self.up_said.get('proof', 'up printed no warm-up line')}"
+
+    def serve(self, label: str) -> dict[str, str]:
+        """`gglib up` from the installed build: the service, the model's
+        engine and the endpoint, as a user's first command starts them."""
         self.daemon_may_run = True
+        self.stopped = False
         _, said, _ = self.run(
-            "gglib up",
+            label,
             [self.cli(), "up", "-y", "--model", self.model, "--port", str(ENDPOINT_PORT)],
             LIMITS["up"],
         )
-        self.up_said = read_up(said)
-        base = self.up_said.get("base", f"http://127.0.0.1:{ENDPOINT_PORT}/v1 (assumed; up named no URL)")
-        return f"{base}; warm-up: {self.up_said.get('proof', 'up printed no warm-up line')}"
+        return read_up(said)
+
+    def serving(self) -> list[str]:
+        """The watched programs running now; a gglib among them, or Failed."""
+        running = leftovers(self.processes())
+        if "gglib" not in running:
+            raise Failed(f"`gglib up` returned and no gglib process runs; running: {', '.join(running) or 'none'}")
+        return running
 
     def chat(self) -> str | None:
         # The URL `up` printed when it printed one, else the port it was given.
@@ -897,6 +984,44 @@ class Smoke:
             raise Failed(f"left in {self.data}: {', '.join(held)}")
         return None
 
+    def install_again(self) -> str | None:
+        # An update over a gglib that has been used: its service runs, with
+        # the model's engine. The installer is this same build, run again
+        # as a user runs it, and inherits the smoke's GGLIB_DAEMON_PORT and
+        # GGLIB_DATA_DIR, so the gglib.exe it finds there reaches this
+        # service: an upgrade from an older release, and a service the
+        # installer's environment does not lead to, are the VM's to check.
+        #
+        # What this proves is that the installer stopped the service, in
+        # order, and so left gglib.exe free to replace. It cannot prove the
+        # file was replaced: the build is the same, so its --version is the
+        # same before and after, and an installer that cannot replace a file
+        # in use still exits 0. The --version only shows gglib.exe still
+        # runs after the install.
+        self.serve("gglib up, for the install to run over")
+        running = self.serving()
+        for template in self.platform.install:
+            argv = self.command(template)
+            code, _, complained = self.run(f"install again: {os.path.basename(argv[0])}", argv, LIMITS["install"], check=False)
+            reason = installer_exit(code)
+            if reason:
+                raise Failed(f"installing over a running service failed: {reason}. {tail(complained, 'stderr', 6)}")
+        _, said, _ = self.run("installed gglib --version, after the install again", [self.cli(), "--version"], LIMITS["short"])
+        reason = check_version(said, self.version, self.sha)
+        if reason:
+            raise Failed(f"after installing again, the installed gglib is not this release: {reason}")
+        found = self.wait_for_no_leftovers(60)
+        if found:
+            raise Failed(f"still running after installing again over {', '.join(running)}: {', '.join(found)}")
+        held = leftover_locks(files_under(self.data))
+        if held:
+            raise Failed(f"the service was not stopped in order; left in {self.data}: {', '.join(held)}")
+        return f"over {', '.join(running)}: exit 0, the service stopped in order, gglib.exe still answers {said.strip()!r}"
+
+    def serve_again(self) -> str | None:
+        self.serve("gglib up, for the uninstall to run over")
+        return f"running: {', '.join(self.serving())}"
+
     def uninstall(self) -> str | None:
         if not self.platform.uninstall:
             return SKIPPED + "no uninstall for this OS"
@@ -910,36 +1035,20 @@ class Smoke:
         found = self.wait_for_no_leftovers(30)
         if found:
             raise Failed(f"still running after the uninstall: {', '.join(found)}")
+        # The data folder outlives the uninstall: a lock left in it means the
+        # service it ran over was killed, not stopped in order. (Windows'
+        # uninstall.exe returns at once, so its exit code says nothing.)
+        held = leftover_locks(files_under(self.data)) if os.path.isdir(self.data) else []
+        if held:
+            raise Failed(f"the service was not stopped in order; left in {self.data}: {', '.join(held)}")
         return None
 
     def steps(self) -> list[Step]:
         pending = dict(self.platform.pending)
-        path = bool(self.platform.user_path)
-        # (name, what runs it, runs after a failure, its failure then not the cause, kept on this OS)
-        listed = [
-            (STEPS[0], self.nothing_running, False, False, True),
-            (STEPS[1], self.path_before_install, False, False, path),
-            (STEPS[2], self.install, False, False, True),
-            (STEPS[3], self.installed_version, False, False, True),
-            (STEPS[4], self.archive_version, False, False, True),
-            (STEPS[5], self.path_added, False, False, path),
-            (STEPS[6], self.clean_data, False, False, True),
-            (STEPS[7], self.engine, False, False, True),
-            (STEPS[8], self.add_model, False, False, True),
-            (STEPS[9], self.up, False, False, True),
-            (STEPS[10], self.chat, False, False, True),
-            (STEPS[11], self.stop, True, False, True),
-            (STEPS[12], self.no_leftovers, True, False, True),
-            (STEPS[13], self.no_locks, True, False, True),
-            # After a failure too, so one run says as much as it can; its
-            # failure then is reported, not counted as the cause.
-            (STEPS[14], self.uninstall, True, True, True),
-            (STEPS[15], self.path_removed, True, True, path),
-        ]
         return [
-            Step(name, run, always=always, secondary=secondary, pending=pending.get(name, ""))
-            for name, run, always, secondary, kept in listed
-            if kept
+            Step(name, getattr(self, method), always=always, secondary=secondary, pending=pending.get(name, ""))
+            for name, method, always, secondary, kept in PLAN
+            if kept(self.platform)
         ]
 
     def save(self, name: str, text: str) -> None:
@@ -1351,6 +1460,10 @@ def self_test() -> int:
             plan = step_plan(platform)
             expect(f"{name}: its steps in STEPS' order", plan, [step for step in STEPS if step in plan])
             expect(f"{name}: the stop is checked before anything else stops it", plan.index("gglib daemon stop") < plan.index("uninstall"), True)
+        expect("the plan's steps", [name for name, *_ in PLAN], list(STEPS))
+        for name, method, *_ in PLAN:
+            if not callable(getattr(Smoke, method, None)):
+                wrong.append(f"the step {name!r} names {method}, which Smoke has not")
         planted = {**PLATFORMS, "windows": replace(PLATFORMS["windows"], over_a_running_service=True, uninstall=())}
         if not any("over_a_running_service" in problem for problem in check_table(planted, targets)):
             wrong.append("a table that uninstalls over a running service with no uninstall passed")
