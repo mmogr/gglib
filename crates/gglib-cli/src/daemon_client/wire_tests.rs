@@ -4,9 +4,9 @@
 
 use super::*;
 use gglib_core::contracts::http::daemon::{
-    PROXY_CLIENTS_FIELDS, PROXY_PROVE_FIELDS, PROXY_START_CLI_FIELDS,
-    PROXY_START_PINNED_CLI_FIELDS, PROXY_STATUS_FIELDS, SERVERS_START_CLI_FIELDS,
-    SERVERS_STOP_CLI_FIELDS,
+    PROXY_CLIENTS_FIELDS, PROXY_PROVE_FIELDS, PROXY_START_ANSWER_FIELDS, PROXY_START_CLI_FIELDS,
+    PROXY_START_PINNED_CLI_FIELDS, PROXY_STATUS_FIELDS, PROXY_STATUS_REFUSED_FIELDS,
+    SERVERS_START_CLI_FIELDS, SERVERS_STOP_CLI_FIELDS,
 };
 use gglib_core::domain::{EndpointState, KeyState};
 
@@ -52,6 +52,7 @@ fn a_populated_start_body_sends_exactly_the_contract_fields() {
         // Non-empty deliberately: an empty vec puts no key on the wire at
         // all, which the next test covers.
         allowed_hosts: vec!["example.test".into()],
+        replace: true,
     };
 
     assert_eq!(
@@ -190,8 +191,9 @@ fn a_start_pinned_body_sends_exactly_the_contract_fields() {
 }
 
 /// The daemon's status is read whole: every key in the shared list lands in
-/// a field with its value. The daemon's own test holds its struct to the same
-/// list, so the two ends of the answer meet in the contract.
+/// a field with its value, a start's own keys among them. The daemon's own
+/// test holds its struct to the same lists, so the two ends of the answer
+/// meet in the contract.
 #[test]
 fn a_status_with_every_contract_field_is_read_whole() {
     let sample = |name: &str| match name {
@@ -203,10 +205,14 @@ fn a_status_with_every_contract_field_is_read_whole() {
         "pinned_model" => serde_json::json!("qwen"),
         "pinned_to" => serde_json::json!("Pinned to qwen"),
         "pinned_model_id" => serde_json::json!(12),
+        "outcome" => serde_json::json!("replaced"),
+        "refused" => serde_json::json!("port 8080 is in use"),
         other => panic!("no sample value for contract field `{other}` — add one"),
     };
     let answer: serde_json::Map<String, serde_json::Value> = PROXY_STATUS_FIELDS
         .iter()
+        .chain(PROXY_START_ANSWER_FIELDS)
+        .chain(PROXY_STATUS_REFUSED_FIELDS)
         .map(|name| ((*name).to_owned(), sample(name)))
         .collect();
 
@@ -222,8 +228,10 @@ fn a_status_with_every_contract_field_is_read_whole() {
         pinned_model,
         pinned_to,
         pinned_model_id,
+        refused,
+        outcome,
     } = status;
-    let fields: [(&str, bool); 8] = [
+    let fields: [(&str, bool); 10] = [
         ("running", running),
         ("state", state == EndpointState::On),
         ("port", port == Some(8080)),
@@ -235,8 +243,18 @@ fn a_status_with_every_contract_field_is_read_whole() {
         ("pinned_model", pinned_model.as_deref() == Some("qwen")),
         ("pinned_to", pinned_to.as_deref() == Some("Pinned to qwen")),
         ("pinned_model_id", pinned_model_id == Some(12)),
+        (
+            "outcome",
+            outcome == Some(gglib_app_services::StartOutcome::Replaced),
+        ),
+        ("refused", refused.as_deref() == Some("port 8080 is in use")),
     ];
-    assert_eq!(fields.len(), PROXY_STATUS_FIELDS.len());
+    assert_eq!(
+        fields.len(),
+        PROXY_STATUS_FIELDS.len()
+            + PROXY_START_ANSWER_FIELDS.len()
+            + PROXY_STATUS_REFUSED_FIELDS.len()
+    );
     for (name, read) in fields {
         assert!(read, "{name} was not read as sent");
     }

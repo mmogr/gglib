@@ -20,7 +20,7 @@
 import { bridgeEvents } from './bridgeEvents';
 import { getTransport } from './transport';
 import { applyProxyStatus, ingestProxyEvent, resetProxyState } from './proxyRegistry';
-import type { ProxyConfig, StartPinnedRequest } from './transport/types/proxy';
+import type { ProxyConfig, ProxyStatus, StartPinnedRequest } from './transport/types/proxy';
 
 const bridge = bridgeEvents({
   category: 'proxy',
@@ -51,13 +51,17 @@ export function initProxyEvents(): void {
  * event can reach this window after the answer or not at all (a stream
  * still reconnecting), so the answer is what moves this window's line.
  */
-export async function startEndpoint(config: Partial<ProxyConfig>): Promise<void> {
-  applyStartAnswer(await getTransport().startProxy(config));
+export async function startEndpoint(config: Partial<ProxyConfig>): Promise<ProxyStatus> {
+  const status = await getTransport().startProxy(config);
+  applyStartAnswer(status);
+  return status;
 }
 
 /** Start the endpoint pinned to one model, and take its answer the same way. */
-export async function startEndpointPinned(request: StartPinnedRequest): Promise<void> {
-  applyStartAnswer(await getTransport().startPinnedProxy(request));
+export async function startEndpointPinned(request: StartPinnedRequest): Promise<ProxyStatus> {
+  const status = await getTransport().startPinnedProxy(request);
+  applyStartAnswer(status);
+  return status;
 }
 
 /**

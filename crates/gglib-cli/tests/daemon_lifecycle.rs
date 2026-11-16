@@ -7,6 +7,9 @@
 //! machine with no daemon up. Data is isolated via `GGLIB_DATA_DIR`; the
 //! port cannot be.
 
+#[path = "support/data_dir.rs"]
+mod data_dir;
+
 use gglib_core::utils::process::cmd;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -15,7 +18,10 @@ fn gglib() -> Command {
     cmd(env!("CARGO_BIN_EXE_gglib"))
 }
 
+/// `gglib daemon run` over `data_dir`, with its endpoint kept off
+/// ([`data_dir::keep_the_endpoint_off`]).
 fn spawn_daemon(data_dir: &std::path::Path) -> Child {
+    data_dir::keep_the_endpoint_off(data_dir);
     let mut cmd = gglib();
     cmd.args(["daemon", "run"])
         .env("GGLIB_DATA_DIR", data_dir)
@@ -123,4 +129,15 @@ fn sigterm_shuts_the_daemon_down_cleanly() {
 #[cfg(unix)]
 fn send_sigterm(pid: u32) {
     let _ = cmd("kill").args(["-15", &pid.to_string()]).status();
+}
+
+/// What every test that starts a real service stores first: the endpoint
+/// off, so the service binds no endpoint port of its own.
+#[test]
+fn a_test_service_is_started_with_its_endpoint_off() {
+    let dir = tempfile::tempdir().unwrap();
+    data_dir::keep_the_endpoint_off(dir.path());
+    let stored = data_dir::read_settings(dir.path());
+    assert_eq!(stored.proxy_autostart, Some(false));
+    assert!(!stored.effective_proxy_autostart());
 }

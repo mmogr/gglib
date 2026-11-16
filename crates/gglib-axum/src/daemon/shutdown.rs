@@ -11,6 +11,13 @@
 //! A stop that leaves only seconds, a closed console window on Windows, kills
 //! every engine at once first ([`shutdown_signal`]), and the same teardown
 //! follows for as long as the process lives.
+//!
+//! The MCP servers are stopped by the teardown itself, each with everything
+//! it started (#2012). Nothing else stops them in time: on macOS and Linux
+//! a server leads a process group of its own, so a signal to the daemon's
+//! group no longer reaches it. A hurried stop does not wait for them: on
+//! Windows, the one OS with a hurried stop, each server's job ends it when
+//! the process ends.
 
 use std::future::Future;
 use std::sync::Arc;
@@ -19,6 +26,7 @@ use std::time::Duration;
 use crate::state::AppState;
 use gglib_app_services::ServerOps;
 use gglib_core::utils::process::stop::{Pace, stop_requested};
+use gglib_mcp::McpService;
 use gglib_runtime::process::residency::RENDER_STOP_WAIT;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
@@ -43,6 +51,14 @@ const TRIP_LOG_DRAIN: Duration = Duration::from_secs(2);
 /// How long the runs may take to handle their ends, such as an agent run
 /// saving its reply, out of the same margin.
 const RUNS_DRAIN: Duration = Duration::from_secs(2);
+
+/// How long the teardown may spend stopping the MCP servers, out of the
+/// same margin: the wait for the servers' list, which a tool call holds
+/// (read) until its reply comes (the runs that make the calls are cancelled
+/// just before), then [`gglib_mcp::SERVER_EXIT_GRACE`] for the servers,
+/// stopped together, to exit by themselves. A stop cut short ends every
+/// server it had taken at once.
+const MCP_STOP: Duration = Duration::from_secs(2);
 
 /// Resolve when *either* trigger fires, then cancel the token so both converge.
 ///
@@ -90,6 +106,19 @@ pub(crate) async fn shutdown_signal(servers: Arc<ServerOps>) {
     if stop_requested().await == Pace::Hurried {
         servers.kill_all_now().await;
         warn!("the console is closing or the session is ending: every engine was killed at once");
+    }
+}
+
+/// Stop every MCP server and what each started, within [`MCP_STOP`].
+async fn stop_mcp_servers(mcp: &McpService) {
+    if tokio::time::timeout(MCP_STOP, mcp.shutdown())
+        .await
+        .is_err()
+    {
+        warn!(
+            "a tool call held the MCP servers' list past their stop; each is stopped when \
+             its client is dropped as gglib exits, which a forced exit skips"
+        );
     }
 }
 
@@ -171,6 +200,10 @@ pub(super) async fn teardown(state: &AppState) {
     {
         warn!("a run's end was still being handled when shutdown moved on");
     }
+
+    //    Then the MCP servers, with everything each started: the runs that
+    //    called their tools have ended.
+    stop_mcp_servers(&state.mcp).await;
 
     // 1. Drain the proxy so in-flight requests finish before their upstream
     //    dies. "Not running" is a fine answer.

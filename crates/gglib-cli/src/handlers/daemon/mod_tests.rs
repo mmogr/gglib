@@ -4,7 +4,7 @@
 
 use gglib_core::domain::{EndpointState, KeyState, UNNAMED_PAIRED};
 
-use super::{ProxyStatusDto, proxy_lines, question, stopping_line};
+use super::{ProxyStatusDto, proxy_lines, question, stopping_line, way_back_line};
 
 /// A listening proxy is reported where a client reaches it, pinned to its
 /// model when it is, with whether a request needs the key; one that is not
@@ -20,6 +20,8 @@ fn the_proxy_report_says_where_it_is_reached_and_whether_a_key_is_needed() {
         pinned_model: Some("qwen".to_owned()),
         pinned_to: Some("Pinned to qwen".to_owned()),
         pinned_model_id: Some(12),
+        refused: None,
+        outcome: None,
     };
     assert_eq!(
         proxy_lines(&listening),
@@ -61,8 +63,53 @@ fn the_proxy_report_says_where_it_is_reached_and_whether_a_key_is_needed() {
         pinned_model: None,
         pinned_to: None,
         pinned_model_id: None,
+        refused: None,
+        outcome: None,
     };
     assert_eq!(proxy_lines(&off), ["  Proxy:   Off"]);
+
+    let refused = ProxyStatusDto {
+        refused: Some("The endpoint is off: port 8080 is in use by another program.".to_owned()),
+        ..off
+    };
+    assert_eq!(
+        proxy_lines(&refused),
+        [
+            "  Proxy:   Off",
+            "  Why:     The endpoint is off: port 8080 is in use by another program.",
+        ],
+        "an endpoint off because its port is taken says why, in the daemon's words"
+    );
+}
+
+/// A pinned proxy's report is followed by the command that serves every
+/// model again; an unpinned or stopped one by nothing.
+#[test]
+fn a_pinned_report_names_the_way_back() {
+    let pinned = ProxyStatusDto {
+        running: true,
+        state: EndpointState::Pinned,
+        port: Some(8080),
+        base_url: Some("http://127.0.0.1:8080/v1".to_owned()),
+        key: Some(KeyState::NoneNeeded),
+        pinned_model: Some("qwen".to_owned()),
+        pinned_to: Some("Pinned to qwen".to_owned()),
+        pinned_model_id: Some(12),
+        refused: None,
+        outcome: None,
+    };
+    assert_eq!(
+        way_back_line(&pinned).as_deref(),
+        Some("  Unpin:   gglib proxy  (serve every model again)")
+    );
+    let every = ProxyStatusDto {
+        state: EndpointState::On,
+        pinned_model: None,
+        pinned_to: None,
+        pinned_model_id: None,
+        ..pinned
+    };
+    assert_eq!(way_back_line(&every), None);
 }
 
 #[test]

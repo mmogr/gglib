@@ -20,8 +20,11 @@ use crate::app::events::{emit_or_log, names};
 
 /// Start the proxy if it is not already running, returning the bound port.
 ///
-/// Idempotent: the daemon's start route treats an already-running proxy as
-/// success, and honours the saved `proxy_port` setting.
+/// Idempotent: the daemon's start route treats an endpoint already on as the
+/// saved settings say as success, and honours the saved `proxy_port`. One on
+/// otherwise, serving one model or started with other flags, is refused and
+/// left alone; this is called only when the last poll saw it off, so it
+/// meets that only in a race.
 pub(crate) async fn start(app: &AppHandle) -> Result<u16, String> {
     let state = app.state::<AppState>();
 

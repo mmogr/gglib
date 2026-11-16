@@ -94,6 +94,86 @@ async fn a_title_request_reaches_the_server_with_its_cap_shaped_for_the_model_se
     assert_eq!(sent["stream"], false, "{sent}");
 }
 
+/// The pinned llama-server's answer to a title request with the budget alone,
+/// recorded 2026-11-16 from b12110 serving Qwen3-4B `Q4_K_M` on a Windows 11 x64
+/// VM's CPU, launched with `--jinja --reasoning-format deepseek`; the
+/// request was this module's shape with `"max_tokens":20`,
+/// `"temperature":0.7`, `"seed":1` and `"reasoning_budget_tokens":0`. The
+/// recordings are described in `gglib-runtime`'s
+/// `tests/thinking_off_recordings.rs`.
+const TITLE_BUDGET_ONLY: &str =
+    include_str!("../../tests/fixtures/llama_b12110_qwen3_title_budget0.json");
+
+/// The same request with `"chat_template_kwargs":{"enable_thinking":false}`
+/// after the budget.
+const TITLE_WITH_THE_KWARG: &str = include_str!(
+    "../../tests/fixtures/llama_b12110_qwen3_title_budget0_enable_thinking_false.json"
+);
+
+/// A title is asked for with thinking off, and the template is told so
+/// beside the budget: with the budget alone a hybrid model's title is the
+/// start of its reasoning.
+#[tokio::test]
+async fn a_title_is_asked_for_with_the_templates_thinking_switched_off() {
+    let (_dir, state) = state().await;
+    let model = NewModel::new(
+        "qwen3".to_owned(),
+        "/models/qwen3.gguf".into(),
+        Some(4.0),
+        chrono::Utc::now(),
+    );
+    let model_id = state.core.models().add(model).await.expect("a model").id;
+    let (port, seen) = llama_server(StatusCode::OK, TITLE_WITH_THE_KWARG).await;
+    let server = ServerInfo {
+        model_id,
+        model_name: "qwen3".to_owned(),
+        pid: None,
+        port,
+        started_at: 0,
+        runtime: gglib_core::domain::RuntimeKind::Llama,
+        launch: None,
+    };
+    let request: ChatTitleRequest = serde_json::from_value(json!({
+        "port": port,
+        "messages": [
+            { "role": "user", "content": "What is the capital of France?" },
+            { "role": "assistant", "content": "The capital of France is Paris." },
+            { "role": "user", "content": "Write a short title (at most six words) for this conversation. Reply with the title only." },
+        ],
+        "temperature": 0.7,
+        "max_tokens": 20,
+    }))
+    .expect("a title request");
+
+    let title = title_from(&state, &server, request).await.expect("a title");
+
+    assert_eq!(title, "Paris is the capital of France.");
+    let sent = seen.lock().expect("the lock").clone().expect("a request");
+    assert_eq!(sent["reasoning_budget_tokens"], 0, "{sent}");
+    assert_eq!(
+        sent["chat_template_kwargs"],
+        json!({ "enable_thinking": false }),
+        "{sent}"
+    );
+}
+
+/// What the page is given is the model's text as it came: with the budget
+/// alone, the reasoning cut off at the cap. The page's cleanup removes paired
+/// tags only, so this was the chat's title; gglib does not parse it.
+#[tokio::test]
+async fn the_recorded_title_replies_are_read_as_the_model_gave_them() {
+    let (port, _) = llama_server(StatusCode::OK, TITLE_BUDGET_ONLY).await;
+    let leaked = ask(port, &json!({})).await.expect("a reply");
+    assert_eq!(
+        leaked,
+        "Okay, the user asked for a short title for the conversation about the capital of France"
+    );
+
+    let (port, _) = llama_server(StatusCode::OK, TITLE_WITH_THE_KWARG).await;
+    let title = ask(port, &json!({})).await.expect("a reply");
+    assert_eq!(title, "Paris is the capital of France.");
+}
+
 #[tokio::test]
 async fn the_server_on_the_port_is_posted_the_request_and_its_reply_text_is_the_answer() {
     let (port, seen) = llama_server(StatusCode::OK, &reply("Cat breeds")).await;

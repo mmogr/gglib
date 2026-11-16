@@ -231,7 +231,7 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/record.log"
 
       # Tier 3, on a llama.cpp bump only: a real small model, uncached, and
-      # four booleans into contracts/upstream/llama/tier3/, which no check
+      # six booleans into contracts/upstream/llama/tier3/, which no check
       # reads. Nothing here fails the job; a probe that cannot run says why,
       # a candidate that did not install included.
       - name: Probe a real small model
@@ -252,7 +252,8 @@ jobs:
             jq -n --arg why "$1" '{value: null, reason: $why} as $p
               | {model: "Qwen3.5-0.8B-Q8_0.gguf", projector: "mmproj-F16.gguf",
                  tool_call_native: $p, tool_call_parsed: $p, reasoning_split: $p,
-                 image_in_tool_message_answered: $p}' > "$out"
+                 image_in_tool_message_answered: $p,
+                 thinking_off_by_budget_alone: $p, thinking_off_as_gglib_sends_it: $p}' > "$out"
           }
           if [[ $INSTALLED != success ]]; then
             unread "the candidate did not install"

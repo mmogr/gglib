@@ -13,6 +13,12 @@
 //! sleep, with the service's own output, a pipe the test reads. The pipe
 //! ends only when every process holding it has ended, so once the service is
 //! killed, the end of the output is the last engine ending.
+//!
+//! The service also starts one more stand-in as a tree
+//! ([`tree::spawn`]), as an MCP server is started (#2012). The tree's own
+//! job ties it on Windows, so it must end with the service as the tied
+//! engines do; on macOS and Linux nothing ties it either, and the test
+//! stops it with them.
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
@@ -20,6 +26,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use gglib_core::utils::process::tied::{self, Tied};
+use gglib_core::utils::process::tree;
 use gglib_core::utils::process::{async_cmd, cmd};
 
 /// Which part this run of the test binary plays.
@@ -29,9 +36,11 @@ const ENGINE: &str = "GGLIB_TIED_CHILD_ENGINE";
 /// This test's name, to run only it.
 const NAME: &str = "a_tied_child_ends_when_the_process_that_tied_it_is_killed";
 
-/// How many engines the service starts: two, so the second is tied to a
-/// job that already holds one, as a second model or an MCP server is.
+/// How many engines the service starts and ties: two, so the second is
+/// tied to a job that already holds one, as a second model is.
 const ENGINES: usize = 2;
+/// How many stand-ins it starts as a tree, as an MCP server is.
+const TREES: usize = 1;
 /// What a stand-in engine prints once it runs.
 const READY: &str = "engine ready";
 /// How long a stand-in engine lives unless something ends it.
@@ -75,12 +84,13 @@ fn test() {
     let mut tied = Vec::new();
     let mut ready = 0;
     let deadline = Instant::now() + START;
-    while tied.len() < ENGINES || ready < ENGINES {
+    while tied.len() < ENGINES || ready < ENGINES + TREES {
         let line = heard
             .recv_timeout(deadline.saturating_duration_since(Instant::now()))
             .unwrap_or_else(|_| {
                 panic!(
-                    "the service had not got {ENGINES} engines running {}s after it started",
+                    "the service had not got {} engines running {}s after it started",
+                    ENGINES + TREES,
                     START.as_secs()
                 )
             })
@@ -89,6 +99,8 @@ fn test() {
             ready += 1;
         } else if let Some(pid) = line.strip_prefix("engine pid ") {
             engines.0.push(pid.to_owned());
+        } else if let Some(why) = line.strip_prefix("tree loose: ") {
+            panic!("the service's tree is not held whole: {why}");
         } else if let Some(what) = line.strip_prefix("tied ") {
             tied.push(match what {
                 "ByJob" => Tied::ByJob,
@@ -165,8 +177,27 @@ fn service() {
         children.push(child);
     }
 
+    let mut trees = Vec::new();
+    for _ in 0..TREES {
+        let mut command = async_cmd(&engine);
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::null());
+        let mut started = tree::spawn(&mut command).expect("starting a tree");
+        let pid = started.child().id().expect("the tree's pid");
+        match started.loose() {
+            None => writeln!(out, "engine pid {pid}"),
+            Some(e) => writeln!(out, "engine pid {pid}\ntree loose: {e}"),
+        }
+        .expect("saying the tree's pid");
+        out.flush().expect("flushing the output");
+        trees.push(started);
+    }
+
     std::thread::sleep(ENGINE_LIFE);
     drop(children);
+    drop(trees);
 }
 
 /// Each line `output` gives, then `None` when it ends.

@@ -9,6 +9,7 @@ both, and for every other surface.
 gglib proxy                       # every model, on the stored proxy_port (8080)
 gglib proxy --port 8081 --host 0.0.0.0 --allowed-host desk.local
 gglib serve Qwen3-4B-Instruct-2507        # one model; other names are refused
+gglib proxy                       # every model again, after serve
 gglib proxy dashboard             # live connections, slots, cache, requests
 gglib proxy test                  # one real request through it, then how a client connects
 gglib proxy stop
@@ -45,6 +46,9 @@ config builder, so a model behaves identically however it was started.
   for it there.
 - The endpoint runs on the daemon, so it outlives the terminal that started
   it; `proxy stop` ends it.
+- It is usually on already: gglib turns it on when it starts
+  (`proxy-autostart`). See [Switching](#switching) for a `proxy` or `serve`
+  that asks for it otherwise.
 - The flag groups `proxy` shares with `serve`, sampling, cache and access,
   are in [the index](README.md#flags-several-commands-share).
 
@@ -125,6 +129,56 @@ through `/v1/models` need, VS Code Copilot's BYOK endpoint among them.
   in words before the dashboard attaches. The chat-only flags (`--context-size`,
   `--mlock`, `--jinja`, MTP, sampling, a profile) are refused by name.
 
+## Switching
+
+There is one endpoint, so a `proxy` or `serve` that finds it on otherwise
+than its flags ask changes it, and that cuts off the clients connected to it.
+So it asks first, naming what runs and what switching does:
+
+```console
+$ gglib serve Qwen3-4B
+  The endpoint is on at port 8080, serving every model. Serve only Qwen3-4B? Clients connected now are cut off for a moment. (Y/n):
+```
+
+- One model and back: `serve <model>` asks to serve only that model, `serve
+  <other>` asks to serve it instead, and `proxy` with no flags, while one
+  model is served, asks to serve every model again. After `serve`, the
+  closing lines name `gglib proxy` for the way back, and `daemon status`
+  says it under the pinned endpoint.
+- Flags: a `--port`, `--host`, sampling flag, `--cache`, `--api-key` or
+  `--allowed-host` the running endpoint was not started with is named in
+  the question, and a yes restarts it with them.
+- A switch to another port or address says so: clients connected now stay
+  cut off until they are pointed at the new address.
+- Yes switches it, as one operation on the daemon, even with a reply still
+  streaming: a start that is refused then, a port another program holds for
+  one, puts back what ran and says so, or says the endpoint is off when that
+  fails too. No changes nothing, says so and exits non-zero, so a script
+  after it does not go on. An endpoint already as asked is said so, and
+  nothing is asked.
+- `-y` answers yes. The question is asked only when both the keyboard and
+  the screen it is written to are a terminal. Otherwise, with no `-y`,
+  nothing changes, the command exits non-zero, and it names the command to
+  run: the same command line with `-y`.
+- When gglib is not running, a `proxy`, `serve`, `up` or `model load --pin`
+  that has to start it leaves its endpoint off at that start and starts its
+  own: nothing is asked, in a terminal or a script. The question is for an
+  endpoint that was on before the command ran.
+- `model load --pin` asks the same way, and takes `-y` too.
+- `serve` with the model already served but other launch options, a
+  `--jinja` or a context of its own, asks to serve it with those.
+- `up` never switches it: it asks for the endpoint as the stored settings
+  describe it, and one already on otherwise, serving one model or on another
+  port, is left as it is and said so, with what it did not do and the
+  command that would (`gglib proxy`, with `--port` when `up` was given one).
+  `-y` does not switch it either.
+- The desktop app's Serves menu, Unpin and pinned Load are the choice
+  themselves: each switches without asking, in the same one operation. A
+  service older than the app does not switch, and the app says so.
+- An endpoint off because its port is taken, by another program or another
+  gglib service, says so wherever it is shown: `daemon status` (`Why:`),
+  the sidebar and the Endpoint page. The service still starts.
+
 ## `daemon`
 
 One process owns the runtime: it holds an exclusive lock on the data
@@ -132,7 +186,10 @@ directory and launches every llama-server and sd-server. Commands that need
 it start one when none is up; a foreign process on its port is reported, not
 fought.
 
-- `status` says whether it runs, its pid, and whether the proxy is up.
+- `status` says whether it runs, its pid, and whether the proxy is up, and
+  why not when its port was taken;
+  under one serving a single model, the command that serves every model
+  again.
 - `run` runs it in the foreground. It listens on `127.0.0.1` only;
   `--allowed-host` accepts one more Host header value beside loopback.
 - `stop` stops the daemon, and with it every llama-server it owns.

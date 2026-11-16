@@ -51,6 +51,9 @@ pub(crate) struct StartProxyBody {
     pub api_key: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub allowed_hosts: Vec<String>,
+    /// Switch an endpoint that is on otherwise than this asks, once the user
+    /// has said yes (`handlers::inference::switch`).
+    pub replace: bool,
 }
 
 /// `GET /api/proxy/status` / start / stop response.
@@ -79,6 +82,13 @@ pub(crate) struct ProxyStatusDto {
     /// matched to. `None` while nothing is pinned.
     #[serde(default)]
     pub pinned_model_id: Option<i64>,
+    /// Why the endpoint is off, in the daemon's words, while a start could
+    /// not bind its port.
+    #[serde(default)]
+    pub refused: Option<String>,
+    /// What a start did; only a start's answer says it.
+    #[serde(default)]
+    pub outcome: Option<gglib_app_services::StartOutcome>,
 }
 
 /// One copyable line of a client recipe, as the daemon sends it.

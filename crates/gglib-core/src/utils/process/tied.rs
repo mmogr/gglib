@@ -21,10 +21,10 @@
 //!
 //! Whoever starts a child ties it, so the job belongs to the process that
 //! runs it: the engines run only in the service (`gglib daemon run`, or the
-//! desktop app when it hosts the service itself), and an MCP server runs in
-//! the service or in the CLI command that starts it (`gglib mcp test`).
-//! This process is not put in its own job. A process that never ties a
-//! child makes no job.
+//! desktop app when it hosts the service itself). An MCP server is started
+//! with [`super::tree::spawn`] instead, whose job of the server's own ties
+//! it the same way. This process is not put in its own job. A process that
+//! never ties a child makes no job.
 //!
 //! A child already in a job is still tied: Windows nests the jobs (since
 //! Windows 8), as for a service started under Windows' SSH server or a
@@ -34,16 +34,11 @@
 //!
 //! The child is tied after it starts. A process it started before then
 //! would not be tied, so a child that starts helpers at once can leave one
-//! untied; llama-server and `sd-server` start none. An MCP server started
-//! through a shim (`npx.cmd` is `cmd.exe` starting `node.exe`) can: what the
-//! shim starts after it is tied is tied too, since a child joins its
-//! parent's jobs, but not what it started in the moment before.
+//! untied; llama-server and `sd-server` start none.
 //!
-//! Tied means everything a tied child starts, for as long as it runs: a
-//! browser an MCP server opens as a new process for a sign-in is in the job
-//! too, and closes when the process that tied the server ends. A helper that
-//! asks Windows to start outside its parent's jobs is refused, since the job
-//! does not allow breaking away.
+//! Tied means everything a tied child starts, for as long as it runs. A
+//! helper that asks Windows to start outside its parent's jobs is refused,
+//! since the job does not allow breaking away.
 //!
 //! Whether a service that its starter's job ends (Windows' SSH server ends
 //! every process of a session when it closes) should outlive it is a

@@ -28,7 +28,7 @@ import { Checkbox } from '../../components/ui/Checkbox';
 import { Copied, useCopied } from '../../components/CopyValue';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useSettings } from '../../hooks/useSettings';
-import type { EndpointFacts } from '../../services/proxyRegistry';
+import { useEndpointRefusal, type EndpointFacts } from '../../services/proxyRegistry';
 import type { EndpointState } from '../../types/generated/EndpointState';
 import { formatError } from '../../utils/errors';
 import type { EndpointActions } from './useEndpointActions';
@@ -48,6 +48,7 @@ export const Header: FC<HeaderProps> = ({ facts, actions, onTest }) => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const state: EndpointState = actions.busy === 'on' || actions.busy === 'serve' ? 'starting' : facts.state;
   const up = state === 'on' || state === 'pinned';
+  const refused = useEndpointRefusal();
 
   const [urlCopied, showUrlCopied] = useCopied();
   const copy = (url: string) =>
@@ -105,6 +106,11 @@ export const Header: FC<HeaderProps> = ({ facts, actions, onTest }) => {
 
       {state === 'off' && (
         <div className="flex flex-col gap-sm pl-lg">
+          {refused !== null && (
+            <p role="status" className="m-0 text-sm text-text">
+              {refused}
+            </p>
+          )}
           <p className="m-0 text-sm text-text-secondary">
             Apps can&apos;t reach your models while it&apos;s off. Loaded models stay in memory.
           </p>
