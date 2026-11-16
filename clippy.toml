@@ -21,6 +21,12 @@
 # calls to the methods below; the creation flags and process group they set
 # are set nowhere else. `allow-invalid` on the ones that exist on one OS
 # only, so the other OSes' clippy can leave them unresolved.
+#
+# A path is canonicalized through gglib_core::paths::canonical. On Windows
+# `canonicalize` writes a verbatim path (`\\?\C:\...`) that many programs
+# refuse and that names a file by a second string; the owner writes it as a
+# plain path where one can be written. `allow-invalid` on tokio's, which a
+# crate without tokio's `fs` feature cannot resolve.
 disallowed-methods = [
     { path = "std::process::Command::new", reason = "start a program with gglib_core::utils::process::cmd, which opens no console window on Windows" },
     { path = "tokio::process::Command::new", reason = "start a program with gglib_core::utils::process::async_cmd, which opens no console window on Windows", allow-invalid = true },
@@ -28,6 +34,9 @@ disallowed-methods = [
     { path = "tokio::process::Command::creation_flags", reason = "the creation flags are set in gglib_core::utils::process only", allow-invalid = true },
     { path = "std::os::unix::process::CommandExt::process_group", reason = "a detached process is started with gglib_core::utils::process::detached::spawn_daemon", allow-invalid = true },
     { path = "tokio::process::Command::process_group", reason = "a detached process is started with gglib_core::utils::process::detached::spawn_daemon", allow-invalid = true },
+    { path = "std::fs::canonicalize", reason = "canonicalize with gglib_core::paths::canonical, which writes no verbatim prefix on Windows" },
+    { path = "std::path::Path::canonicalize", reason = "canonicalize with gglib_core::paths::canonical, which writes no verbatim prefix on Windows" },
+    { path = "tokio::fs::canonicalize", reason = "canonicalize with gglib_core::paths::canonical, which writes no verbatim prefix on Windows", allow-invalid = true },
     { path = "tokio::net::TcpListener::accept", reason = "a fake server takes its connection from gglib_test_http::accept, or ::incoming and then Incoming::request, so the request is read first", allow-invalid = true },
     { path = "tokio::net::TcpListener::poll_accept", reason = "a fake server takes its connection from gglib_test_http::incoming, whose Incoming gives no stream until the request is read", allow-invalid = true },
     { path = "axum::serve::Listener::accept", reason = "a fake server takes its connection from gglib_test_http::accept, or ::incoming and then Incoming::request, so the request is read first", allow-invalid = true },
