@@ -201,7 +201,7 @@ pub(super) fn other_gpu_memory_bytes(total_ram_bytes: u64) -> (Option<u64>, bool
 
 /// The decision, over a plain struct.
 ///
-/// Lifted out of the probe for the same reason `device_budget_of` is: the
+/// Lifted out of the probe for the same reason `fit_memory_of` is: the
 /// interesting part is one branch of policy, and it should be assertable
 /// without the hardware it describes.
 fn budget_for(device: &VulkanDevice, total_ram_bytes: u64) -> Option<u64> {

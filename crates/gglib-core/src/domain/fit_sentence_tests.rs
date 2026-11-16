@@ -341,8 +341,9 @@ fn the_kv_cache_served_counts_the_window_block() {
 /// past a trained window that capped the rung, a model too big for the
 /// smallest rung, a refusal for
 /// each missing figure, and one for a header that says neither what its
-/// context costs nor what it was trained for. The first is the GUI
-/// fixtures' chat model.
+/// context costs nor what it was trained for; then, on a machine with no
+/// GPU, a fit to its RAM and a context served above it. The first is the
+/// GUI fixtures' chat model.
 fn recorded() -> Vec<ContextFit> {
     use ContextSizeSource::{BuiltInDefault, Explicit, FittedToHardware, ModelServerDefaults};
     let refused = FitInputs {
@@ -392,6 +393,8 @@ fn recorded() -> Vec<ContextFit> {
             trained_ctx: None,
             ..refused
         }),
+        ContextFit::new(32_768, FittedToHardware, Some(32_768), &on_ram()),
+        ContextFit::new(65_536, Explicit, Some(32_768), &on_ram()),
     ]
 }
 

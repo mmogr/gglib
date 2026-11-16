@@ -590,5 +590,107 @@
         "source": null
       }
     ]
+  },
+  {
+    "servesAt": 32768,
+    "source": "fitted_to_hardware",
+    "fitted": 32768,
+    "budgetBytes": 51539607552,
+    "systemRamBytes": 68719476736,
+    "weightsBytes": 2500000000,
+    "kvBytesPerToken": 1097000,
+    "kvBytes": 35946496000,
+    "trainedCtx": 131072,
+    "unsnapped": 40005,
+    "sentence": "Fits this machine's 64.0 GiB of RAM (no GPU) with 32K context, of 128K trained.",
+    "note": "fits (35.81 GiB of 43.20 GiB usable)",
+    "figures": [
+      {
+        "label": "memory",
+        "value": "fits (35.81 GiB of 43.20 GiB usable)",
+        "source": null
+      },
+      {
+        "label": "RAM budget",
+        "value": "48.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "2.33 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "1097000",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "33.48 GiB",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "131072",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "40005",
+        "source": null
+      }
+    ]
+  },
+  {
+    "servesAt": 65536,
+    "source": "explicit",
+    "fitted": 32768,
+    "budgetBytes": 51539607552,
+    "systemRamBytes": 68719476736,
+    "weightsBytes": 2500000000,
+    "kvBytesPerToken": 1097000,
+    "kvBytes": 71892992000,
+    "trainedCtx": 131072,
+    "unsnapped": 40005,
+    "sentence": "Serves at 64K context, of 128K trained; 32K fits this machine's 64.0 GiB of RAM (no GPU).",
+    "note": "does not fit (69.28 GiB of 43.20 GiB usable)",
+    "figures": [
+      {
+        "label": "memory",
+        "value": "does not fit (69.28 GiB of 43.20 GiB usable)",
+        "source": null
+      },
+      {
+        "label": "RAM budget",
+        "value": "48.00 GiB",
+        "source": null
+      },
+      {
+        "label": "weights",
+        "value": "2.33 GiB",
+        "source": null
+      },
+      {
+        "label": "kv bytes/token",
+        "value": "1097000",
+        "source": null
+      },
+      {
+        "label": "kv cache",
+        "value": "66.96 GiB",
+        "source": null
+      },
+      {
+        "label": "trained window",
+        "value": "131072",
+        "source": null
+      },
+      {
+        "label": "before snapping",
+        "value": "40005",
+        "source": null
+      }
+    ]
   }
 ]

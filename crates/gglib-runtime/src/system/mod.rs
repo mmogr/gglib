@@ -257,9 +257,13 @@ impl SystemProbePort for DefaultSystemProbe {
 /// loaded: that set changes while a model is resident, which is exactly the
 /// drift this avoids.
 ///
+/// A machine with no GPU runs its model from RAM and is sized against a
+/// share of it ([`FitMemory::SystemRam`], see `fit_memory_of`).
+///
 /// No budget ([`FitMemory::Unreadable`]) when gglib cannot read a GPU's
-/// memory: a software rasteriser, or a device whose heaps cannot be shown to
-/// be its own. Deliberately a refusal rather than a fallback to system RAM:
+/// memory: a device whose heaps cannot be shown to be its own, or an NVIDIA
+/// card `nvidia-smi` cannot answer for. Deliberately a refusal rather than a
+/// fallback to system RAM:
 /// sizing a KV cache against 64 GiB of host memory on an 8 GiB card is
 /// exactly the "working but unusably slow" outcome the recommendation module
 /// exists to prevent, and it would look stable while measuring the wrong
@@ -280,7 +284,7 @@ pub fn fit_memory() -> FitMemory {
     })
 }
 
-/// The GPU's memory, when [`fit_memory`] read one: `None` on a machine with
+/// The GPU's memory, when [`fit_memory()`] read one: `None` on a machine with
 /// no GPU and on one whose GPU could not be read.
 #[must_use]
 pub fn total_device_memory_bytes() -> Option<u64> {
