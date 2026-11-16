@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use gglib_core::request_pipeline::budget_turns_thinking_off;
 use minijinja::Value as JinjaValue;
 use serde_json::{Map, Value};
 
@@ -51,12 +52,16 @@ impl ChatKwargs {
     /// as llama-server refuses it. `reasoning_effort: "none"` turns thinking
     /// off, and another effort becomes the `reasoning_effort` kwarg.
     ///
-    /// Then gglib's own rule, which llama-server does not have: a
-    /// `reasoning_budget_tokens` (or `thinking_budget_tokens`) of 0 renders
-    /// with thinking off, over anything else the request says. llama-server
-    /// keeps the thinking prompt and ends the thinking at its sampler
+    /// Then gglib's own rule: a `reasoning_budget_tokens` (or
+    /// `thinking_budget_tokens`) of 0 renders with thinking off, over
+    /// anything else the request says. llama-server alone keeps the thinking
+    /// prompt and ends the thinking at its sampler
     /// (`tools/server/server-common.cpp:1439-1454`); gglib's in-process
-    /// engine has no such sampler, so the budget is honoured here.
+    /// engine has no such sampler, so the budget is honoured here. Which
+    /// budget is `0` is the request pipeline's
+    /// [`budget_turns_thinking_off`], whose stage sends llama-server
+    /// `enable_thinking: false` for the same requests, so the two engines
+    /// render one request alike.
     pub fn from_request(body: &Value) -> Result<Self, RenderError> {
         let mut read = Self::default();
         if let Some(asked) = body.get("chat_template_kwargs").and_then(Value::as_object) {
@@ -85,7 +90,7 @@ impl ChatKwargs {
             }
             _ => {}
         }
-        if reasoning_budget(body) == Some(0) {
+        if budget_turns_thinking_off(body) {
             read.enable_thinking = false;
             read.kwargs
                 .insert("enable_thinking".to_owned(), Value::Bool(false));
@@ -103,18 +108,6 @@ impl ChatKwargs {
     pub fn kwargs(&self) -> &Map<String, Value> {
         &self.kwargs
     }
-}
-
-/// The request's reasoning budget: `reasoning_budget_tokens`, else
-/// `thinking_budget_tokens` (`tools/server/server-common.cpp:1441-1442`).
-///
-/// A field that is null or not a number reads as absent, as llama-server's
-/// `json_value` reads it (`tools/server/server-common.h:43-55`). Only an
-/// integer is a budget here: a float or a boolean, which llama-server casts
-/// to an int, reads as absent too.
-fn reasoning_budget(body: &Value) -> Option<i64> {
-    let budget = |key| body.get(key).and_then(Value::as_i64);
-    budget("reasoning_budget_tokens").or_else(|| budget("thinking_budget_tokens"))
 }
 
 /// The variables a `preserve_reasoning` boolean and a `reasoning_effort`

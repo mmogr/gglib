@@ -92,6 +92,12 @@ does either.
 - [`sampling`] — [`resolve_sampling()`] and [`SamplingLayers`], stage 4: the
   sampling hierarchy. Everything that
   touches top-level sampling keys.
+- [`thinking_off`] — [`tell_template_thinking_is_off()`], stage 4b: a request
+  whose resolved thinking budget is `0` is also sent
+  `chat_template_kwargs.enable_thinking: false`, merged into the client's own
+  kwargs, because the budget alone ends the thinking at llama-server's sampler
+  while the template still asks for it. [`budget_turns_thinking_off()`] is
+  which budget counts, and the in-process engine's renderer reads it too.
 - [`sampling_log`] — no stage of its own; the single `sampling resolved` debug
   line, rendered once stage 4 has resolved the request.
 

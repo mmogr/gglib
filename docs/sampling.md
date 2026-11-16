@@ -132,6 +132,17 @@ does. Its range is upstream's, quoted rather than invented: `-1` to
 `i32::MAX`, with anything below `-1` coming back as an HTTP 400 naming that
 range, so gglib rejects exactly what upstream rejects and nothing more.
 
+A budget of `0` is enforced at llama.cpp's sampler, but the template still
+asks for thinking, and a model that thinks by default, such as Qwen3, then
+reasons on in plain text: its reasoning and a stray `</think>` arrive as the
+reply. So when the budget resolves to `0` gglib also sends
+`chat_template_kwargs.enable_thinking: false`, kept beside any kwargs the
+client sent and over its own `enable_thinking`, and the template asks for no
+thinking. Thinking on, or a budget left unset, sends no `enable_thinking` at
+all. The in-process engine renders the same requests with thinking off
+([ADR 0007](adr/0007-ask-the-server-for-template-capabilities.md)'s
+2026-11-16 amendment).
+
 That difference is also the trust split. A client's `reasoning_budget_tokens`
 is honoured even when `trust_client_sampling` is off — it joins `max_tokens` as
 a bound the caller sets on its own turn — while a client's `reasoning_effort`

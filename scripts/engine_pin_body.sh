@@ -201,7 +201,9 @@ tier3_line() {
       def why($p): if $p.value == true then "" else ", `\($p.reason // "no reason given" | gsub("`"; ""))`" end;
       [["tool_call_native", "tool call native"], ["tool_call_parsed", "tool call parsed"],
        ["reasoning_split", "reasoning split"],
-       ["image_in_tool_message_answered", "image in tool message answered"]] as $probes
+       ["image_in_tool_message_answered", "image in tool message answered"],
+       ["thinking_off_by_budget_alone", "thinking off by the budget alone"],
+       ["thinking_off_as_gglib_sends_it", "thinking off as gglib sends it"]] as $probes
     | ($n.model // "the model" | sub("-Q[0-9].*$"; "") | sub("\\.gguf$"; "")) as $model
     | if $w != null and all($probes[]; $n[.[0]].value == $w[.[0]].value) then
         "\($model): \([$probes[] | .[1]] | join(", ")): unchanged"
