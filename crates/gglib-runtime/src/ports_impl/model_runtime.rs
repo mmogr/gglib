@@ -142,6 +142,10 @@ impl ModelRuntimePort for RuntimePortImpl {
         Ok(())
     }
 
+    async fn kill_all_now(&self) {
+        self.mgr.kill_all_now().await;
+    }
+
     fn pinned(&self) -> Option<gglib_core::ports::PinnedSpec> {
         self.mgr.pinned()
     }

@@ -20,7 +20,7 @@ dotenvy = { workspace = true }
 bitflags = { version = "2.6", features = ["serde"] }
 uuid = { workspace = true, features = ["serde", "v4"] }
 getrandom = "0.4"
-tokio = { workspace = true, features = ["fs", "process", "rt", "sync", "time"] }
+tokio = { workspace = true, features = ["fs", "macros", "process", "rt", "signal", "sync", "time"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }

@@ -64,6 +64,25 @@ comment).
    Windows call that needs `unsafe`, such as the job object of
    [#1985](https://github.com/mmogr/gglib/issues/1985), goes beside them.
 
+> **Amendment, 2026-11-16 ([#1983](https://github.com/mmogr/gglib/issues/1983)).**
+> Decision 2 covers a service the CLI or the app starts. A service run in a
+> terminal, `gglib daemon run`, shares that terminal's console, and closing
+> its window used to end it at once, with no teardown and llama-server left
+> running. `gglib_core::utils::process::stop::stop_requested` now hears every
+> stop and says how long it leaves: Ctrl-C, SIGTERM and Ctrl-Break are
+> orderly, and the teardown runs as before; a console window closed while
+> the service serves is hurried, because Windows ends the process about five
+> seconds later, so the service kills every engine (llama-server and
+> `sd-server`) at once, then runs the same teardown for as long as it lives.
+> A window closed during the teardown of an earlier stop still ends the
+> process at once. A logoff and a system
+> shutdown are listened for as hurried too, but Windows does not send them
+> to the service: a console program that loads `user32.dll`, as gglib does,
+> is not sent `CTRL_LOGOFF_EVENT` or `CTRL_SHUTDOWN_EVENT`. Hearing those
+> would take a hidden window and its `WM_ENDSESSION`, which is not done. A
+> test cannot raise the console events; a run on the Windows VM is their
+> proof. The engines' kill is tested on every OS.
+
 ## Consequences
 
 - `crates/gglib-core/tests/detached_spawn.rs` holds the A5 fault on every
@@ -102,8 +121,10 @@ comment).
 
 ## Out of scope
 
-- How the service stops on Windows when its console closes, the user logs
-  off or the system shuts down ([#1983](https://github.com/mmogr/gglib/issues/1983)).
+- How the service stops on Windows when the user logs off or the system
+  shuts down: Windows does not send those events to it (see the amendment
+  under Decision for the console closing, done in
+  [#1983](https://github.com/mmogr/gglib/issues/1983)).
 - Time limits on the programs gglib waits for
   ([#1984](https://github.com/mmogr/gglib/issues/1984)).
 - Tying the engines to the service on Windows, so they end with it
