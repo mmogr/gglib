@@ -26,7 +26,7 @@ builtinIntegration  mcpIntegration  Tools ▸ (every tool, by
 |------|------|
 | `registry.ts` | Core `ToolRegistry`; register, name resolution, renderer lookup |
 | `types.ts` | `ToolDefinition`, `RegisteredTool`, `ToolResultRenderer` |
-| `builtinIntegration.ts` | Fetches built-in tool definitions from backend at startup; registers them with their renderers |
+| `builtinIntegration.ts` | Fetches built-in tool definitions from the backend when the window starts and on every opening of the event stream (`keepBuiltinToolsCurrent`); registers them with their renderers, in place of the built-ins held, only once a read has answered |
 | `mcpIntegration.ts` | Registers MCP server tools dynamically; converts MCP → OpenAI format |
 | `nameUtils.ts` | Name sanitization, collision detection, display name formatting |
 | `renderers/` | React renderers for tool result display in the chat |

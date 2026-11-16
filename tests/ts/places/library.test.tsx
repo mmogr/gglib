@@ -50,6 +50,8 @@ vi.mock('../../../src/services/transport', async () => {
         return () => handlers.delete(category);
       }),
       onEventStreamOpen: vi.fn(() => () => {}),
+      onEventStreamClose: vi.fn(() => () => {}),
+      isEventStreamOpen: vi.fn(() => false),
       revealSecret: vi.fn(async () => null),
     }),
   };

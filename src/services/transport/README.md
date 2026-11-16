@@ -24,7 +24,7 @@ There is no branch **between transports**: desktop and web both talk to the ggli
 
 Both halves reach the same gglib daemon, on desktop and on the web.
 
-The event half is two functions of `events/sse.ts`, `subscribe` and `onEventStreamOpen`, with no factory between: there is one stream and nothing to construct. Callers listen through `getTransport().subscribe`.
+The event half is functions of `events/sse.ts` (`subscribe`, `onEventStreamOpen`, `onEventStreamClose`, `isEventStreamOpen` and `reconnectEventStreamNow`), with no factory between: there is one stream and nothing to construct. Callers listen through `getTransport().subscribe`.
 
 ## Subdirectories
 

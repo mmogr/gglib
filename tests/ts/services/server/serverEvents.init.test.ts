@@ -23,9 +23,26 @@ const subscribe = vi.fn();
 const listServers = vi.fn();
 const ingestServerEvent = vi.fn();
 const isDesktop = vi.fn();
+/** Who listens for the event stream to open or close; a test opens it by calling them. */
+const openListeners = new Set<() => void>();
+const closeListeners = new Set<() => void>();
+const stream = { open: false };
+const onEventStreamOpen = (listener: () => void) => {
+  openListeners.add(listener);
+  return () => void openListeners.delete(listener);
+};
+const onEventStreamClose = (listener: () => void) => {
+  closeListeners.add(listener);
+  return () => void closeListeners.delete(listener);
+};
+const isEventStreamOpen = () => stream.open;
+const openStream = () => {
+  stream.open = true;
+  openListeners.forEach((listener) => listener());
+};
 
 vi.mock('../../../../src/services/transport', () => ({
-  getTransport: () => ({ subscribe, listServers }),
+  getTransport: () => ({ subscribe, onEventStreamOpen, onEventStreamClose, isEventStreamOpen, listServers }),
 }));
 
 vi.mock('../../../../src/services/serverRegistry', () => ({
@@ -47,9 +64,13 @@ describe('initServerEvents', () => {
     listServers.mockReset().mockResolvedValue([]);
     ingestServerEvent.mockReset();
     isDesktop.mockReset();
+    openListeners.clear();
+    closeListeners.clear();
+    stream.open = false;
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.resetModules();
   });
 
@@ -112,7 +133,7 @@ describe('initServerEvents', () => {
    * A live event during the hydration fetch is newer than the fetch. Applying
    * the snapshot afterwards would resurrect a server that had just stopped.
    */
-  it('drops hydration that a live event has already overtaken', async () => {
+  it('drops hydration that a live event has already overtaken, and lands the read the event set going', async () => {
     // Typed on both sides deliberately. `ServerWireEvent` and `ServerInfo` are
     // otherwise read by nothing in a checked position — the subscription hands
     // its payload to a normalizer taking `unknown` — so corrupting either
@@ -134,6 +155,8 @@ describe('initServerEvents', () => {
     const { initServerEvents, cleanupServerEvents } = await loadFresh();
     initServerEvents();
 
+    // The read the event sets going answers with nothing running.
+    listServers.mockResolvedValue([]);
     // `server_stopped` carries no port — the Rust variant has `modelId` and
     // `modelName` only.
     deliver?.({ type: 'server_stopped', modelId: 1, modelName: 'Loaded' });
@@ -147,13 +170,77 @@ describe('initServerEvents', () => {
         runtime: 'llama',
       },
     ]);
-    await vi.waitFor(() => expect(ingestServerEvent).toHaveBeenCalled());
+    await vi.waitFor(() => expect(ingestServerEvent).toHaveBeenCalledTimes(2));
 
-    expect(ingestServerEvent).toHaveBeenCalledTimes(1);
-    expect(ingestServerEvent).toHaveBeenCalledWith(
+    // The overtaken hydration is dropped; the read the event set going (the
+    // list still unheard) is the one that lands.
+    expect(listServers).toHaveBeenCalledTimes(2);
+    expect(ingestServerEvent.mock.calls.map(([evt]) => evt)).toEqual([
       expect.objectContaining({ type: 'stopped' }),
-    );
+      { type: 'snapshot', servers: [] },
+    ]);
 
+    cleanupServerEvents();
+  });
+
+  // While the stream is down nothing asks on a timer: a read that failed is
+  // followed by the next opening of the stream (the daemon answering) or the
+  // next server event, which says so too.
+  it('while the stream is down, reads a list that failed again on a server event or an opening of the stream, not on a timer', async () => {
+    vi.useFakeTimers();
+    let deliver: ((payload: ServerWireEvent) => void) | undefined;
+    subscribe.mockImplementation((_channel: string, cb: (p: ServerWireEvent) => void) => {
+      deliver = cb;
+      return () => {};
+    });
+    listServers.mockRejectedValueOnce(new Error('refused')).mockRejectedValueOnce(new Error('refused'));
+    const { initServerEvents, cleanupServerEvents } = await loadFresh();
+    initServerEvents();
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(listServers).toHaveBeenCalledTimes(1);
+
+    deliver?.({ type: 'server_stopped', modelId: 1, modelName: 'Loaded' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(listServers).toHaveBeenCalledTimes(2);
+
+    openStream();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(listServers).toHaveBeenCalledTimes(3);
+
+    // Heard: an event no longer reads the list.
+    deliver?.({ type: 'server_stopped', modelId: 1, modelName: 'Loaded' });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(listServers).toHaveBeenCalledTimes(3);
+
+    cleanupServerEvents();
+  });
+
+  // The review's sequence: the mount read and the opening's read both fail
+  // (a 30 s time limit, a 5xx), the stream stays open, no server starts. The
+  // one retry, `keptCurrent`'s, asks again after 1 s, then 2 s, until a read lands.
+  it('while the stream is open, asks a list that failed again after a wait that grows, until one lands', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const timedOut = () => Promise.reject(new Error('gglib did not answer in 30 seconds.'));
+    listServers.mockImplementationOnce(timedOut).mockImplementationOnce(timedOut).mockImplementationOnce(timedOut);
+    const { initServerEvents, cleanupServerEvents } = await loadFresh();
+    initServerEvents();
+    openStream();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(listServers).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(listServers).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(listServers).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(listServers).toHaveBeenCalledTimes(4);
+    expect(ingestServerEvent).toHaveBeenCalledWith({ type: 'snapshot', servers: [] });
+
+    // Landed: nothing more.
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(listServers).toHaveBeenCalledTimes(4);
     cleanupServerEvents();
   });
 

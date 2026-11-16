@@ -50,6 +50,28 @@ function parseAppEvent(msg: SseEvent): unknown {
 }
 
 /**
+ * One run of the reconnect loop: what it is doing now, and how to wake it.
+ *
+ * Each start of the loop has its own, so a loop that was stopped, still
+ * settling its last attempt, can only change its own state and never the
+ * state of the loop that replaced it (a stop and a start in one tick, as
+ * StrictMode remounts do).
+ */
+interface Loop {
+  readonly abort: AbortController;
+  /**
+   * `attempting` from the request until whatever follows its refusal is
+   * done, a credential's renewal included; `connected` while a stream is
+   * read; `waiting` in a reconnect wait.
+   */
+  phase: 'attempting' | 'connected' | 'waiting';
+  /** A wake asked while attempting: the next attempt is made at once. */
+  wakeAsked: boolean;
+  /** Ends the reconnect wait early, while one is running. */
+  wake: (() => void) | null;
+}
+
+/**
  * SSE connection manager with automatic reconnection.
  * Supports multiple subscribers sharing a single connection.
  */
@@ -57,10 +79,11 @@ export class SSEConnectionManager<T = unknown> {
   private listeners = new Set<EventHandler<T>>();
   /** Announced each time the stream opens, reconnections included. */
   readonly opened = new OpenSignal();
+  /** Announced each time an open stream ends: closed, failed or stopped. */
+  readonly closed = new OpenSignal();
   private running = false;
-  private abort: AbortController | null = null;
-  /** Ends the current reconnect wait early, while one is running. */
-  private wake: (() => void) | null = null;
+  /** The loop that is running, if one is. */
+  private loop: Loop | null = null;
   private readonly path: string;
   private readonly parse: (msg: SseEvent) => unknown;
 
@@ -107,18 +130,45 @@ export class SSEConnectionManager<T = unknown> {
    */
   private stop(): void {
     this.running = false;
-    this.abort?.abort();
-    this.abort = null;
-    this.wake?.();
+    const loop = this.loop;
+    this.loop = null;
+    if (loop) this.enter(loop, 'waiting');
+    loop?.abort.abort();
+    loop?.wake?.();
+  }
+
+  /** Whether a stream is open now. */
+  get isOpen(): boolean {
+    return this.loop?.phase === 'connected';
+  }
+
+  /**
+   * Move `loop` to `phase`, telling the listeners when that ends an open
+   * stream. A stopped loop is told nothing more: its stop said it.
+   */
+  private enter(loop: Loop, phase: Loop['phase']): void {
+    const ended = loop.phase === 'connected' && phase !== 'connected';
+    loop.phase = phase;
+    if (ended && !loop.abort.signal.aborted) this.closed.announce();
   }
 
   /**
    * Cut a reconnect wait short and connect now: for a reader that knows the
    * daemon is back, so its stream need not sleep out a backoff that grew
-   * while the daemon was gone. Nothing happens while connected or stopped.
+   * while the daemon was gone. Asked while an attempt is out (or while the
+   * credential it was refused with is renewed), it is kept: that attempt,
+   * begun before the daemon listened, may yet fail, and the next is then
+   * made at once. Asked while connected, the connection is kept and its
+   * opening announced again: a reader that let its state go when the
+   * daemon seemed gone (a health probe that failed while the stream stayed
+   * up) reads it again, as on any opening. Nothing happens while stopped.
    */
   retryNow(): void {
-    this.wake?.();
+    const loop = this.loop;
+    if (!loop) return;
+    if (loop.wake) loop.wake();
+    else if (loop.phase === 'attempting') loop.wakeAsked = true;
+    else if (loop.phase === 'connected') this.opened.announce();
   }
 
   /**
@@ -126,21 +176,29 @@ export class SSEConnectionManager<T = unknown> {
    */
   private async start(): Promise<void> {
     this.running = true;
-    // Each start owns its controller, so a loop stopped while it slept in a
-    // reconnect wait ends when it wakes, whatever a later start set going:
-    // one stream, however often the readers come and go.
-    const abort = new AbortController();
-    this.abort = abort;
+    // Each start owns its loop, controller and all, so a loop stopped while
+    // it slept in a reconnect wait ends when it wakes, whatever a later
+    // start set going: one stream, however often the readers come and go.
+    const loop: Loop = { abort: new AbortController(), phase: 'attempting', wakeAsked: false, wake: null };
+    this.loop = loop;
+    const { signal } = loop.abort;
 
     const backoff = new Backoff();
+    // Whether the last attempt was refused for its credential, which was
+    // then renewed: one at once after that, not a run of them.
+    let renewedLast = false;
 
-    while (!abort.signal.aborted) {
+    while (!signal.aborted) {
+      this.enter(loop, 'attempting');
+      loop.wakeAsked = false;
       try {
         appLogger.debug('transport.sse', '[SSE] Connecting to', { path: this.path });
 
         // The daemon's base URL and the session's token are resolved here, on
         // each connection, so one made after a renewal presents the new token.
-        const response = await apiFetch(this.path, { signal: abort.signal, stream: true });
+        const response = await apiFetch(this.path, { signal, stream: true });
+        renewedLast = false;
+        this.enter(loop, 'connected');
         this.opened.announce();
 
         for await (const msg of readSse(response)) {
@@ -157,26 +215,35 @@ export class SSEConnectionManager<T = unknown> {
         appLogger.debug('transport.sse', '[SSE] Stream ended');
       } catch (error) {
         // Don't reconnect if explicitly stopped
-        if (abort.signal.aborted) {
+        if (signal.aborted) {
           break;
         }
 
+        // Still the attempt until the renewal below is done: a wake asked
+        // meanwhile is kept.
+        this.enter(loop, 'attempting');
         appLogger.error('transport.sse', '[SSE] Connection error', { error });
-        await renewAfterRefusal(error); // a restarted daemon minted a new token
+        // A restarted daemon minted a new token. A refusal for the old one
+        // says the daemon answers, so the attempt with the new one is made
+        // at once rather than after a wait that grew while it was gone.
+        const renewed = await renewAfterRefusal(error).catch(() => false);
+        const again = (renewed && !renewedLast) || loop.wakeAsked;
+        renewedLast = renewed;
+        if (signal.aborted) break;
+        if (again) continue;
+
         const wait = backoff.next();
         appLogger.debug('transport.sse', '[SSE] Reconnecting', { waitMs: wait });
 
-        let wake: () => void = () => {};
+        this.enter(loop, 'waiting');
         await new Promise<void>((resolve) => {
           const timer = setTimeout(resolve, wait);
-          wake = () => {
+          loop.wake = () => {
             clearTimeout(timer);
             resolve();
           };
-          this.wake = wake;
         });
-        // Only this loop's own: a stopped loop waking late leaves a newer one's alone.
-        if (this.wake === wake) this.wake = null;
+        loop.wake = null;
       }
     }
 
@@ -335,6 +402,16 @@ export function subscribeSseEvent<K extends AppEventType>(
  */
 export function onEventStreamOpen(handler: () => void): Unsubscribe {
   return getSharedManager().opened.listen(handler);
+}
+
+/** Be told each time an open stream ends: closed by the daemon, failed, or stopped. */
+export function onEventStreamClose(handler: () => void): Unsubscribe {
+  return getSharedManager().closed.listen(handler);
+}
+
+/** Whether the shared stream is open now. */
+export function isEventStreamOpen(): boolean {
+  return sharedManager?.isOpen ?? false;
 }
 
 /**

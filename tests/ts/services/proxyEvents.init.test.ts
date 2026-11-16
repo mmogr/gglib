@@ -18,7 +18,7 @@ const applyProxyStatus = vi.fn();
 const resetProxyState = vi.fn();
 
 vi.mock('../../../src/services/transport', () => ({
-  getTransport: () => ({ subscribe: subscribeSseEvent, getProxyStatus }),
+  getTransport: () => ({ subscribe: subscribeSseEvent, onEventStreamOpen: () => () => {}, onEventStreamClose: vi.fn(() => () => {}), isEventStreamOpen: vi.fn(() => false), getProxyStatus }),
 }));
 
 vi.mock('../../../src/services/proxyRegistry', () => ({

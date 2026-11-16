@@ -1,55 +1,33 @@
 //! Filesystem provider trait for testable path resolution.
 
+use super::platform::Platform;
 use super::types::AttemptOutcome;
 use std::path::Path;
 
 /// Trait for filesystem operations (injectable for testing).
 pub(crate) trait FsProvider {
-    /// Check if a path exists and is a valid executable.
-    /// Returns Ok if the file is executable, or a specific outcome otherwise.
-    fn check_executable(&self, path: &Path) -> AttemptOutcome;
+    /// Check if a path exists and is a program by `platform`'s rules.
+    /// Returns Ok if it is, or a specific outcome otherwise.
+    fn check_executable(&self, path: &Path, platform: &Platform) -> AttemptOutcome;
 }
 
 /// Production filesystem provider that uses real filesystem operations.
 pub(crate) struct SystemFs;
 
 impl FsProvider for SystemFs {
-    fn check_executable(&self, path: &Path) -> AttemptOutcome {
-        // Check if path exists
+    fn check_executable(&self, path: &Path, platform: &Platform) -> AttemptOutcome {
         if !path.exists() {
             return AttemptOutcome::NotFound;
         }
-
-        // Check if it's a file
         if !path.is_file() {
             return AttemptOutcome::NotAFile;
         }
-
-        // Check if executable (Unix only - Windows assumes .exe/.cmd are executable)
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            match std::fs::metadata(path) {
-                Ok(metadata) => {
-                    let permissions = metadata.permissions();
-                    if permissions.mode() & 0o111 == 0 {
-                        return AttemptOutcome::NotExecutable;
-                    }
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-                    return AttemptOutcome::PermissionDenied;
-                }
-                Err(e) => {
-                    return AttemptOutcome::IoError(e.to_string());
-                }
-            }
-        }
-
-        AttemptOutcome::Ok
+        platform.check_runnable(path)
     }
 }
 
-/// Test/mock filesystem provider with predefined responses.
+/// Test/mock filesystem provider with predefined responses. It ignores the
+/// platform's rules: what it was given is a program, and nothing else is there.
 #[cfg(test)]
 #[derive(Default)]
 pub(crate) struct MockFs {
@@ -71,7 +49,7 @@ impl MockFs {
 
 #[cfg(test)]
 impl FsProvider for MockFs {
-    fn check_executable(&self, path: &Path) -> AttemptOutcome {
+    fn check_executable(&self, path: &Path, _platform: &Platform) -> AttemptOutcome {
         if self.executables.contains(path) {
             AttemptOutcome::Ok
         } else {

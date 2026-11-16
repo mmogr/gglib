@@ -16,7 +16,7 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
 vi.mock('../../../src/services/transport', () => ({
-  getTransport: () => ({ revealSecret: async () => null, getSettings: async () => ({}) }),
+  getTransport: () => ({ revealSecret: async () => null, getSettings: async () => ({}), onEventStreamOpen: () => () => {}, onEventStreamClose: vi.fn(() => () => {}), isEventStreamOpen: vi.fn(() => false) }),
 }));
 const dashboard = vi.hoisted(() => ({ send: null as ((s: unknown) => void) | null }));
 vi.mock('../../../src/services/clients/proxyDashboard', () => ({

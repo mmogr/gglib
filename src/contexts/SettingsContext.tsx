@@ -5,10 +5,10 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useRef,
   useState,
 } from "react";
 import { AppSettings, UpdateSettingsRequest } from "../types";
+import { keptCurrent } from '../services/bridgeEvents';
 import { getTransport } from '../services/transport';
 import { formatError } from '../utils/errors';
 
@@ -16,6 +16,11 @@ export type ShowToastFn = (message: string, type?: "success" | "error" | "info" 
 
 export interface SettingsContextValue {
   settings: AppSettings | null;
+  /**
+   * True until the daemon has first answered, a read or a save, with the
+   * settings or with a failure. A failure leaves `settings` null: a reader
+   * that needs the settings themselves waits for `settings`, not this.
+   */
   loading: boolean;
   saving: boolean;
   error: string | null;
@@ -38,31 +43,41 @@ interface SettingsProviderProps {
 /**
  * Provider component that manages shared settings state.
  * All components using useSettings() will share the same state instance.
+ *
+ * The settings are kept current (`keptCurrent`): read on mount and again
+ * each time the event stream opens, so a first read the daemon refused on a
+ * cold start is followed by one that lands. A read applies its answer only
+ * if no save began and no later read landed while it was out, so a read
+ * overtaken by a save cannot put back what was there before (TX-2). A read
+ * that fails is said in `error` and is not newer state: an earlier read
+ * that lands after it is still applied.
  */
 export const SettingsProvider: FC<SettingsProviderProps> = ({ children, showToast }) => {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Counts every read and write begun. A read applies its answer only when
-  // nothing began after it, so a read overtaken by a save (or by a later
-  // read) cannot put back what was there before (TX-2).
-  const turn = useRef(0);
 
+  const [kept] = useState(() =>
+    keptCurrent<AppSettings>({
+      read: () => getTransport().getSettings(),
+      apply: (read) => {
+        setSettings(read);
+        setError(null);
+        setLoading(false);
+      },
+      onFailure: (err) => {
+        setError(formatError(err));
+        setLoading(false);
+      },
+    })
+  );
+
+  // Asked for by a reader: what it says while the read is out is the asking, not an old failure.
   const load = useCallback(async () => {
-    const mine = ++turn.current;
-    try {
-      setLoading(true);
-      setError(null);
-      const result = await getTransport().getSettings();
-      if (mine === turn.current) setSettings(result);
-    } catch (err) {
-      const message = formatError(err);
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    setError(null);
+    await kept.refresh();
+  }, [kept]);
 
   const save = useCallback(
     async (updates: UpdateSettingsRequest, options?: { quiet?: boolean }): Promise<AppSettings> => {
@@ -70,7 +85,7 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children, showToas
       try {
         setSaving(true);
         setError(null);
-        ++turn.current;
+        kept.overtake();
         const result = await getTransport().updateSettings(updates);
         setSettings(result);
         toast?.("Settings applied", "success");
@@ -81,16 +96,18 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children, showToas
         toast?.(message, "error");
         throw err;
       } finally {
+        // The daemon has answered, even if the read the save overtook never will.
+        setLoading(false);
         setSaving(false);
       }
     },
-    [showToast]
+    [showToast, kept]
   );
 
-  // Load settings on mount
+  // Read now, and again each time the event stream opens.
   useEffect(() => {
-    load();
-  }, [load]);
+    return kept.keep();
+  }, [kept]);
 
   const value: SettingsContextValue = {
     settings,

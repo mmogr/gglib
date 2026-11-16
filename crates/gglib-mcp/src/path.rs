@@ -5,7 +5,7 @@
 //! - Build effective PATH for child processes (includes exe dir, system paths, custom paths)
 //! - Validate working directories
 
-use crate::resolver::{AttemptOutcome, FsProvider, PATH_SEPARATOR, SystemFs};
+use crate::resolver::{AttemptOutcome, FsProvider, Platform, SystemFs};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
@@ -26,7 +26,7 @@ pub(crate) fn validate_exe_path(exe_path: &str) -> Result<(), String> {
         return Err(format!("Executable path must be absolute: {exe_path}"));
     }
 
-    match SystemFs.check_executable(path) {
+    match SystemFs.check_executable(path, &Platform::host()) {
         AttemptOutcome::Ok => Ok(()),
         AttemptOutcome::NotFound => Err(format!("Executable not found: {exe_path}")),
         AttemptOutcome::NotAFile => Err(format!("Executable path is not a file: {exe_path}")),
@@ -65,14 +65,21 @@ pub(crate) fn validate_working_dir(cwd: &str) -> Result<(), String> {
 ///
 /// Entries are deduplicated.
 pub(crate) fn build_effective_path(exe_path: &str, path_extra: Option<&str>) -> OsString {
-    effective_path(exe_path, env::var_os("PATH").as_deref(), path_extra)
+    effective_path(
+        exe_path,
+        env::var_os("PATH").as_deref(),
+        path_extra,
+        &Platform::host(),
+    )
 }
 
-/// [`build_effective_path`], given the current process PATH.
+/// [`build_effective_path`], given the current process PATH and the rules
+/// its lists are written by.
 fn effective_path(
     exe_path: &str,
     current_path: Option<&OsStr>,
     path_extra: Option<&str>,
+    platform: &Platform,
 ) -> OsString {
     let mut path_entries = Vec::new();
 
@@ -86,11 +93,7 @@ fn effective_path(
     // 2. Add current process PATH
     if let Some(current_path) = current_path {
         if let Some(current_path_str) = current_path.to_str() {
-            for entry in current_path_str.split(PATH_SEPARATOR) {
-                if !entry.is_empty() {
-                    path_entries.push(entry.to_string());
-                }
-            }
+            path_entries.extend(platform.split(current_path_str).map(String::from));
         }
     }
 
@@ -107,11 +110,7 @@ fn effective_path(
 
     // 4. Add user-provided path_extra
     if let Some(extra) = path_extra {
-        for entry in extra.split(PATH_SEPARATOR) {
-            if !entry.is_empty() {
-                path_entries.push(entry.to_string());
-            }
-        }
+        path_entries.extend(platform.split(extra).map(String::from));
     }
 
     // Deduplicate while preserving order
@@ -122,7 +121,7 @@ fn effective_path(
         .collect();
 
     // Join with platform-specific separator
-    OsString::from(deduped.join(PATH_SEPARATOR))
+    OsString::from(platform.join(&deduped))
 }
 
 #[cfg(test)]
@@ -161,7 +160,7 @@ mod tests {
         let path_str = path.to_str().unwrap();
 
         // Count exact occurrences of /usr/bin as a PATH entry (not substring)
-        let entries: Vec<&str> = path_str.split(PATH_SEPARATOR).collect();
+        let entries: Vec<&str> = Platform::host().split(path_str).collect();
         let count = entries.iter().filter(|&&e| e == "/usr/bin").count();
         assert_eq!(count, 1, "PATH should deduplicate /usr/bin");
     }
@@ -211,11 +210,12 @@ mod tests {
     /// after them, the system ones a child may need.
     #[test]
     fn a_childs_path_is_the_executables_directory_then_path_then_the_defaults_then_the_extra() {
-        let list = |entries: &[&str]| entries.join(PATH_SEPARATOR);
+        let host = Platform::host();
+        let list = |entries: &[&str]| host.join(entries);
         let current = OsString::from(list(&["/gglib-test/p", "/usr/bin", "", "/gglib-test/bin"]));
         let extra = list(&["/gglib-test/x", "/usr/bin", "/gglib-test/y"]);
 
-        let built = effective_path("/gglib-test/bin/tool", Some(&current), Some(&extra));
+        let built = effective_path("/gglib-test/bin/tool", Some(&current), Some(&extra), &host);
 
         let mut expected = vec!["/gglib-test/bin", "/gglib-test/p", "/usr/bin"];
         if cfg!(target_os = "macos") {
@@ -224,7 +224,7 @@ mod tests {
             expected.extend(["/usr/sbin", "/sbin"]);
         }
         expected.extend(["/gglib-test/x", "/gglib-test/y"]);
-        let built: Vec<&str> = built.to_str().unwrap().split(PATH_SEPARATOR).collect();
+        let built: Vec<&str> = host.split(built.to_str().unwrap()).collect();
         assert_eq!(built, expected);
     }
 
@@ -233,7 +233,12 @@ mod tests {
         let exe_path = "/gglib-test/bin/tool";
         assert_eq!(
             build_effective_path(exe_path, None),
-            effective_path(exe_path, env::var_os("PATH").as_deref(), None)
+            effective_path(
+                exe_path,
+                env::var_os("PATH").as_deref(),
+                None,
+                &Platform::host()
+            )
         );
     }
 }

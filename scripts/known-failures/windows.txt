@@ -4,7 +4,3 @@
 # change that makes its test pass; never add one for a test that passed.
 # One row per test, sorted: <package> <target> <test>
 gglib-cli gglib_cli handlers::model::explain::tests::the_launch_is_the_runtimes_plan_through_the_one_shot_runtime
-gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_absolute_path_failure_falls_back
-gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_absolute_path_success
-gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_in_path
-gglib-mcp gglib_mcp resolver::search::tests::test_search_in_path_finds_executable
