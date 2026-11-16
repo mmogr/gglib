@@ -272,7 +272,7 @@ const WEIGHTS: &[u8] = b"the weights a llama-server has open";
 async fn model_on_disk(core: &AppCore, dir: &std::path::Path) -> (i64, PathBuf) {
     let weights = dir.join("other.Q8_0.gguf");
     std::fs::write(&weights, WEIGHTS).expect("the file is written");
-    let weights = weights.canonicalize().expect("its canonical path");
+    let weights = gglib_core::paths::canonical(&weights).expect("its canonical path");
     let id = another_model(core, |model| {
         model.file_path = weights.clone();
         model.variant_label = Some("Q8_0".to_string());

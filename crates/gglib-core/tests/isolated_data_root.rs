@@ -77,7 +77,7 @@ fn the_root_is_a_temporary_directory_set_once() {
     assert_eq!(isolate_data_root(), root);
     assert!(root.is_dir());
     assert!(root.starts_with(std::env::temp_dir()));
-    assert!(!root.starts_with(checkout.canonicalize().unwrap()));
+    assert!(!root.starts_with(gglib_core::paths::canonical(&checkout).unwrap()));
 }
 
 /// The test root comes before `GGLIB_DATA_DIR` and `GGLIB_RESOURCE_DIR`, so a

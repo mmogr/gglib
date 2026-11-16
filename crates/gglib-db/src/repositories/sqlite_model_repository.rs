@@ -38,9 +38,9 @@ use super::row_mappers::{
 ///
 /// A row registered under a non-canonical spelling before [#850] does move:
 /// `setup::backfill_local_model_keys` re-keys it from its resolved
-/// `file_path` on open. On Windows, where `canonicalize` returns an
-/// extended-length `\\?\` path, every local row registered before [#850] is
-/// one.
+/// `file_path` on open. A library a Windows build wrote before generation 11
+/// is refused before that, since it stored every path in the verbatim form
+/// (`setup_generation.rs`).
 ///
 /// `canonical_path` is the already-resolved string the caller is about to bind
 /// to `file_path`, passed in rather than recomputed. Resolving is a blocking
@@ -597,7 +597,7 @@ mod tests {
             .await
             .unwrap();
 
-        let resolved = std::fs::canonicalize(&path).expect("the file exists");
+        let resolved = gglib_core::paths::canonical(&path).expect("the file exists");
         let found = repo
             .find_by_path(&resolved)
             .await
@@ -632,9 +632,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("Qwen3-8B-Q4_K_M.gguf");
         std::fs::File::create(&file).unwrap();
-        let path = std::fs::canonicalize(&file).expect("the file exists");
+        let path = gglib_core::paths::canonical(&file).expect("the file exists");
         assert_eq!(
-            std::fs::canonicalize(&path).unwrap(),
+            gglib_core::paths::canonical(&path).unwrap(),
             path,
             "the fixture must already be canonical"
         );
@@ -754,7 +754,7 @@ mod tests {
         assert_eq!(repo.list().await.unwrap().len(), 2);
 
         let at_beta = repo
-            .find_by_path(&std::fs::canonicalize(&beta_path).unwrap())
+            .find_by_path(&gglib_core::paths::canonical(&beta_path).unwrap())
             .await
             .unwrap()
             .expect("a row at B's path");
@@ -803,7 +803,7 @@ mod tests {
             "a refresh must not erase last_update_check"
         );
         assert!(
-            repo.find_by_path(&std::fs::canonicalize(&second).unwrap())
+            repo.find_by_path(&gglib_core::paths::canonical(&second).unwrap())
                 .await
                 .unwrap()
                 .is_some(),
@@ -864,7 +864,7 @@ mod tests {
         let inserted = repo.insert(&model).await.unwrap();
 
         let found = repo
-            .find_by_path(&std::fs::canonicalize(&second).unwrap())
+            .find_by_path(&gglib_core::paths::canonical(&second).unwrap())
             .await
             .unwrap()
             .expect("the sibling shard belongs to a model already present");
@@ -901,7 +901,7 @@ mod tests {
         repo.update(&edited).await.unwrap();
 
         let found = repo
-            .find_by_path(&std::fs::canonicalize(&path).unwrap())
+            .find_by_path(&gglib_core::paths::canonical(&path).unwrap())
             .await
             .unwrap()
             .expect("an updated row must still be findable by its real path");

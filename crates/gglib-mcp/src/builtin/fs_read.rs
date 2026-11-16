@@ -78,7 +78,7 @@ mod tests {
     #[test]
     fn a_refusal_names_an_absolute_path_by_its_part_under_the_root() {
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().canonicalize().unwrap();
+        let root = gglib_core::paths::canonical(dir.path()).unwrap();
         let file = root.join("data.bin");
         fs::write(&file, b"foo\x00bar").unwrap();
 

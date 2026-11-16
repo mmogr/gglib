@@ -11,7 +11,6 @@ mod common;
 use chrono::Utc;
 use common::setup_test_pool;
 use std::collections::HashMap;
-use std::fs;
 use std::sync::Arc;
 use tempfile::tempdir;
 
@@ -62,7 +61,8 @@ async fn test_add_command_database_integration() {
 
     let added_model: Model = models.into_iter().next().unwrap();
     assert_eq!(added_model.name, "Integration Test Model");
-    let expected_path = fs::canonicalize(&file_path).unwrap_or_else(|_| file_path.clone());
+    let expected_path =
+        gglib_core::paths::canonical(&file_path).unwrap_or_else(|_| file_path.clone());
     assert_eq!(added_model.file_path, expected_path);
     assert_eq!(added_model.param_count_b, Some(7.0));
     assert_eq!(added_model.architecture, Some("llama".to_string()));

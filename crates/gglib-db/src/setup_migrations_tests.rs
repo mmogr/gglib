@@ -84,7 +84,7 @@ fn spelled_and_canonical(dir: &Path, name: &str) -> (String, String) {
     std::fs::write(dir.join(name), b"weights").expect("a file");
     std::fs::create_dir_all(dir.join("sub")).expect("a dir");
     let spelled = dir.join("sub").join("..").join(name);
-    let canonical = std::fs::canonicalize(&spelled).expect("resolved");
+    let canonical = gglib_core::paths::canonical(&spelled).expect("resolved");
     (
         spelled.to_string_lossy().into_owned(),
         canonical.to_string_lossy().into_owned(),

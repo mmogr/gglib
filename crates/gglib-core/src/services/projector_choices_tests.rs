@@ -36,7 +36,7 @@ fn file(index: i32, name: &str) -> ModelFile {
 #[test]
 fn a_models_own_projector_file_is_offered_and_its_weights_are_not() {
     let dir = tempfile::tempdir().unwrap();
-    let dir = dir.path().canonicalize().unwrap();
+    let dir = crate::paths::canonical(dir.path()).unwrap();
     let weights = dir.join("X.Q8_0.gguf");
     let projector = dir.join("X.mmproj-Q8_0.gguf");
     std::fs::write(&weights, b"weights").unwrap();
@@ -59,7 +59,7 @@ fn a_models_own_projector_file_is_offered_and_its_weights_are_not() {
 #[test]
 fn the_weights_file_is_never_parsed() {
     let dir = tempfile::tempdir().unwrap();
-    let dir = dir.path().canonicalize().unwrap();
+    let dir = crate::paths::canonical(dir.path()).unwrap();
     let weights = dir.join("X.Q8_0.gguf");
     let projector = dir.join("X.mmproj-Q8_0.gguf");
     std::fs::write(&weights, b"weights").unwrap();
@@ -98,7 +98,7 @@ fn an_own_projector_that_is_not_on_disk_is_not_offered() {
 #[test]
 fn projectors_in_use_are_offered_each_once() {
     let dir = tempfile::tempdir().unwrap();
-    let dir = dir.path().canonicalize().unwrap();
+    let dir = crate::paths::canonical(dir.path()).unwrap();
     let weights = dir.join("X.Q8_0.gguf");
     let own = dir.join("X.mmproj-Q8_0.gguf");
     std::fs::write(&weights, b"weights").unwrap();
@@ -129,7 +129,7 @@ fn projectors_in_use_are_offered_each_once() {
 #[test]
 fn an_own_file_is_offered_by_its_header_whatever_its_name() {
     let dir = tempfile::tempdir().unwrap();
-    let dir = dir.path().canonicalize().unwrap();
+    let dir = crate::paths::canonical(dir.path()).unwrap();
     let weights = dir.join("X.Q8_0.gguf");
     let renamed = dir.join("vision-F16.gguf");
     let misnamed = dir.join("mmproj-Q4_K_M.gguf");

@@ -233,7 +233,7 @@ fn exe(name: &str) -> String {
 /// The file `path` names, links followed, or `path` itself when it cannot
 /// be resolved.
 fn canonical(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    gglib_core::paths::canonical(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 /// Whether `path` is a file this user could run: on Unix, one with an

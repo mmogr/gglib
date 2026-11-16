@@ -8,6 +8,7 @@ import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { ConfirmProvider } from "./contexts/ConfirmContext";
 import { startMenuBridge } from "./app/menuBridge";
+import { listenToSecondLaunch } from "./services/platform";
 import { createAppRouter } from "./app/router";
 import { SetupGate } from "./app/SetupGate";
 import { Shell } from "./app/Shell";
@@ -66,6 +67,12 @@ export function AppContent() {
   useEffect(() => {
     return startMenuBridge({ notify: showToast });
   }, [showToast]);
+
+  // A second launch of the desktop app: Rust has brought this window forward;
+  // what the launch carried is kept for a later feature to read.
+  useEffect(() => {
+    return listenToSecondLaunch();
+  }, []);
 
   return (
     <SettingsProvider showToast={showToast}>

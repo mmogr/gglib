@@ -121,9 +121,8 @@ impl Walk<'_> {
             return;
         };
 
-        let relative = path
-            .strip_prefix(&self.root)
-            .map_or_else(|_| path.display().to_string(), shown_inside);
+        let relative = gglib_core::paths::inside(path, &self.root)
+            .map_or_else(|| path.display().to_string(), |rest| shown_inside(&rest));
 
         for (line_num, line) in content.lines().enumerate() {
             if matches.len() >= self.max {
@@ -163,7 +162,9 @@ impl Walk<'_> {
                 return;
             }
 
-            let path = entry.path();
+            // Not `entry.path()`: under a plain folder on Windows that opens
+            // `notes` for an entry named `notes.`.
+            let path = gglib_core::paths::child(dir, entry.file_name());
             let name = entry.file_name().to_string_lossy().to_string();
 
             if name.starts_with('.') && name != "." {
@@ -174,10 +175,10 @@ impl Walk<'_> {
                 continue;
             };
             let target = if file_type.is_symlink() {
-                let Ok(canon) = path.canonicalize() else {
+                let Ok(canon) = gglib_core::paths::canonical(&path) else {
                     continue;
                 };
-                if !canon.starts_with(&self.root) {
+                if gglib_core::paths::inside(&canon, &self.root).is_none() {
                     continue;
                 }
                 let Ok(meta) = fs::metadata(&canon) else {
@@ -193,9 +194,11 @@ impl Walk<'_> {
                 if SKIP_DIRS.contains(&name.as_str()) {
                     continue;
                 }
-                // A plain entry under a canonical directory is canonical by
-                // its name; a link's is its target.
-                let canon = target.unwrap_or_else(|| here.join(entry.file_name()));
+                // An entry that is no link has the canonical form `child`
+                // gives it under its canonical directory; a link's is its
+                // target.
+                let canon =
+                    target.unwrap_or_else(|| gglib_core::paths::child(&here, entry.file_name()));
                 if ancestors.contains(&canon) {
                     continue;
                 }

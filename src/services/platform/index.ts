@@ -15,6 +15,10 @@ export { setSelectedModel, syncMenuState, syncMenuStateSilent } from './menuSync
 export { listenToMenuEvents, MENU_EVENTS, MENU_PLACES } from './menuEvents';
 export type { MenuEventHandlers, MenuPlace } from './menuEvents';
 
+// A second launch of the desktop app
+export { listenToSecondLaunch, lastSecondLaunch, SECOND_LAUNCH_EVENT } from './secondLaunch';
+export type { SecondLaunchPayload } from './secondLaunch';
+
 // File dialogs
 export { pickFolder, pickGgufFile } from './fileDialogs';
 export type { FilePickerResult } from './fileDialogs';
