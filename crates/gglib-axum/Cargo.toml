@@ -96,8 +96,12 @@ tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 # The connection a fake server answers on, with the request already read.
 gglib-test-http = { workspace = true }
-# The stand-in engine the repair route is asked about, on every OS.
+# A stand-in program on every OS: the engine the repair route is asked
+# about, and an MCP server behind a shim whose stop the teardown is tested
+# on (daemon/shutdown_tests.rs).
 gglib-test-proc = { workspace = true }
+# Whether the process behind that shim still runs after the teardown.
+sysinfo = { workspace = true }
 
 [lints]
 workspace = true

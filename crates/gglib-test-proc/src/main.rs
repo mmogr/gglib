@@ -45,6 +45,11 @@ fn run(list: &[Instruction], args: &[String]) -> ExitCode {
     for instruction in list {
         let done = match instruction {
             Instruction::Argv(path) => write_argv(path, args),
+            Instruction::Pid(path) => write_whole(path, &format!("{}\n", std::process::id())),
+            Instruction::Touch(path) => write_whole(path, ""),
+            Instruction::Read => {
+                std::io::copy(&mut std::io::stdin(), &mut std::io::sink()).map(drop)
+            }
             Instruction::Print(text) => {
                 writeln!(std::io::stdout(), "{}", text.replace(ARGS, &joined))
                     .and_then(|()| std::io::stdout().flush())
@@ -66,16 +71,21 @@ fn run(list: &[Instruction], args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Writes each argument and a newline to `path`, whole: to a file beside it
-/// first, then renamed onto it.
+/// Writes each argument and a newline to `path`, whole.
 fn write_argv(path: &Path, args: &[String]) -> std::io::Result<()> {
-    let mut partial = path.as_os_str().to_owned();
-    partial.push(".partial");
     let mut text = String::new();
     for arg in args {
         text.push_str(arg);
         text.push('\n');
     }
+    write_whole(path, &text)
+}
+
+/// Writes `text` to `path`, whole: to a file beside it first, then renamed
+/// onto it.
+fn write_whole(path: &Path, text: &str) -> std::io::Result<()> {
+    let mut partial = path.as_os_str().to_owned();
+    partial.push(".partial");
     std::fs::write(&partial, text)?;
     std::fs::rename(&partial, path)
 }

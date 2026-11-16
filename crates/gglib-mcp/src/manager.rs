@@ -200,8 +200,7 @@ impl McpManager {
                 .ok_or_else(|| McpManagerError::NotRunning(server_id.to_string()))?
         };
 
-        // Disconnect cleanly
-        server.client.disconnect();
+        server.client.stop().await;
 
         tracing::info!(server_id = %server_id, "MCP server stopped");
 
@@ -261,18 +260,19 @@ impl McpManager {
         servers.contains_key(&server_id)
     }
 
-    /// Stop all running servers.
+    /// Stop all running servers, together, so the whole stop waits
+    /// [`crate::SERVER_EXIT_GRACE`] at most once.
+    ///
+    /// A stop cancelled part way stops the servers it had taken at once, as
+    /// each is dropped.
     pub(crate) async fn stop_all(&self) {
-        let server_ids: Vec<i64> = {
-            let servers = self.servers.read().await;
-            servers.keys().copied().collect()
-        };
-
-        for id in server_ids {
-            if let Err(e) = self.stop_server(id).await {
-                tracing::warn!(server_id = %id, error = %e, "Failed to stop server");
-            }
-        }
+        // Taken whole, so the list is free again before any server is waited for.
+        let servers = std::mem::take(&mut *self.servers.write().await);
+        futures_util::future::join_all(servers.into_iter().map(|(id, mut server)| async move {
+            server.client.stop().await;
+            tracing::info!(server_id = %id, "MCP server stopped");
+        }))
+        .await;
     }
 }
 

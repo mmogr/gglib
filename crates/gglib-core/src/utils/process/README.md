@@ -36,5 +36,7 @@ The Windows-specific flag is applied here and nowhere else.
   time for an orderly teardown or seconds before the OS ends it.
 - [`tied`]: tying a child to this process, so it ends when this process
   ends, however it ends.
+- [`tree`]: starting a child as the root of a tree, so stopping it stops
+  everything it started, as the program behind a shim such as `npx.cmd`.
 
 <!-- module-docs:end -->
