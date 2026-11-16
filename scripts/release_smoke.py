@@ -22,14 +22,16 @@ Windows by hand:
  6. `gglib config llama install` installs the pinned engine, and
     `gglib config llama status` says it is functional;
  7. `gglib model add` adds tinygemma3 from the pinned test models (--models,
-    the `pinned-engines` action's folder);
+    the `pinned-engines` action's folder), and `gglib model list` gives
+    its ID, which `add` does not print;
  8. `gglib up -y --model <id> --port <port>` starts the daemon and the
     endpoint as a user's first command does;
  9. one chat request to the endpoint gets a reply with text in it;
 10. `gglib daemon stop`, then no gglib, gglib-gui, llama-server or sd-server
     process is left, and no lock or pid file is left in the data folder;
 11. uninstalling, where PLATFORMS says how, removes what was installed and
-    leaves no gglib process.
+    leaves no gglib process. Steps 10 and 11 run after an earlier failure
+    too; an uninstall that then fails is reported, not counted as the cause.
 
 Every command has a time limit and its stdout and stderr go to files under
 --work/logs, which the job uploads whether or not the run passed, with the
@@ -48,8 +50,9 @@ each target release.yml builds and names no value the run does not give;
 that the leftover-process check finds a planted gglib program and ignores
 everything else; that the reply check refuses an empty reply and an error
 body; that the version check refuses another version or commit; and the
-readers of a process list, of `gglib config paths`, of `gglib model add` and
-of the data folder.
+readers of a process list, of `gglib config paths`, of `gglib model list`
+(on what `model add` printed on Windows, which has no ID, and on a list
+with spaces in its paths), of what `gglib up` says, and of the data folder.
 
 Exit codes:
     0  every step passed, or the self-test passed
@@ -385,10 +388,45 @@ def read_settings(said: str) -> dict[str, str]:
     return found
 
 
-def model_id(said: str) -> str | None:
-    """The id `gglib model add` says it gave the model, from its `ID:` line."""
-    match = re.search(r"^\s*ID:\s*(\d+)\s*$", said, re.MULTILINE)
-    return match.group(1) if match else None
+def listed_model_id(said: str, file_name: str) -> str | None:
+    """The ID `gglib model list` gives the model whose file is `file_name`.
+
+    `model list` prints a table: a row starts with the model's ID and ends
+    with its file's path, which may hold spaces. `model add` prints no ID, so
+    the list is where it is read. None unless exactly one row is that file's.
+    """
+    ids = []
+    for line in said.splitlines():
+        match = re.match(r"^\s*(\d+)\s+\S", line)
+        if match and line.rstrip().replace("\\", "/").endswith("/" + file_name):
+            ids.append(match.group(1))
+    return ids[0] if len(ids) == 1 else None
+
+
+def read_up(said: str) -> dict[str, str]:
+    """What `gglib up` says it did: the endpoint's `base` URL from its client
+    block, the `model` id a client sends ("Model ID <id> \u00b7 gglib id <n>"),
+    and its warm-up's `proof`, the line saying whether the first request was
+    answered. Each key is present only when `up` said it."""
+    found: dict[str, str] = {}
+    base = re.search(r"\bhttps?://(?:127\.0\.0\.1|localhost|\[::1\]):\d+/v1\b", said)
+    if base:
+        found["base"] = base.group(0)
+    model = re.search(r"Model ID (\S+) \u00b7 gglib id \d+", said)
+    if model:
+        found["model"] = model.group(1)
+    proof = re.search(r"^\s*(?:\u2713 answered in .*|! the first request did not complete: .*)$", said, re.MULTILINE)
+    if proof:
+        found["proof"] = proof.group(0).strip()
+    return found
+
+
+def shorten(text: str, limit: int = 240) -> str:
+    """`text` on one line, cut to `limit` characters with a pointer to the log."""
+    flat = " ".join(text.split())
+    if len(flat) <= limit:
+        return flat
+    return flat[: limit - 40].rstrip() + " \u2026 (whole text in 00-summary.txt)"
 
 
 def leftover_locks(paths: list[str]) -> list[str]:
@@ -422,6 +460,9 @@ class Step:
     always: bool = False
     # Why this step is expected to fail today; its failure then fails nothing.
     pending: str = ""
+    # After an earlier step failed, its failure is reported and not counted:
+    # it may be that failure's consequence, and the run has failed already.
+    secondary: bool = False
 
 
 # How a step that had nothing to check says so.
@@ -474,6 +515,7 @@ class Smoke:
         self.stopped = False
         self.model = ""
         self.new_shell_found = False
+        self.up_said: dict[str, str] = {}
         self.results: list[tuple[str, str, str]] = []
 
     # -- helpers --
@@ -646,10 +688,12 @@ class Smoke:
         # terminal on its input (mmogr/gglib#2020). An empty line takes the
         # count it read from the file; 0.1 answers when it read none. Remove
         # the answers once #2020 is fixed.
-        _, said, _ = self.run("gglib model add", [self.cli(), "model", "add", model], LIMITS["model"], answers=b"\n0.1\n")
-        self.model = model_id(said) or ""
+        self.run("gglib model add", [self.cli(), "model", "add", model], LIMITS["model"], answers=b"\n0.1\n")
+        # `model add` prints no ID; the library's own list says it.
+        _, said, _ = self.run("gglib model list", [self.cli(), "model", "list"], LIMITS["short"])
+        self.model = listed_model_id(said, MODEL) or ""
         if not self.model:
-            raise Failed(f"`gglib model add` named no ID: {tail(said, 'stdout', 12)}")
+            raise Failed(f"`gglib model list` has no single row for {MODEL}: {tail(said, 'stdout', 12)}")
         return f"id {self.model}"
 
     def up(self) -> str | None:
@@ -657,16 +701,25 @@ class Smoke:
         # sends one warm-up request, whose outcome never fails it, so the
         # request below is the check. Once the endpoint is on at launch (6.2
         # in #1959's plan), `up` still starts it the same way.
+        #
+        # With -y and --model, `up` asks nothing: the engines are installed
+        # with -y (the drawing engine's failure only prints), the model is
+        # the one named, and it opens no browser and attaches no dashboard.
+        # It exits non-zero only when the chat engine does not work or the
+        # endpoint does not start; its warm-up's outcome is a line it prints.
         self.daemon_may_run = True
-        self.run(
+        _, said, _ = self.run(
             "gglib up",
             [self.cli(), "up", "-y", "--model", self.model, "--port", str(ENDPOINT_PORT)],
             LIMITS["up"],
         )
-        return f"http://127.0.0.1:{ENDPOINT_PORT}/v1"
+        self.up_said = read_up(said)
+        base = self.up_said.get("base", f"http://127.0.0.1:{ENDPOINT_PORT}/v1 (assumed; up named no URL)")
+        return f"{base}; warm-up: {self.up_said.get('proof', 'up printed no warm-up line')}"
 
     def chat(self) -> str | None:
-        base = f"http://127.0.0.1:{ENDPOINT_PORT}/v1"
+        # The URL `up` printed when it printed one, else the port it was given.
+        base = self.up_said.get("base", f"http://127.0.0.1:{ENDPOINT_PORT}/v1")
         status, body = http("GET", f"{base}/models", None, LIMITS["short"])
         self.save("models.json", body)
         try:
@@ -675,7 +728,9 @@ class Smoke:
             raise Failed(f"GET /v1/models answered HTTP {status}: {body[:400]}") from None
         if not listed:
             raise Failed("GET /v1/models lists no model")
-        request = dict(QUESTION, model=listed[0])
+        # The id `up` told a client to send, when the endpoint lists it.
+        named = self.up_said.get("model")
+        request = dict(QUESTION, model=named if named in listed else listed[0])
         self.save("chat-request.json", json.dumps(request, indent=2))
         started = time.monotonic()
         status, body = http("POST", f"{base}/chat/completions", request, LIMITS["reply"])
@@ -683,14 +738,17 @@ class Smoke:
         reason, content = check_reply(status, body)
         if reason:
             raise Failed(reason)
-        return f"{listed[0]} said {content!r} in {time.monotonic() - started:.0f}s"
+        return f"{request['model']} said {content!r} in {time.monotonic() - started:.0f}s"
 
     def stop(self) -> str | None:
         if not self.daemon_may_run:
             return SKIPPED + "nothing started the daemon"
         self.stopped = True
-        self.run("gglib daemon stop", [self.cli(), "daemon", "stop"], LIMITS["stop"])
-        return None
+        # It says so on stderr: "Stopping daemon... — stopped." once the
+        # daemon has let go of its lock, or "Daemon is not running.", exit 0
+        # both; a daemon still stopping past its watchdog exits 1.
+        _, _, complained = self.run("gglib daemon stop", [self.cli(), "daemon", "stop"], LIMITS["stop"])
+        return " ".join(complained.split()) or None
 
     def no_leftovers(self) -> str | None:
         if not self.installed:
@@ -711,6 +769,8 @@ class Smoke:
     def uninstall(self) -> str | None:
         if not self.platform.uninstall:
             return SKIPPED + "no uninstall for this OS"
+        if not self.installed:
+            return SKIPPED + "nothing was installed"
         for template in self.platform.uninstall:
             argv = self.command(template)
             self.run(f"uninstall: {os.path.basename(argv[0])}", argv, LIMITS["uninstall"])
@@ -740,10 +800,20 @@ class Smoke:
             Step("gglib daemon stop", self.stop, always=True),
             Step("no gglib process is left", self.no_leftovers, always=True),
             Step("no lock is left in the data folder", self.no_locks, always=True),
-            Step("uninstall", self.uninstall),
+            # Runs after a failure too, so one run says as much as it can;
+            # its failure then is reported, not counted as the cause.
+            Step("uninstall", self.uninstall, always=True, secondary=True),
         ]
         if self.platform.new_shell_path:
-            steps.append(Step("a new shell no longer finds gglib", lambda: self.new_shell_finds(False), pending=pending))
+            steps.append(
+                Step(
+                    "a new shell no longer finds gglib",
+                    lambda: self.new_shell_finds(False),
+                    always=True,
+                    pending=pending,
+                    secondary=True,
+                )
+            )
         return steps
 
     def save(self, name: str, text: str) -> None:
@@ -767,6 +837,9 @@ class Smoke:
                     if step.pending:
                         self.results.append((step.name, "expected failure", f"{error} ({step.pending})"))
                         annotate("warning", f"Smoke test: {step.name}, expected to fail", f"{error}. {step.pending}")
+                    elif failed and step.secondary:
+                        self.results.append((step.name, "failed too, after an earlier failure", str(error)))
+                        annotate("warning", f"Smoke test: {step.name}, after an earlier failure", str(error))
                     else:
                         failed = True
                         self.results.append((step.name, "FAILED", str(error)))
@@ -807,17 +880,18 @@ class Smoke:
 
     def report(self) -> None:
         width = max(len(name) for name, _, _ in self.results)
-        lines = [f"{name:<{width}}  {verdict}{': ' + said if said else ''}" for name, verdict, said in self.results]
+        whole = [f"{name:<{width}}  {verdict}{': ' + said if said else ''}" for name, verdict, said in self.results]
+        self.save("00-summary.txt", "\n".join(whole) + "\n")
         print("\n=== Summary")
-        print("\n".join(lines))
-        self.save("00-summary.txt", "\n".join(lines) + "\n")
+        for name, verdict, said in self.results:
+            print(f"{name:<{width}}  {verdict}{': ' + shorten(said) if said else ''}")
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
             with open(summary, "a", encoding="utf-8") as handle:
                 handle.write(f"### Smoke test of gglib {self.version} on {self.platform.target}\n\n")
                 handle.write("| Step | Result | What it saw |\n|---|---|---|\n")
                 for name, verdict, said in self.results:
-                    cell = said.replace("|", "\\|").replace("\n", " ")[:300]
+                    cell = shorten(said).replace("|", "\\|")
                     handle.write(f"| {name} | {verdict} | {cell} |\n")
                 handle.write("\n")
 
@@ -875,6 +949,65 @@ def this_os() -> str:
 
 
 # --- self-test ---------------------------------------------------------------
+
+# What `gglib model add` printed on windows-2022 in run 43833047240: no ID.
+ADD_SAID = """File validation and metadata extraction successful.
+
+Extracted metadata:
+  Name: tinygemma3-Q8_0
+  Architecture: gemma3
+  Parameters: 0.0B
+  Quantization: Q8_0
+  Context Length: 131072
+Parameter count (in billions) [0.0]:
+
+Model successfully created:
+
+  Name: tinygemma3-Q8_0
+  File: D:\\a\\_temp\\test-models\\tinygemma3-Q8_0.gguf
+  Parameters: 0.0B
+  Architecture: gemma3
+  Quantization: Q8_0 \u00b7 8.51 bpw
+  Context Length: 131072 tokens
+Model successfully added to database!
+"""
+
+# `gglib model list` after that add, laid out as list.rs's render_table lays
+# out a row: ID first, the file's path last.
+LIST_SAID_WINDOWS = """Found 1 model(s):
+
+ID  Name                      Model ID        Params   Arch         Quant    Size       Context    Images  Draws Added                File Path
+---------------------------------------------------------------------------------------------------------------------------------------------------
+1   tinygemma3-Q8_0           tinygemma3-Q8_0 0.0B     gemma3       Q8_0     51.2 MiB   131072     --      --    2026-11-16 09:12:44  D:\\a\\_temp\\test-models\\tinygemma3-Q8_0.gguf
+"""
+
+# docs/cli/snippets/model-list.txt, whose paths hold spaces.
+LIST_SAID_DOCS = """Found 3 model(s):
+
+ID  Name                      Model ID               Params   Arch         Quant    Size       Context    Images  Draws Added                File Path
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+3   Qwen3.8-27B               Qwen3.8-27B            27.0B    qwen35       Q8_0     27.05 GiB  262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/q38/Qwen3.8-27B-Q8_0.gguf
+2   Qwen3-4B-Instruct-2507    Qwen3-4B-Instruct-2507 4.0B     qwen3        Q8_0     3.99 GiB   262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf
+1   Qwen3-30B-A3B             Qwen3-30B-A3B          30.0B    qwen3moe     Q4_K_M   17.28 GiB  40960      --      --    2026-10-31 06:24:05  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-30B-A3B-Q4_K_M.gguf
+"""
+
+LIST_SAID_EMPTY = "No models found.\nUse 'gglib model add <file_path>' to add your first model.\n"
+
+# The end of `gglib up`'s output with colour off. The proof line and the
+# "Connect your client" line are as warm.rs and client_block.rs print them;
+# the recipe lines under it are the daemon's, and only their URL is read.
+UP_SAID = """
+  \u2713 answered in 2.4s by tinygemma3-Q8_0
+
+  Connect your client  Model ID tinygemma3-Q8_0 \u00b7 gglib id 1
+
+    OpenAI-compatible        any client that takes a base URL
+      Base URL http://127.0.0.1:19488/v1
+      API key  (none)
+
+      curl http://127.0.0.1:19488/v1/models
+  Ready. The endpoint keeps running in the background.
+"""
 
 
 def self_test() -> int:
@@ -992,9 +1125,35 @@ def self_test() -> int:
         expect("config paths' data_root_source", paths.get("data_root_source"), "GGLIB_DATA_DIR")
         expect("config paths' data_root", paths.get("data_root"), "C:\\Users\\runner\\smoke data\\x")
         expect("config paths' other lines", "not a setting" in " ".join(paths), False)
-        added = "Model successfully created:\n\n  ID: 1\n  Name: tinygemma3\n  Parameters: 0.0B\n"
-        expect("model add's ID", model_id(added), "1")
-        expect("model add's ID, none said", model_id("Parameter count (in billions) [0.0]:\n"), None)
+        expect("an ID in model add's own output, which has none", listed_model_id(ADD_SAID, MODEL), None)
+        expect("the ID in a model list on Windows", listed_model_id(LIST_SAID_WINDOWS, MODEL), "1")
+        expect(
+            "the ID in docs/cli/snippets/model-list.txt, a path with spaces",
+            listed_model_id(LIST_SAID_DOCS, "Qwen3-4B-Instruct-2507-Q8_0.gguf"),
+            "2",
+        )
+        expect("an ID for a file the list does not hold", listed_model_id(LIST_SAID_DOCS, MODEL), None)
+        expect("an ID in an empty library", listed_model_id(LIST_SAID_EMPTY, MODEL), None)
+        expect("an ID for a file listed twice", listed_model_id(LIST_SAID_WINDOWS + LIST_SAID_WINDOWS.splitlines()[-1].replace("1   ", "2   ", 1), MODEL), None)
+        expect(
+            "what up said",
+            read_up(UP_SAID),
+            {
+                "base": "http://127.0.0.1:19488/v1",
+                "model": "tinygemma3-Q8_0",
+                "proof": "\u2713 answered in 2.4s by tinygemma3-Q8_0",
+            },
+        )
+        expect(
+            "what up said when its warm-up failed",
+            read_up("  ! the first request did not complete: timed out\n  the endpoint is still running\n"),
+            {"proof": "! the first request did not complete: timed out"},
+        )
+        expect("a short detail", shorten("passed:  id 1\n"), "passed: id 1")
+        long = "no folder on a new shell's PATH holds gglib.exe; it is: " + ";".join(["C:\\Program Files\\x"] * 60)
+        cut = shorten(long)
+        if len(cut) > 240 or not cut.startswith("no folder on a new shell's PATH") or "00-summary.txt" not in cut:
+            wrong.append(f"a long detail was cut to {cut!r}")
         expect(
             "locks left",
             leftover_locks(["daemon.lock", "daemon.json", "pids\\1.pid", "pids/2.pid.tmp", "logs/daemon.log", "data/gglib.db", "pids/README", "daemon.lock.bak"]),
