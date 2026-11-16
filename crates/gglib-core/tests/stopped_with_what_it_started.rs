@@ -23,6 +23,7 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use gglib_core::utils::process::async_cmd;
+use gglib_core::utils::process::tree::{self, Tree};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{ChildStdout, Command};
 
@@ -78,19 +79,21 @@ async fn a_server_started_through_a_wrapper_is_stopped_with_the_wrapper() {
 }
 
 /// A server started as the MCP client starts one.
-struct Started(tokio::process::Child);
+struct Started(Tree);
 
 /// Start `command` as the MCP client starts a server; its output is the
 /// test's to read.
 fn start(mut command: Command) -> (Started, ChildStdout) {
-    let mut child = command.spawn().expect("starting the wrapper");
-    let stdout = child.stdout.take().expect("the server's output");
-    (Started(child), stdout)
+    let mut server = tree::spawn(&mut command).expect("starting the wrapper");
+    if let Some(e) = server.loose() {
+        panic!("the server could not be started as a tree: {e}");
+    }
+    let stdout = server.child().stdout.take().expect("the server's output");
+    (Started(server), stdout)
 }
 
 /// Stop the server as the MCP client stops one.
 fn stop(started: Started) {
-    let mut child = started.0;
-    let _ = child.start_kill();
-    let _ = child.try_wait();
+    let mut server = started.0;
+    server.stop();
 }

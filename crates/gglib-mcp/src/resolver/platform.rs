@@ -5,6 +5,8 @@
 //! else takes them as a value. Windows's rules are tested on every OS by
 //! passing [`Platform::windows`], and Unix's by passing [`Platform::unix`].
 
+use super::env::EnvProvider;
+use super::node_managers::{NodeDir, NodeManagers};
 use super::types::AttemptOutcome;
 use std::ffi::OsStr;
 use std::path::Path;
@@ -71,6 +73,8 @@ pub(crate) struct Platform {
     default_dirs: &'static [&'static str],
     /// Whether `/etc/paths` and `/etc/paths.d/*` name directories to search.
     reads_etc_paths: bool,
+    /// Which OS's Node version managers are looked for.
+    node_managers: NodeManagers,
 }
 
 impl Platform {
@@ -98,6 +102,7 @@ impl Platform {
             runnable: Runnable::ByPermissionBits,
             default_dirs: &[],
             reads_etc_paths: false,
+            node_managers: NodeManagers::Unix,
         }
     }
 
@@ -125,6 +130,7 @@ impl Platform {
             runnable: Runnable::ByExtension,
             default_dirs: &[],
             reads_etc_paths: false,
+            node_managers: NodeManagers::Windows,
         }
     }
 
@@ -171,6 +177,12 @@ impl Platform {
     /// Whether `/etc/paths` and `/etc/paths.d/*` are read for directories.
     pub(crate) const fn reads_etc_paths(&self) -> bool {
         self.reads_etc_paths
+    }
+
+    /// Where Node's version managers keep `node`, `npm` and `npx` on this
+    /// OS, in the order they are searched, in `env`.
+    pub(crate) fn node_dirs(&self, env: &dyn EnvProvider) -> Vec<NodeDir> {
+        self.node_managers.dirs(env)
     }
 
     /// Whether the file at `path` may be run. The caller has found it is a

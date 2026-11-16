@@ -15,7 +15,7 @@
 //! it printed last: the reason a server that cannot start gives.
 
 use gglib_core::utils::process::async_cmd;
-use gglib_core::utils::process::tied::tie_to_this_process;
+use gglib_core::utils::process::tree::{self, Tree};
 use gglib_core::{McpTool, McpToolResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -25,7 +25,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::process::Child;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 
@@ -47,6 +46,16 @@ const STDERR_SETTLE: Duration = Duration::from_millis(500);
 /// connection's error waits inside it, or that error is lost to the timeout.
 const PING_TIMEOUT: Duration = Duration::from_secs(3);
 const _: () = assert!(PING_TIMEOUT.as_millis() > 2 * STDERR_SETTLE.as_millis());
+
+/// How long a server being stopped has to exit by itself once its input is
+/// closed, before it and everything it started are ended.
+///
+/// A server that
+/// keeps state (a database, a memory file) writes it out and exits when its
+/// input ends; one that has not gone by then is not going to. Short, since
+/// a stop of every server waits this long at most once (they are stopped
+/// together) and the daemon's teardown bounds that wait.
+pub const SERVER_EXIT_GRACE: Duration = Duration::from_secs(1);
 
 /// Errors that can occur during MCP client operations.
 #[derive(Debug, Error)]
@@ -179,8 +188,8 @@ struct Pipes {
 
 /// Client for communicating with an MCP server via stdio.
 pub(crate) struct McpClient {
-    /// Child process (for stdio servers)
-    process: Option<Child>,
+    /// The server's process and everything it started (for stdio servers)
+    process: Option<Tree>,
     /// The server's stdin and stdout, while connected
     pipes: Option<Mutex<Pipes>>,
     /// What the server has printed on stderr lately, while connected
@@ -249,23 +258,24 @@ impl McpClient {
             command.env(key, value);
         }
 
-        let mut child = command.spawn().map_err(|e| {
+        // As a tree, so stopping the server stops what it started too: the
+        // program behind a shim such as `npx.cmd` (#2012).
+        let mut server = tree::spawn(&mut command).map_err(|e| {
             // Build detailed error message with all context
             let effective_path_str = effective_path.to_string_lossy();
             McpClientError::SpawnFailed(format!(
                 "Failed to spawn '{exe_path}': {e}\nArgs: {args:?}\nCwd: {cwd:?}\nEffective PATH: {effective_path_str}"
             ))
         })?;
-        // So it ends with this process even if this process dies without
-        // its teardown (#1985).
-        if let Err(e) = tie_to_this_process(&child) {
+        if let Some(e) = server.loose() {
             tracing::warn!(
                 exe = exe_path,
                 error = %e,
-                "the MCP server is not tied to this process: if gglib dies without its \
-                 teardown, it keeps running"
+                "stopping the MCP server may leave what it started running, and if gglib \
+                 dies without its teardown, the server keeps running"
             );
         }
+        let child = server.child();
 
         let stdin = child
             .stdin
@@ -292,7 +302,7 @@ impl McpClient {
             .and_then(|handle| StderrTail::drain_on_thread(std::fs::File::from(handle)))
             .map_err(|e| McpClientError::SpawnFailed(format!("Failed to read stderr: {e}")))?;
 
-        self.process = Some(child);
+        self.process = Some(server);
         self.stderr = Some(stderr);
         self.pipes = Some(Mutex::new(Pipes {
             writer: Box::new(stdin),
@@ -505,20 +515,40 @@ impl McpClient {
         Ok(())
     }
 
-    /// Disconnect from the MCP server.
+    /// Stop the server as the MCP stdio transport says: close its input,
+    /// wait up to [`SERVER_EXIT_GRACE`] for it to exit, then end it and
+    /// everything it started, as [`Self::disconnect`] does.
+    ///
+    /// The wait ends when the server's output ends, which it does once
+    /// every process holding it has exited: the shim and the server behind
+    /// it. Nothing is reaped while waiting, so the tree is still whole to
+    /// end what the server left behind.
+    pub(crate) async fn stop(&mut self) {
+        if let Some(pipes) = self.pipes.take() {
+            let Pipes { writer, mut reader } = pipes.into_inner();
+            drop(writer);
+            let _ = timeout(
+                SERVER_EXIT_GRACE,
+                tokio::io::copy(&mut reader, &mut tokio::io::sink()),
+            )
+            .await;
+        }
+        self.disconnect();
+    }
+
+    /// Disconnect from the MCP server at once: close its input and end it
+    /// and everything it started, without waiting for it to exit, as a
+    /// synchronous `Drop` must.
     pub(crate) fn disconnect(&mut self) {
         // Drop stdin to signal EOF to the child process.
         self.pipes = None;
         self.stderr = None;
 
-        // Kill the process without waiting for it to exit: this runs in a
-        // synchronous Drop, where waiting would block a runtime thread.
-        // `start_kill` sends SIGKILL and returns; `try_wait` reaps a child
-        // that has already exited, and tokio reaps one that has not once the
-        // dropped `Child` exits.
-        if let Some(mut process) = self.process.take() {
-            let _ = process.start_kill();
-            let _ = process.try_wait();
+        // Stop the server and what it started without waiting for them to
+        // exit: this runs in a synchronous Drop, where waiting would block a
+        // runtime thread.
+        if let Some(mut server) = self.process.take() {
+            server.stop();
         }
 
         self.server_info = None;

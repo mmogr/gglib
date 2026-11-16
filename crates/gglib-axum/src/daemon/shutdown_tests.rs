@@ -38,7 +38,11 @@ async fn the_api_path_tolerates_a_second_cancel() {
 fn the_watchdog_outlasts_a_render_stop() {
     assert_eq!(RENDER_STOP_WAIT, Duration::from_secs(20));
     assert_eq!(SHUTDOWN_WATCHDOG, Duration::from_secs(30));
-    assert!(SHUTDOWN_WATCHDOG >= RENDER_STOP_WAIT + RUNS_DRAIN + TRIP_LOG_DRAIN);
+    assert!(SHUTDOWN_WATCHDOG >= RENDER_STOP_WAIT + RUNS_DRAIN + MCP_STOP + TRIP_LOG_DRAIN);
+    assert!(
+        MCP_STOP > gglib_mcp::SERVER_EXIT_GRACE,
+        "the servers' grace fits inside the teardown's bound on stopping them"
+    );
 }
 
 /// The daemon's teardown writes what the loop guard recorded — through the
@@ -237,28 +241,15 @@ async fn teardown_waits_for_the_runs_ends_but_never_past_its_bound() {
 
 /// Teardown stops every MCP server, with what each started (#2012). A
 /// server leads a process group of its own on macOS and Linux, so nothing
-/// sent to the daemon reaches it: the teardown is what stops it. The
-/// stand-in is started through a shim, as `npx.cmd` is, and the process
-/// behind the shim must be gone once the teardown is done.
+/// sent to the daemon reaches it: the teardown is what stops it. Each
+/// stand-in is started through a shim, as `npx.cmd` is, and ignores its
+/// input closing, so each is ended at its grace; the process behind every
+/// shim must be gone once the teardown is done. The servers are stopped
+/// together, so the teardown takes one grace, not one each.
 #[tokio::test]
 async fn teardown_stops_every_mcp_server_and_what_it_started() {
-    use gglib_core::NewMcpServer;
-
-    // Its answers to the client's two requests, `initialize` and
-    // `tools/list`, written before they are asked.
-    const INITIALIZED: &str = r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","serverInfo":{"name":"stand-in"},"capabilities":{"tools":{}}}}"#;
-    const NO_TOOLS: &str = r#"{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}"#;
+    const SERVERS: u32 = 3;
     let dir = tempfile::tempdir().unwrap();
-    let pid_file = dir.path().join("server.pid");
-    let server = gglib_test_proc::install(
-        dir.path(),
-        "server",
-        &format!(
-            "pid {}\nprint {INITIALIZED}\nprint {NO_TOOLS}\nsleep 30",
-            pid_file.display()
-        ),
-    );
-    let shim = gglib_test_proc::wrap(dir.path(), "server-shim", &server);
     let state: AppState = std::sync::Arc::new(
         crate::bootstrap::bootstrap(crate::ServerConfig {
             base_port: Some(19_400),
@@ -271,10 +262,53 @@ async fn teardown_stops_every_mcp_server_and_what_it_started() {
         .await
         .expect("bootstrap an isolated context"),
     );
+    let mut behind = Vec::new();
+    for n in 0..SERVERS {
+        behind.push(started_stand_in(&state, dir.path(), n).await);
+    }
+
+    let began = std::time::Instant::now();
+    teardown(&state).await;
+    let took = began.elapsed();
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while behind.iter().any(Behind::running) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "a server behind a shim was still running 5s after the teardown"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(
+        took < 2 * gglib_mcp::SERVER_EXIT_GRACE,
+        "the teardown took {took:?} over {SERVERS} servers: they were not stopped together"
+    );
+}
+
+/// Add stand-in `n` to the daemon's MCP servers and start it through a shim:
+/// it writes its pid, answers `initialize` and `tools/list` before they are
+/// asked, and sleeps.
+async fn started_stand_in(state: &AppState, dir: &std::path::Path, n: u32) -> Behind {
+    use gglib_core::NewMcpServer;
+
+    const INITIALIZED: &str = r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","serverInfo":{"name":"stand-in"},"capabilities":{"tools":{}}}}"#;
+    const NO_TOOLS: &str = r#"{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}"#;
+    let dir = dir.join(format!("server-{n}"));
+    std::fs::create_dir(&dir).unwrap();
+    let pid_file = dir.join("server.pid");
+    let server = gglib_test_proc::install(
+        &dir,
+        "server",
+        &format!(
+            "pid {}\nprint {INITIALIZED}\nprint {NO_TOOLS}\nsleep 30",
+            pid_file.display()
+        ),
+    );
+    let shim = gglib_test_proc::wrap(&dir, "server-shim", &server);
     let added = state
         .mcp
         .add_server(NewMcpServer::new_stdio(
-            "stand-in",
+            format!("stand-in-{n}"),
             shim.to_string_lossy(),
             Vec::new(),
             None,
@@ -294,17 +328,7 @@ async fn teardown_stops_every_mcp_server_and_what_it_started() {
             .expect("a pid"),
     );
     assert!(behind.running(), "the server behind the shim runs");
-
-    teardown(&state).await;
-
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
-    while behind.running() {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "the server behind the shim was still running 5s after the teardown"
-        );
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
+    behind
 }
 
 /// The server behind a shim, by its pid; killed when the test ends however

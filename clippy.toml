@@ -17,7 +17,8 @@
 #
 # A program is started through gglib_core::utils::process (ADR 0030): `cmd`
 # or `async_cmd`, which keep a child from opening a console window on Windows,
-# and `detached::spawn_daemon` for the service. That module holds the only
+# `detached::spawn_daemon` for the service, and `tree::spawn` for a child
+# that is stopped with what it starts. That module holds the only
 # calls to the methods below; the creation flags and process group they set
 # are set nowhere else. `allow-invalid` on the ones that exist on one OS
 # only, so the other OSes' clippy can leave them unresolved.
@@ -32,8 +33,8 @@ disallowed-methods = [
     { path = "tokio::process::Command::new", reason = "start a program with gglib_core::utils::process::async_cmd, which opens no console window on Windows", allow-invalid = true },
     { path = "std::os::windows::process::CommandExt::creation_flags", reason = "the creation flags are set in gglib_core::utils::process only", allow-invalid = true },
     { path = "tokio::process::Command::creation_flags", reason = "the creation flags are set in gglib_core::utils::process only", allow-invalid = true },
-    { path = "std::os::unix::process::CommandExt::process_group", reason = "a detached process is started with gglib_core::utils::process::detached::spawn_daemon", allow-invalid = true },
-    { path = "tokio::process::Command::process_group", reason = "a detached process is started with gglib_core::utils::process::detached::spawn_daemon", allow-invalid = true },
+    { path = "std::os::unix::process::CommandExt::process_group", reason = "a process group is set in gglib_core::utils::process only: detached::spawn_daemon for the service, tree::spawn for a child stopped with what it starts", allow-invalid = true },
+    { path = "tokio::process::Command::process_group", reason = "a process group is set in gglib_core::utils::process only: detached::spawn_daemon for the service, tree::spawn for a child stopped with what it starts", allow-invalid = true },
     { path = "std::fs::canonicalize", reason = "canonicalize with gglib_core::paths::canonical, which writes no verbatim prefix on Windows" },
     { path = "std::path::Path::canonicalize", reason = "canonicalize with gglib_core::paths::canonical, which writes no verbatim prefix on Windows" },
     { path = "tokio::fs::canonicalize", reason = "canonicalize with gglib_core::paths::canonical, which writes no verbatim prefix on Windows", allow-invalid = true },

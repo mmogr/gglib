@@ -28,8 +28,8 @@ The library installs the program; the binary is the program.
               ▼
   ┌──────────────────────────────────────────────────────────────┐
   │ dir/sd-server[.exe]: reads dir/sd-server.proc, line by line   │
-  │ argv <path> · pid <path> · print <text> · eprint <text>       │
-  │ sleep <s> · exit <code>                                       │
+  │ argv <path> · pid <path> · touch <path> · read                │
+  │ print <text> · eprint <text> · sleep <s> · exit <code>        │
   └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -68,7 +68,9 @@ let sd = gglib_test_proc::install(
 ```
 
 In `print` and `eprint`, `{args}` stands for the program's arguments, joined
-by spaces. `pid <path>` writes the program's own process id to `path`.
+by spaces. `pid <path>` writes the program's own process id to `path`,
+`touch <path>` writes an empty file there, and `read` reads stdin until it
+ends.
 
 `wrap(dir, name, program)` writes a script that starts `program` and waits
 for it, as a shim such as `npx.cmd` does: `name.cmd` on Windows, run by

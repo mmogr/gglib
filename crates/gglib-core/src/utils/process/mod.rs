@@ -5,6 +5,7 @@ pub mod detached;
 pub mod host;
 pub mod stop;
 pub mod tied;
+pub mod tree;
 
 use std::ffi::OsStr;
 

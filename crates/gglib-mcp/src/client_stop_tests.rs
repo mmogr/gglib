@@ -6,13 +6,18 @@
 //! the client starts, as it starts `npx.cmd`. After [`McpClient::disconnect`],
 //! the process with that pid must be gone within [`GONE`]. A server left
 //! running is killed by the test, so none outlives it.
+//!
+//! [`McpClient::stop`] closes the server's input first and gives it
+//! [`SERVER_EXIT_GRACE`] to exit by itself: a server that exits when its
+//! input ends gets to finish (it writes a marker on its way out), and one
+//! that ignores its input is ended at the bound, with the shim.
 
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
-use super::McpClient;
+use super::{McpClient, SERVER_EXIT_GRACE};
 
 /// How long the stand-in lives unless something ends it.
 const LIFE: Duration = Duration::from_secs(30);
@@ -27,17 +32,64 @@ const INITIALIZED: &str = r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion"
 #[tokio::test]
 async fn stopping_a_server_started_through_a_shim_stops_the_server_behind_it() {
     let dir = tempfile::tempdir().unwrap();
-    let pid_file = dir.path().join("server.pid");
-    let server = gglib_test_proc::install(
-        dir.path(),
-        "server",
-        &format!(
-            "pid {}\nprint {INITIALIZED}\nsleep {}",
-            pid_file.display(),
-            LIFE.as_secs()
-        ),
+    let (mut client, behind) = started(dir.path(), &format!("sleep {}", LIFE.as_secs())).await;
+
+    client.disconnect();
+
+    gone(&behind).await;
+}
+
+/// A server that exits when its input ends is let go: the stop returns once
+/// it has gone, well inside the grace, and its clean exit ran.
+#[tokio::test]
+async fn a_server_that_exits_when_its_input_ends_is_let_exit() {
+    let dir = tempfile::tempdir().unwrap();
+    let marker = dir.path().join("exited");
+    let (mut client, behind) =
+        started(dir.path(), &format!("read\ntouch {}", marker.display())).await;
+
+    let began = Instant::now();
+    client.stop().await;
+    let took = began.elapsed();
+
+    assert!(
+        marker.exists(),
+        "the server was ended before its clean exit"
     );
-    let shim = gglib_test_proc::wrap(dir.path(), "server-shim", &server);
+    assert!(
+        took < SERVER_EXIT_GRACE,
+        "the stop waited {took:?}, the whole grace, for a server that had exited"
+    );
+    gone(&behind).await;
+}
+
+/// A server that ignores its input is ended at the grace, the shim with it.
+#[tokio::test]
+async fn a_server_that_ignores_its_input_is_ended_at_the_grace() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut client, behind) = started(dir.path(), &format!("sleep {}", LIFE.as_secs())).await;
+
+    let began = Instant::now();
+    client.stop().await;
+    let took = began.elapsed();
+
+    assert!(
+        took >= SERVER_EXIT_GRACE,
+        "the stop ended the server after {took:?}, before its grace"
+    );
+    gone(&behind).await;
+}
+
+/// A client connected to a stand-in behind a shim, which writes its pid,
+/// answers `initialize`, then follows `then`; and the stand-in.
+async fn started(dir: &Path, then: &str) -> (McpClient, Behind) {
+    let pid_file = dir.join("server.pid");
+    let server = gglib_test_proc::install(
+        dir,
+        "server",
+        &format!("pid {}\nprint {INITIALIZED}\n{then}", pid_file.display()),
+    );
+    let shim = gglib_test_proc::wrap(dir, "server-shim", &server);
 
     let mut client = McpClient::new();
     client
@@ -46,9 +98,11 @@ async fn stopping_a_server_started_through_a_shim_stops_the_server_behind_it() {
         .expect("the client starts the server through its shim");
     let behind = Behind(read_pid(&pid_file).await);
     assert!(running(behind.0), "the server behind the shim is running");
+    (client, behind)
+}
 
-    client.disconnect();
-
+/// Wait until the stand-in is gone, failing after [`GONE`].
+async fn gone(behind: &Behind) {
     let deadline = Instant::now() + GONE;
     while running(behind.0) {
         assert!(

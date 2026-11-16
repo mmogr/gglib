@@ -39,11 +39,17 @@ windows-sys = { version = "0.61", features = [
     "Win32_Security",
     "Win32_System_Console",
     "Win32_System_Diagnostics_Debug",
+    "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_JobObjects",
     "Win32_System_Registry",
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+# utils::process::tree signals a process group on macOS and Linux. The version and
+# feature gglib-runtime already resolves, so no second copy is built.
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.30", features = ["signal"] }
 
 [features]
 # Emit TypeScript for the types that cross the wire. Enabled transitively by

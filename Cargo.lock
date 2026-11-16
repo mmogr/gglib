@@ -2731,6 +2731,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.4.3",
  "gglib-test-proc",
+ "nix 0.30.1",
  "serde",
  "serde_json",
  "sha2 0.10.9",

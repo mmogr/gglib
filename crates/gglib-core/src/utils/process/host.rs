@@ -4,7 +4,8 @@
 //! because Rust opens every other one close-on-exec, and a library that fails
 //! to load is a line on standard error.
 //!
-//! On Windows `prepare()` does two things, and the third is done on demand:
+//! On Windows `prepare()` does two things, and the last two are done on
+//! demand:
 //!
 //! - **The standard handles stay private.** Windows hands a new process every
 //!   inheritable handle of its parent, not only the three it is given. The
@@ -23,6 +24,9 @@
 //! - **A job that ends the engines with this process.** [`super::tied`]
 //!   puts each child it ties in a kill-on-close job object this process
 //!   makes on first use and never closes (#1985).
+//! - **A job for each child started as a tree.** [`super::tree`] puts such
+//!   a child in a kill-on-close job of its own, so stopping it ends what it
+//!   started too, as `cmd.exe` running the `node.exe` of `npx.cmd` (#2012).
 //!
 //! It also reads and writes the user's own `Path` variable, and gglib's
 //! record of the entries it added there, for [`crate::paths::user_path`]:
@@ -118,6 +122,14 @@ fn not_kept() -> std::io::Error {
         "only Windows keeps a user's own Path",
     )
 }
+
+// --- A tree: a child started in a job of its own (#2012) ---
+
+/// A kill-on-close job holding one child and every process it starts, and
+/// the suspended start that puts the child in it before it runs; see
+/// [`super::tree`].
+#[cfg(windows)]
+pub(super) use windows::{TreeJob, resume, start_suspended};
 
 #[cfg(windows)]
 #[expect(
@@ -437,6 +449,178 @@ mod windows {
                 &raw mut answer,
             )
         };
+    }
+
+    // --- A tree: a child started in a job of its own (#2012) ---
+
+    pub(in crate::utils::process) use tree::{TreeJob, resume, start_suspended};
+
+    mod tree {
+        use std::io;
+        use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+
+        use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+        use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
+        };
+        use windows_sys::Win32::System::JobObjects::{
+            AssignProcessToJobObject, TerminateJobObject,
+        };
+        use windows_sys::Win32::System::Threading::{
+            CREATE_SUSPENDED, OpenThread, ResumeThread, THREAD_SUSPEND_RESUME,
+        };
+
+        use super::make_job;
+
+        /// Have `command` start its process suspended, with no console
+        /// window: "The primary thread of the new process is created in a
+        /// suspended state, and does not run until the `ResumeThread` function
+        /// is called" (Process Creation Flags). Nothing it would start can
+        /// start before [`resume`].
+        pub(in crate::utils::process) fn start_suspended(command: &mut tokio::process::Command) {
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "a tree's creation flags are set here, in the process module"
+            )]
+            command.creation_flags(crate::utils::process::CREATE_NO_WINDOW | CREATE_SUSPENDED);
+        }
+
+        /// Resume the process `pid`, started by [`start_suspended`]: every
+        /// thread of it the system lists. A thread that was not suspended
+        /// is left as it was, so only the suspended first thread starts
+        /// running.
+        ///
+        /// # Errors
+        ///
+        /// When the threads cannot be listed, a thread of it cannot be
+        /// opened or resumed, or none is found. The process may then never
+        /// run, and the caller ends it.
+        pub(in crate::utils::process) fn resume(pid: u32) -> io::Result<()> {
+            // SAFETY: two plain values. TH32CS_SNAPTHREAD "Includes all
+            // threads in the system in the snapshot", and the process id
+            // "is ignored" for it (CreateToolhelp32Snapshot). The result is
+            // a new handle, or INVALID_HANDLE_VALUE on failure.
+            let raw = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+            if raw == INVALID_HANDLE_VALUE {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: `raw` is a new handle nothing else owns; it is closed
+            // when `snapshot` is dropped ("To destroy the snapshot, use the
+            // CloseHandle function").
+            let snapshot = unsafe { OwnedHandle::from_raw_handle(raw) };
+            let owner_is_read =
+                std::mem::offset_of!(THREADENTRY32, th32OwnerProcessID) + size_of::<u32>();
+            let full = u32::try_from(size_of::<THREADENTRY32>()).expect("the entry fits a u32");
+            let mut entry = THREADENTRY32 {
+                dwSize: full,
+                ..THREADENTRY32::default()
+            };
+            let mut resumed = 0;
+            // SAFETY: `snapshot` is open; `entry` is a live THREADENTRY32
+            // whose dwSize the caller "must set ... to the size, in bytes, of
+            // the structure" (Thread32First), as it is before each call. The
+            // calls write at most that many bytes into it.
+            let mut listed = unsafe { Thread32First(snapshot.as_raw_handle(), &raw mut entry) };
+            while listed != 0 {
+                // "do not rely on the values of any members whose offsets
+                // are greater than" the dwSize the call wrote (Thread32First).
+                let read = usize::try_from(entry.dwSize).unwrap_or(0) >= owner_is_read;
+                if read && entry.th32OwnerProcessID == pid {
+                    resume_thread(entry.th32ThreadID)?;
+                    resumed += 1;
+                }
+                entry.dwSize = full;
+                // SAFETY: as for Thread32First above.
+                listed = unsafe { Thread32Next(snapshot.as_raw_handle(), &raw mut entry) };
+            }
+            if resumed == 0 {
+                return Err(io::Error::other("no thread of it was found to resume"));
+            }
+            Ok(())
+        }
+
+        /// Resume the thread `id`.
+        fn resume_thread(id: u32) -> io::Result<()> {
+            // SAFETY: plain values. With bInheritHandle false "the
+            // processes do not inherit this handle"; the result is "an open
+            // handle to the specified thread", granted the access asked
+            // for, or NULL on failure (OpenThread).
+            let raw = unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, id) };
+            if raw.is_null() {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: `raw` is a new handle nothing else owns.
+            let thread = unsafe { OwnedHandle::from_raw_handle(raw) };
+            // SAFETY: `thread` is open and has THREAD_SUSPEND_RESUME, the
+            // right ResumeThread needs. It "Decrements a thread's suspend
+            // count", and returns "(DWORD) -1" on failure (ResumeThread); a
+            // thread that was not suspended is left as it was.
+            if unsafe { ResumeThread(thread.as_raw_handle()) } == u32::MAX {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        }
+
+        /// A job holding one child and every process it starts, made by
+        /// [`make_job`]: kill-on-close, and its one handle is this value's.
+        /// [`TreeJob::terminate`] ends them all; so does dropping it, which
+        /// closes that handle ("closing the last job object handle
+        /// terminates all associated processes", Job Objects), and so does
+        /// this process ending, however it ends, since Windows then closes
+        /// every handle the process had.
+        #[derive(Debug)]
+        pub(in crate::utils::process) struct TreeJob(OwnedHandle);
+
+        impl TreeJob {
+            /// Put `child`, just started and still suspended, in a new job
+            /// of its own.
+            ///
+            /// A process the child starts joins the job: "After a process
+            /// is associated with a job, by default any child processes it
+            /// creates using `CreateProcess` are also associated with the
+            /// job" (Job Objects), and this job sets neither breakaway
+            /// limit, so none leaves it.
+            pub(in crate::utils::process) fn of(child: &tokio::process::Child) -> io::Result<Self> {
+                let Some(process) = child.raw_handle() else {
+                    return Err(io::Error::other(
+                        "it exited before it could be put in a job",
+                    ));
+                };
+                let job = make_job().map_err(io::Error::from_raw_os_error)?;
+                // SAFETY: `job` is the new, empty job made above, open while
+                // this runs, with JOB_OBJECT_ALL_ACCESS and so the
+                // JOB_OBJECT_ASSIGN_PROCESS the call needs
+                // (CreateJobObjectW). `process` is the child's own handle
+                // from CreateProcessW, with PROCESS_ALL_ACCESS and so
+                // PROCESS_SET_QUOTA and PROCESS_TERMINATE; it stays open
+                // while `child` is borrowed. A child already in a job (one
+                // it inherited from this process, as under Windows' SSH
+                // server) is nested, since Windows 8: the job "must be empty
+                // or it must be in the hierarchy of nested jobs to which the
+                // process already belongs" (AssignProcessToJobObject), and
+                // this one is empty. On a failure `job` is dropped and
+                // closed; it held nothing.
+                if unsafe { AssignProcessToJobObject(job.as_raw_handle(), process) } == 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(Self(job))
+            }
+
+            /// End every process in the job now, without waiting for them.
+            pub(in crate::utils::process) fn terminate(&self) -> io::Result<()> {
+                // SAFETY: the handle is open while `self` lives and has
+                // JOB_OBJECT_ALL_ACCESS, which includes the
+                // JOB_OBJECT_TERMINATE the call needs. It "Terminates all
+                // processes currently associated with the job", and for a
+                // nested job those associated with "all of its child jobs in
+                // the hierarchy" (TerminateJobObject); each exits with code
+                // 1. The handle stays open.
+                if unsafe { TerminateJobObject(self.0.as_raw_handle(), 1) } == 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(())
+            }
+        }
     }
 
     pub(super) fn prepare() {

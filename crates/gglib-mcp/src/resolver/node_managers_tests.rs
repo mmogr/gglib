@@ -23,19 +23,22 @@ fn found_on_windows(env: &MockEnv, fs: &MockFs, command: &str) -> (Option<PathBu
     (found, attempts)
 }
 
-/// A Windows user's environment: `APPDATA` and `LOCALAPPDATA`, and no `HOME`.
+/// A Windows user's environment: `APPDATA`, `LOCALAPPDATA` and
+/// `ProgramFiles`, and no `HOME`.
 fn windows_env() -> MockEnv {
     MockEnv::new()
         .with_var("APPDATA", APPDATA)
         .with_var("LOCALAPPDATA", LOCALAPPDATA)
+        .with_var("ProgramFiles", PROGRAM_FILES)
 }
 
+const PROGRAM_FILES: &str = r"C:\Program Files";
+
+/// Volta's installer puts the `node`, `npm` and `npx` shims beside
+/// `volta.exe` in `%ProgramFiles%\Volta`.
 #[test]
-fn volta_is_found_in_local_app_data() {
-    let shim = Path::new(LOCALAPPDATA)
-        .join("Volta")
-        .join("bin")
-        .join("npx.exe");
+fn volta_is_found_where_its_installer_puts_it() {
+    let shim = Path::new(PROGRAM_FILES).join("Volta").join("npx.exe");
     let fs = MockFs::new().with_executable(&shim);
 
     assert_eq!(found_on_windows(&windows_env(), &fs, "npx").0, Some(shim));
@@ -141,6 +144,7 @@ fn every_windows_place_is_checked_and_no_unix_one() {
     let checked: Vec<&Path> = attempts.iter().map(|a| a.candidate.as_path()).collect();
     for place in [
         Path::new(LOCALAPPDATA).join("Volta").join("bin"),
+        Path::new(PROGRAM_FILES).join("Volta"),
         Path::new(APPDATA)
             .join("fnm")
             .join("aliases")
@@ -157,6 +161,52 @@ fn every_windows_place_is_checked_and_no_unix_one() {
             |c| !c.to_string_lossy().contains(".asdf") && !c.to_string_lossy().contains(".nvm")
         ),
         "a Unix place was checked: {checked:?}"
+    );
+}
+
+/// Versions are compared as numbers: `v18.10.0` is newer than `v18.9.0`,
+/// and both than `v9.0.0`, under nvm-windows' layout (the programs in the
+/// version's folder) and nvm's (in its `bin`).
+#[test]
+fn the_newest_version_is_found_first_by_its_numbers() {
+    let names = ["v9.0.0", "v18.9.0", "v18.10.0", "not-a-version"];
+
+    let windows_home = versions(&names);
+    let mut fs = MockFs::new();
+    for name in names {
+        fs = fs.with_executable(windows_home.path().join(name).join("npx.cmd"));
+    }
+    let env = windows_env().with_var("NVM_HOME", windows_home.path());
+    assert_eq!(
+        found_on_windows(&env, &fs, "npx").0,
+        Some(windows_home.path().join("v18.10.0").join("npx.cmd"))
+    );
+
+    let home = tempfile::tempdir().unwrap();
+    let node = home.path().join(".nvm/versions/node");
+    let mut fs = MockFs::new();
+    for name in names {
+        std::fs::create_dir_all(node.join(name).join("bin")).unwrap();
+        fs = fs.with_executable(node.join(name).join("bin").join("npx"));
+    }
+    let env = MockEnv::new().with_var("HOME", home.path());
+    let unix = Platform::unix();
+    let searcher = ExecutableSearcher::new(&env, &fs, &unix);
+    assert_eq!(
+        searcher.search_node_managers("npx", &mut Vec::new()),
+        Some(node.join("v18.10.0").join("bin").join("npx"))
+    );
+}
+
+#[test]
+fn version_folders_are_ordered_by_their_numbers() {
+    let mut names: Vec<String> = ["v18.9.0", "zzz", "v9.0.0", "v18.10.0", "v18.10", "aaa"]
+        .map(String::from)
+        .to_vec();
+    super::newest_first(&mut names);
+    assert_eq!(
+        names,
+        ["v18.10.0", "v18.9.0", "v9.0.0", "aaa", "v18.10", "zzz"]
     );
 }
 

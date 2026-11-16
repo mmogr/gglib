@@ -26,6 +26,12 @@ pub enum Instruction {
     /// as `argv` writes, so a test can find the program wherever it was
     /// started from (behind a wrapper, say).
     Pid(PathBuf),
+    /// `touch <path>`: write an empty file at `path`, as a sign the program
+    /// got this far (say, to a clean exit).
+    Touch(PathBuf),
+    /// `read`: read stdin until it ends, as a server waits for its client
+    /// to close its input.
+    Read,
     /// `print <text>`: write `text` and a newline to stdout.
     Print(String),
     /// `eprint <text>`: write `text` and a newline to stderr.
@@ -55,6 +61,8 @@ fn parse_line(line: &str) -> Option<Instruction> {
     Some(match verb {
         "argv" if !rest.is_empty() => Instruction::Argv(PathBuf::from(rest)),
         "pid" if !rest.is_empty() => Instruction::Pid(PathBuf::from(rest)),
+        "touch" if !rest.is_empty() => Instruction::Touch(PathBuf::from(rest)),
+        "read" if rest.is_empty() => Instruction::Read,
         "print" => Instruction::Print(rest.to_owned()),
         "eprint" => Instruction::Eprint(rest.to_owned()),
         "sleep" => Instruction::Sleep(rest.parse().ok()?),

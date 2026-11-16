@@ -46,6 +46,10 @@ fn run(list: &[Instruction], args: &[String]) -> ExitCode {
         let done = match instruction {
             Instruction::Argv(path) => write_argv(path, args),
             Instruction::Pid(path) => write_whole(path, &format!("{}\n", std::process::id())),
+            Instruction::Touch(path) => write_whole(path, ""),
+            Instruction::Read => {
+                std::io::copy(&mut std::io::stdin(), &mut std::io::sink()).map(drop)
+            }
             Instruction::Print(text) => {
                 writeln!(std::io::stdout(), "{}", text.replace(ARGS, &joined))
                     .and_then(|()| std::io::stdout().flush())
