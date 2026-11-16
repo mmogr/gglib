@@ -5,14 +5,15 @@
 //! one place that knows what each OS reports for a program that cannot
 //! start. llama.cpp's status, stable-diffusion.cpp's status and an install's
 //! Verify phase all check here, so each says the same thing for the same
-//! binary. A `#[path]` child of `engine.rs`.
+//! binary. A binary the system calls busy is asked again for a moment
+//! ([`BUSY_WAIT`]). A `#[path]` child of `engine.rs`.
 
 use std::collections::HashSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::sync::{LazyLock, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::process::said_line;
 
@@ -221,12 +222,49 @@ fn check_binary(
     if !path.is_file() {
         return Err(not_working(Failure::NotExecutable, None));
     }
-    let run = run_bounded(cmd(path).arg("--version"), wait);
+    let run = once_not_busy(BUSY_WAIT, || run_bounded(cmd(path).arg("--version"), wait));
     if let Some(failure) = failure_of(&run) {
         let said = run.ok().and_then(|output| first_line(&output.stderr));
         return Err(not_working(failure, said));
     }
     run.map_err(|e| not_working(failure_kind(Ended::NotStarted(&e)), None))
+}
+
+/// How long a binary the system will not start because it is busy is asked
+/// again for.
+///
+/// Linux will not start a program from a file any process holds open for
+/// writing ("text file busy"). An install writes the server and runs it at
+/// once, at its Verify phase. A program gglib starts on another thread at
+/// the moment the server is written (an engine, an MCP server, another
+/// check) begins as a copy of this process, holding every descriptor open
+/// then, the one the server is written through among them, until it starts
+/// its own program a moment later; so Verify can meet a busy server that is
+/// fine (#2045). Once a run has started, no such copy is left. The check is
+/// the one place that sees the system's reason as a kind rather than words,
+/// and every run of it, Verify's included, comes through here.
+const BUSY_WAIT: Duration = Duration::from_secs(2);
+
+/// How often a busy binary is asked again.
+const BUSY_POLL: Duration = Duration::from_millis(10);
+
+/// What `run` answers once it no longer fails because its program is busy,
+/// or that failure once `limit` is up. Any other answer is given at once.
+pub(super) fn once_not_busy<T>(
+    limit: Duration,
+    mut run: impl FnMut() -> std::io::Result<T>,
+) -> std::io::Result<T> {
+    let until = Instant::now() + limit;
+    loop {
+        match run() {
+            Err(e)
+                if e.kind() == std::io::ErrorKind::ExecutableFileBusy && Instant::now() < until =>
+            {
+                std::thread::sleep(BUSY_POLL);
+            }
+            answer => return answer,
+        }
+    }
 }
 
 /// The first line of `bytes` with anything on it, made plain and cut as a

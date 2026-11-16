@@ -225,6 +225,13 @@ pub struct QueueDownloadResponse {
 pub struct StartServerResponse {
     pub port: u16,
     pub message: String,
+    /// Why the endpoint is off, when the load could not turn it on because
+    /// another program holds its port: the status's own sentence. The model
+    /// loaded all the same. Absent when the endpoint is on, so a reader that
+    /// does not know it sees the shape it always did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub endpoint_off: Option<String>,
 }
 
 /// Information about a running model server (GUI DTO).

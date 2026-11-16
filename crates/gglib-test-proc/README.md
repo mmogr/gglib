@@ -76,4 +76,8 @@ ends.
 for it, as a shim such as `npx.cmd` does: `name.cmd` on Windows, run by
 `cmd.exe`, and an executable `sh` script elsewhere. A test of what stopping
 a shim leaves behind starts the wrapper and finds the program by its `pid`
-file.
+file. The `sh` script is written by a child `sh`, so no descriptor to it is
+ever open in the test's process: Linux refuses to start a file a process
+holds open for writing ("text file busy"), and a process another test was
+just starting could have held a copy of one. `install` instead runs each new
+copy once, which waits out any such copy before the copy is handed back.

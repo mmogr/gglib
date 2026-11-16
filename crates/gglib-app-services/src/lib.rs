@@ -3,6 +3,8 @@
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
+mod test_support_engines;
+#[cfg(test)]
 mod test_support_hf;
 #[cfg(test)]
 mod test_support_remote;

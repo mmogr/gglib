@@ -12,7 +12,7 @@ use gglib_core::utils::process::bounded::Failure;
 
 use crate::error::GuiError;
 use crate::launch_options::plan_bare_launch;
-use crate::proxy::ProxyOps;
+use crate::proxy::{Endpoint, ProxyOps};
 use crate::types::{ServerInfo, StartServerRequest, StartServerResponse};
 
 /// Dependencies for server lifecycle operations.
@@ -62,11 +62,21 @@ impl ServerOps {
 
         let settings = self.deps.core.settings().get().await?;
 
-        // The proxy must be up before the model: it owns the runtime the model
-        // will run under, and its dashboard and cache lifecycle are the reason
-        // this path exists.
-        let proxy_addr = self.deps.proxy.ensure_running().await?;
-        debug!(%proxy_addr, "proxy ready for model start");
+        // The endpoint is brought up with the model, so a client pointed at
+        // it finds the model there. The model does not need it: it runs
+        // under the shared runtime, endpoint or none, so a port another
+        // program holds leaves the endpoint off and the load goes on, its
+        // answer saying why in the status's own sentence (#2047).
+        let endpoint_off = match self.deps.proxy.ensure_running_or_off().await? {
+            Endpoint::On(proxy_addr) => {
+                debug!(%proxy_addr, "proxy ready for model start");
+                None
+            }
+            Endpoint::Off(why) => {
+                warn!("loading the model with the endpoint off: {why}");
+                Some(why)
+            }
+        };
 
         // The cascade `gglib serve` and a pinned start run, less their proxy
         // inputs, so a request means the same launch options here as there.
@@ -98,6 +108,7 @@ impl ServerOps {
         Ok(StartServerResponse {
             port: target.port,
             message: format!("Server started on port {}", target.port),
+            endpoint_off,
         })
     }
 
