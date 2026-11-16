@@ -309,7 +309,8 @@ impl McpService {
             .path_extra
             .as_ref()
             .map(|p| {
-                p.split(crate::resolver::PATH_SEPARATOR)
+                crate::resolver::Platform::host()
+                    .split(p)
                     .map(String::from)
                     .collect()
             })

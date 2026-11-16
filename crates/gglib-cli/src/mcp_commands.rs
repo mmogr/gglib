@@ -98,3 +98,7 @@ pub enum McpCommand {
         server: String,
     },
 }
+
+#[cfg(test)]
+#[path = "mcp_commands_tests.rs"]
+mod tests;

@@ -599,6 +599,48 @@ async fn a_servers_extra_path_is_split_on_the_platforms_separator() {
     assert_eq!(McpService::extract_user_search_paths(&server), expected);
 }
 
+/// A server stored with a resolved path that is no longer a program there:
+/// the program was removed, or an older gglib stored a path this one would
+/// not resolve to (on Windows, Node's bare `npx` script beside `npx.cmd`).
+async fn stored_with_a_stale_path(repo: &MockMcpRepository, command: &str) -> McpServer {
+    let gone = std::env::temp_dir().join("gglib-test-gone").join("npx");
+    let mut stale = stdio("stale", command);
+    stale.config.resolved_path_cache = Some(gone.to_string_lossy().into_owned());
+    repo.insert(stale).await.unwrap()
+}
+
+#[tokio::test]
+async fn a_stale_resolved_path_is_dropped_when_the_command_resolves_again() {
+    let (service, repo) = service();
+    // A program on every OS: the one running this test.
+    let program = std::env::current_exe().unwrap();
+    let server = stored_with_a_stale_path(&repo, program.to_str().unwrap()).await;
+
+    let status = service.ensure_resolved(server.id).await.unwrap();
+
+    let program = program.to_string_lossy().into_owned();
+    assert!(status.success, "{:?}", status.error_message);
+    assert_eq!(status.resolved_path.as_deref(), Some(program.as_str()));
+    let stored = service.get_server(server.id).await.unwrap();
+    assert_eq!(stored.config.resolved_path_cache, Some(program));
+}
+
+#[tokio::test]
+async fn a_stale_resolved_path_is_dropped_when_the_command_no_longer_resolves() {
+    let (service, repo) = service();
+    let server = stored_with_a_stale_path(&repo, "gglib-no-such-command").await;
+
+    let status = service.ensure_resolved(server.id).await.unwrap();
+
+    assert!(!status.success);
+    assert_eq!(status.resolved_path, None, "the stale path is not offered");
+    let stored = service.get_server(server.id).await.unwrap();
+    assert_eq!(
+        stored.config.resolved_path_cache, None,
+        "the stale path is not kept to be started later"
+    );
+}
+
 const BUILTIN_IS_KEPT: &str =
     "'builtin' is a name gglib keeps for its own tools; choose another name";
 

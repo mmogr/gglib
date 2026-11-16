@@ -6,6 +6,7 @@
 
 use crate::resolver::env::MockEnv;
 use crate::resolver::fs::MockFs;
+use crate::resolver::platform::Platform;
 use crate::resolver::resolve::resolve_executable_with_deps;
 use crate::resolver::types::{AttemptOutcome, ResolveError};
 use std::path::{Path, PathBuf};
@@ -122,7 +123,7 @@ fn resolve(
 ) -> (Option<PathBuf>, Vec<String>, Vec<String>) {
     let fs = executable.map_or_else(MockFs::new, |path| MockFs::new().with_executable(path));
 
-    match resolve_executable_with_deps(command, &user_dirs(), env, &fs) {
+    match resolve_executable_with_deps(command, &user_dirs(), env, &fs, &Platform::host()) {
         Ok(result) => (
             Some(result.resolved_path),
             result
@@ -252,7 +253,8 @@ fn an_absolute_path_that_is_gone_is_recorded_then_its_name_is_searched_for() {
     );
 
     let nowhere =
-        resolve_executable_with_deps(gone, &user_dirs(), &env, &MockFs::new()).unwrap_err();
+        resolve_executable_with_deps(gone, &user_dirs(), &env, &MockFs::new(), &Platform::host())
+            .unwrap_err();
     let tried: Vec<String> = recorded(&order, None)
         .iter()
         .map(|attempt| format!("  ✗ {attempt}"))
