@@ -88,6 +88,7 @@ gglib config llama detect
 gglib config llama install
   --build
   --force
+  --yes -y
 gglib config llama status
 gglib config llama uninstall
   --yes -y
@@ -133,6 +134,7 @@ gglib config sd
 gglib config sd install
   --build
   --force
+  --yes -y
 gglib config sd status
 gglib config sd uninstall
   --yes -y
@@ -237,6 +239,7 @@ gglib model
 gglib model add
   --component
   --no-component
+  --param-count
   --reimport
 gglib model browse
   --images

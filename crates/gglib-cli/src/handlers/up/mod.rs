@@ -165,7 +165,7 @@ fn sgr_when(color: bool, code: &'static str) -> &'static str {
 /// that *is* an answer is one word long, so name it.
 pub(super) fn require_tty(action: &str) -> anyhow::Result<()> {
     anyhow::ensure!(
-        std::io::stdin().is_terminal(),
+        crate::utils::input::Input::stdin() == crate::utils::input::Input::Terminal,
         "Not running in a terminal, so there is nobody to confirm {action}.\n\
          Re-run with --yes to proceed without being asked."
     );

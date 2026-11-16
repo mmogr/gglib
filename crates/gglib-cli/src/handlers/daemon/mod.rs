@@ -1,12 +1,13 @@
 #![doc = include_str!("README.md")]
 
-use std::io::{IsTerminal as _, Write as _};
+use std::io::Write as _;
 
 use anyhow::Result;
 
 use crate::daemon_client::{self, Absent, DaemonProbe, ProxyStatusDto};
 use crate::presentation::style;
 use crate::target::Target;
+use crate::utils::input::{self, Input, Unasked};
 use gglib_axum::{DaemonLock, DaemonOptions, SHUTDOWN_WATCHDOG, run_daemon};
 use gglib_core::daemon_port;
 
@@ -150,8 +151,8 @@ async fn stop_here() -> Result<()> {
 /// Stop the paired machine's daemon through the tunnel, then disconnect.
 ///
 /// Asks first, because the far side cannot be restarted from here. `--yes`
-/// skips the question; so does a stdin that is not a terminal, on the theory
-/// that a script passing `--remote --yes` has read the help. The stop itself
+/// skips the question; with no terminal to ask, nothing is stopped, and the
+/// refusal names `--yes`. The stop itself
 /// is this machine's daemon's to carry out: it owns the tunnel, it already
 /// does this for the desktop app, and the request it sends asks the far
 /// proxy to type the same word.
@@ -164,9 +165,22 @@ async fn stop_far(yes: bool) -> Result<()> {
         anyhow::bail!("not connected to a remote \u{2014} `gglib remote join` first");
     }
 
-    if !yes && std::io::stdin().is_terminal() && !confirm(status.paired_shown())? {
-        eprintln!("  Left it running.");
-        return Ok(());
+    if !yes {
+        let machine = status.paired_shown();
+        let refused = input::nobody_to_ask(
+            &format!("the daemon on {machine} was left running"),
+            "--yes to stop it",
+        );
+        let agreed = input::asked(
+            Input::stdin_asking_on_stderr(),
+            &mut std::io::stderr(),
+            Unasked::Refuse(refused),
+            |_| confirm(machine),
+        )?;
+        if !agreed {
+            eprintln!("  Left it running.");
+            return Ok(());
+        }
     }
     handle.remote_kill().await?;
     eprintln!("{}", stopping_line(status.paired_shown()));

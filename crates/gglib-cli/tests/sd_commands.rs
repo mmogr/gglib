@@ -135,28 +135,33 @@ fn uninstall_with_nothing_installed_says_so_and_asks_nothing() {
     );
 }
 
+/// With no terminal, nothing is asked and nothing read, a yes waiting in a
+/// pipe included: the uninstall is refused naming `--yes`.
 #[test]
-fn uninstall_with_nobody_to_ask_removes_nothing() {
+fn uninstall_with_nobody_to_ask_removes_nothing_and_names_the_flag() {
     let root = tempfile::tempdir().unwrap();
     install(root.path());
 
-    let out = gglib(root.path(), &["config", "sd", "uninstall"], None);
+    for typed in [None, Some("yes\n")] {
+        let out = gglib(root.path(), &["config", "sd", "uninstall"], typed);
 
-    assert!(out.status.success(), "{}", text(&out));
-    assert_eq!(
-        String::from_utf8_lossy(&out.stdout),
-        "This will remove stable-diffusion.cpp and sd-server. Continue? (y/N): \n\
-         Uninstall cancelled.\n"
-    );
-    assert!(sd_server(root.path()).exists());
+        assert_eq!(out.status.code(), Some(1), "{}", text(&out));
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "", "{}", text(&out));
+        assert_eq!(
+            String::from_utf8_lossy(&out.stderr),
+            "Error: There is no terminal to ask, so stable-diffusion.cpp was not removed: run it \
+             again with --yes to remove it.\n"
+        );
+        assert!(sd_server(root.path()).exists());
+    }
 }
 
 #[test]
-fn uninstall_told_yes_removes_what_sd_installed_and_says_what_it_removed() {
+fn uninstall_with_yes_removes_what_sd_installed_and_says_what_it_removed() {
     let root = tempfile::tempdir().unwrap();
     install(root.path());
 
-    let out = gglib(root.path(), &["config", "sd", "uninstall"], Some("yes\n"));
+    let out = gglib(root.path(), &["config", "sd", "uninstall", "--yes"], None);
 
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success(), "{}", text(&out));
@@ -176,7 +181,7 @@ fn uninstall_told_yes_removes_what_sd_installed_and_says_what_it_removed() {
 }
 
 /// `-y` is the answer given up front: nothing is asked, so with nobody to
-/// ask (input closed, which is a no) it still removes everything.
+/// ask it still removes everything.
 #[test]
 fn uninstall_with_yes_asks_nothing_and_removes_everything() {
     let root = tempfile::tempdir().unwrap();
@@ -195,13 +200,13 @@ fn uninstall_with_yes_asks_nothing_and_removes_everything() {
     assert!(!root.path().join(".sd").exists());
 }
 
-/// A source install told no says it was cancelled and exits with an error,
-/// so a script that ran it knows nothing was installed, and nothing is
-/// cloned. The stand-in `nvcc` gives a machine with no Metal a CUDA build to
-/// ask about.
+/// A source install with nobody to ask is refused with an error naming
+/// `--yes`, so a script that ran it knows nothing was installed, and nothing
+/// is cloned; a no waiting in a pipe is not read. The stand-in `nvcc` gives a
+/// machine with no Metal a CUDA build to ask about.
 #[cfg(unix)]
 #[test]
-fn a_source_install_told_no_is_cancelled_with_an_error_and_clones_nothing() {
+fn a_source_install_with_nobody_to_ask_is_refused_and_clones_nothing() {
     let _guard = stub_tools::one_at_a_time();
     let root = tempfile::tempdir().unwrap();
     let machine = stub_tools::Machine::bare()
@@ -224,10 +229,11 @@ fn a_source_install_told_no_is_cancelled_with_an_error_and_clones_nothing() {
         "{}",
         text(&out)
     );
-    assert!(stdout.ends_with("Continue? (Y/n): \n"), "{}", text(&out));
+    assert!(!stdout.contains("Continue?"), "{}", text(&out));
     assert_eq!(
         String::from_utf8_lossy(&out.stderr).trim_end(),
-        "Error: Installation cancelled.",
+        "Error: There is no terminal to ask, so nothing was built: run it again with --yes to \
+         build it.",
         "{}",
         text(&out)
     );

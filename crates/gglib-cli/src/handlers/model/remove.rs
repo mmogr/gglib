@@ -16,7 +16,7 @@ use gglib_core::Model;
 use super::resolver;
 use crate::bootstrap::CliContext;
 use crate::presentation::{ModelSummaryOpts, display_model_summary};
-use crate::utils::input;
+use crate::utils::input::{self, Unasked};
 
 /// Execute the remove command.
 ///
@@ -41,6 +41,7 @@ use crate::utils::input;
 /// - Model not found
 /// - The model is being served, as `ops` sees it, before the prompt or
 ///   after it
+/// - There is no terminal to confirm the removal and `yes` was not given
 /// - User input fails
 /// - Database removal operation fails
 pub(crate) async fn execute(
@@ -63,8 +64,13 @@ pub(crate) async fn execute(
         display_model_summary(&model, &ModelSummaryOpts::for_removal());
         println!();
 
-        let confirm = input::prompt_confirmation(
+        let confirm = input::yes_no(
             "Are you sure you want to remove this model from the database?",
+            false,
+            Unasked::Refuse(input::nobody_to_ask(
+                "the model was not removed",
+                "--yes to remove it",
+            )),
         )?;
         if !confirm {
             println!("Remove operation cancelled.");

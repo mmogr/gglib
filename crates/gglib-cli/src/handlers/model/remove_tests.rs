@@ -10,6 +10,7 @@ use std::sync::Arc;
 use gglib_core::events::AppEvent;
 
 use super::super::test_library::{Heard, Runtime, library, ops, row, run, run_with};
+use crate::utils::input::TYPED;
 
 /// How to stop a server, as a refusal says it.
 const HOW_TO_STOP: &str = "Stop it first, in the gglib app or with `gglib daemon stop` (which stops \
@@ -105,6 +106,44 @@ async fn a_server_that_came_up_while_the_prompt_waited_is_refused_in_the_same_wo
     );
     assert!(!runtime.stopped(), "--yes stopped the server");
     assert!(heard.events().is_empty(), "{:?}", heard.events());
+}
+
+/// At a terminal the removal is asked, and the answer typed there decides:
+/// a yes removes the model; a no, or the end of input, keeps it.
+#[tokio::test]
+async fn a_removal_asked_at_a_terminal_is_decided_there() {
+    for (typed, kept) in [("y\n", false), ("n\n", true), ("", true)] {
+        let dir = tempfile::tempdir().unwrap();
+        let (ctx, model) = library(dir.path()).await;
+        let id = model.id.to_string();
+
+        TYPED
+            .scope(typed, run(&ctx, &["gglib", "model", "remove", &id]))
+            .await
+            .expect("the command");
+
+        assert_eq!(row(&ctx, model.id).await.is_some(), kept, "{typed:?}");
+    }
+}
+
+/// With nobody to ask, the removal is refused naming `--yes`, and the model
+/// stays.
+#[tokio::test]
+async fn a_removal_with_nobody_to_ask_is_refused_and_names_the_flag() {
+    let dir = tempfile::tempdir().unwrap();
+    let (ctx, model) = library(dir.path()).await;
+    let id = model.id.to_string();
+
+    let refused = run(&ctx, &["gglib", "model", "remove", &id])
+        .await
+        .expect_err("nobody agreed");
+
+    assert_eq!(
+        refused.to_string(),
+        "There is no terminal to ask, so the model was not removed: run it again with --yes to \
+         remove it."
+    );
+    assert!(row(&ctx, model.id).await.is_some());
 }
 
 /// The command as it is dispatched, with the ops it builds for itself.

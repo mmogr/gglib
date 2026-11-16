@@ -157,8 +157,14 @@ fn a_server_for_one_model_does_not_block_the_removal_of_another() {
     let second = write_gguf(root.path(), "phi.Q4_0.gguf");
     gglib(
         root.path(),
-        &["model", "add", second.to_str().unwrap()],
-        "4\n",
+        &[
+            "model",
+            "add",
+            second.to_str().unwrap(),
+            "--param-count",
+            "4",
+        ],
+        "",
     );
     takes_sleep_for_llama_server(root.path());
     let server = StandIn::start();

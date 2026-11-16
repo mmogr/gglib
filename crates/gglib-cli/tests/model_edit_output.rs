@@ -79,23 +79,6 @@ fn an_answered_remove_prints_the_one_line() {
     );
 }
 
-/// Asked first, a removal also says the file is still there.
-#[test]
-fn a_confirmed_remove_ends_by_saying_the_file_remains() {
-    let root = tempfile::tempdir().expect("temp data dir");
-    let weights = library(root.path());
-
-    let removed = gglib(root.path(), &["model", "remove", "qwen.Q8_0"], "y\n");
-
-    let ending = format!(
-        "✓ Model 'qwen.Q8_0' (ID 1) successfully removed from database.\n\
-         Note: The model file '{}' remains on disk.\n",
-        weights.display()
-    );
-    assert!(removed.ends_with(&ending), "{removed}");
-    assert!(weights.exists(), "the file went with the row");
-}
-
 /// What an add prints of the file before it asks anything.
 const READ_FROM_THE_FILE: &str = "File validation and metadata extraction successful.\n\
      \nExtracted metadata:\n\
@@ -103,10 +86,10 @@ const READ_FROM_THE_FILE: &str = "File validation and metadata extraction succes
      \x20 Architecture: qwen3\n\
      \x20 Quantization: Q8_0\n";
 
-/// The file carries no parameter count, so an add asks for one, and stores
-/// and prints the one typed. A re-import asks nothing and leaves it stored.
+/// The file carries no parameter count, so an add is given one, and stores
+/// and prints it. A re-import asks nothing and leaves it stored.
 #[test]
-fn an_add_stores_the_count_typed_and_a_reimport_leaves_it() {
+fn an_add_stores_the_count_given_and_a_reimport_leaves_it() {
     let root = tempfile::tempdir().expect("temp data dir");
     let weights = write_gguf(root.path(), "qwen.Q8_0.gguf");
     let file = weights.to_str().expect("a path in UTF-8");
@@ -118,14 +101,17 @@ fn an_add_stores_the_count_typed_and_a_reimport_leaves_it() {
          \x20 Quantization: Q8_0\n"
     );
 
-    let added = gglib(root.path(), &["model", "add", file], "7.5\n");
+    let added = gglib(
+        root.path(),
+        &["model", "add", file, "--param-count", "7.5"],
+        "",
+    );
     let reimported = gglib(root.path(), &["model", "add", file, "--reimport"], "");
 
     assert_eq!(
         added,
         format!(
             "{READ_FROM_THE_FILE}\
-             Parameter count (in billions): \n\
              \nModel successfully created:\n\n\
              {stored}\
              Model successfully added to database!\n"
@@ -147,14 +133,14 @@ fn an_add_stores_the_count_typed_and_a_reimport_leaves_it() {
 }
 
 /// A file that is already in the library is refused in the handler's words,
-/// before anything is asked: the count typed here is never read.
+/// before anything is asked or refused for want of a terminal.
 #[test]
 fn an_add_of_a_file_already_in_the_library_is_refused_before_it_asks() {
     let root = tempfile::tempdir().expect("temp data dir");
     let weights = library(root.path());
     let file = weights.to_str().expect("a path in UTF-8");
 
-    let refused = run(root.path(), &["model", "add", file], "9\n");
+    let refused = run(root.path(), &["model", "add", file], "");
 
     assert_eq!(refused.status.code(), Some(1));
     assert_eq!(

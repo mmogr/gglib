@@ -12,7 +12,7 @@ use crate::handlers::inference::switch::Consent;
 fn consent(answer: bool, terminal: bool) -> Consent {
     Consent {
         yes: false,
-        terminal,
+        input: crate::utils::input::Input::from_streams(terminal, terminal),
         command: "gglib model load 3 --pin".to_owned(),
         ask: Box::new(move |_| Ok(answer)),
     }

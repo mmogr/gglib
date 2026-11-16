@@ -204,49 +204,31 @@ fn uninstall_with_nothing_installed_says_so_and_asks_nothing() {
     );
 }
 
+/// With no terminal, the question is not asked and its input not read, a
+/// yes waiting in a pipe included: the uninstall is refused naming `--yes`,
+/// and everything stays.
 #[test]
-fn uninstall_with_nobody_to_ask_removes_nothing() {
+fn uninstall_with_nobody_to_ask_removes_nothing_and_names_the_flag() {
     let root = tempfile::tempdir().unwrap();
     install(root.path());
 
-    let out = gglib(root.path(), &["config", "llama", "uninstall"], None);
+    for typed in [None, Some("yes\n")] {
+        let out = gglib(root.path(), &["config", "llama", "uninstall"], typed);
 
-    assert!(out.status.success(), "{}", text(&out));
-    assert_eq!(
-        String::from_utf8_lossy(&out.stdout),
-        "This will remove llama.cpp and llama-server. Continue? (y/N): \nUninstall cancelled.\n"
-    );
-    assert!(root.path().join(".llama/bin/llama-server").exists());
-    assert!(root.path().join(".llama/llama-config.json").exists());
-}
-
-/// The question is the one every command asks through, so `yes` is a yes
-/// here as it is everywhere else.
-#[test]
-fn uninstall_told_yes_removes_the_binaries_the_checkout_and_the_record() {
-    let root = tempfile::tempdir().unwrap();
-    install(root.path());
-
-    let out = gglib(
-        root.path(),
-        &["config", "llama", "uninstall"],
-        Some("yes\n"),
-    );
-
-    assert!(out.status.success(), "{}", text(&out));
-    assert!(
-        String::from_utf8_lossy(&out.stdout).ends_with("llama.cpp uninstalled successfully.\n"),
-        "{}",
-        text(&out)
-    );
-    assert!(
-        !root.path().join(".llama").exists(),
-        "the folder it emptied"
-    );
+        assert_eq!(out.status.code(), Some(1), "{}", text(&out));
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "", "{}", text(&out));
+        assert_eq!(
+            String::from_utf8_lossy(&out.stderr),
+            "Error: There is no terminal to ask, so llama.cpp was not removed: run it again with \
+             --yes to remove it.\n"
+        );
+        assert!(root.path().join(".llama/bin/llama-server").exists());
+        assert!(root.path().join(".llama/llama-config.json").exists());
+    }
 }
 
 /// `--yes` is the answer given up front: nothing is asked, so with nobody
-/// to ask (input closed, which is a no) it still removes everything.
+/// to ask it still removes everything.
 #[test]
 fn uninstall_with_yes_asks_nothing_and_removes_everything() {
     let root = tempfile::tempdir().unwrap();
@@ -328,8 +310,8 @@ const DETECTED: &str = if cfg!(all(target_os = "macos", target_arch = "aarch64")
 const NVCC: &str = "Cuda compilation tools, release 12.4, V12.4.131";
 
 /// With the tools there, a source install says what it found and what it
-/// will do, and asks. Nobody answers, so nothing is cloned, and the command
-/// says it was cancelled and exits with an error.
+/// will do, and would ask. There is no terminal to ask, so nothing is
+/// cloned, and the command says so, names `--yes` and exits with an error.
 #[cfg(unix)]
 #[test]
 fn a_source_install_with_the_build_tools_asks_before_it_clones_anything() {
@@ -368,8 +350,7 @@ fn a_source_install_with_the_build_tools_asks_before_it_clones_anything() {
              \x20 2. Configure with CMake ({DETECTED} enabled)\n\
              \x20 3. Compile llama-server (~3-5 minutes)\n\
              \x20 4. Install to {}\n\
-             \n\
-             Continue? (Y/n): \n",
+             \n",
             root.path().join(".llama/bin").display()
         ),
         "{}",
@@ -377,7 +358,8 @@ fn a_source_install_with_the_build_tools_asks_before_it_clones_anything() {
     );
     assert_eq!(
         String::from_utf8_lossy(&out.stderr).trim_end(),
-        "Error: Installation cancelled.",
+        "Error: There is no terminal to ask, so nothing was built: run it again with --yes to \
+         build it.",
         "{}",
         text(&out)
     );
@@ -411,13 +393,13 @@ fn a_source_install_that_is_agreed_to_clones_under_its_spinner() {
     let out = gglib_on(
         &machine.path(),
         root.path(),
-        &["config", "llama", "install", "--build"],
-        Some("y\n"),
+        &["config", "llama", "install", "--build", "--yes"],
+        None,
     );
 
     assert_eq!(out.status.code(), Some(1), "{}", text(&out));
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.ends_with("Continue? (Y/n): \n"), "{}", text(&out));
+    assert!(!stdout.contains("Continue?"), "{}", text(&out));
     assert!(!stdout.contains("Cloning into"), "{}", text(&out));
     assert_eq!(
         String::from_utf8_lossy(&out.stderr),

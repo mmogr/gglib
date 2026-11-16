@@ -196,7 +196,7 @@ pub(in crate::handlers) async fn started(
                 settings,
                 &mut crate::handlers::inference::switch::Consent {
                     yes: false,
-                    terminal: false,
+                    input: crate::utils::input::Input::NotTerminal,
                     command: "gglib proxy".to_owned(),
                     ask: Box::new(|_| Ok(false)),
                 },
