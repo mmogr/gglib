@@ -14,6 +14,7 @@ fn status(install_type: Option<&str>) -> SdStatus {
     let installed = install_type.is_some();
     SdStatus {
         installed,
+        health_error: None,
         binary_path: "/data/.sd/bin/sd-server".to_owned(),
         config_path: "/data/.sd/sd-config.json".to_owned(),
         pinned_release: "master-948-228c707".to_owned(),
@@ -122,6 +123,27 @@ fn status_of_a_binary_with_no_record_and_no_version_says_so() {
         status_lines(&bare).contains(
             &"Warning: Could not load sd-config.json: expected value at line 1".to_owned()
         )
+    );
+}
+
+/// A binary that fails its check is installed and not working, and the
+/// status stops at why, as `config llama status` does (#1959 B3).
+#[test]
+fn status_of_a_binary_that_does_not_work_stops_at_why() {
+    let mut broken = status(Some("prebuilt"));
+    broken.health_error =
+        Some("sd-server cannot start: the library libvulkan.so.1 it needs is missing.".to_owned());
+    broken.version_line = None;
+    broken.commit = None;
+    assert_eq!(
+        status_lines(&broken),
+        [
+            "Status: Installed, not working",
+            "Binary: /data/.sd/bin/sd-server",
+            "Pinned release: master-948-228c707, which is the one installed.",
+            "Health: \u{2717} Error - sd-server cannot start: the library libvulkan.so.1 it \
+             needs is missing.",
+        ]
     );
 }
 

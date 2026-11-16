@@ -157,6 +157,40 @@ fn serve_with_a_silent_open_stdin_refuses_at_once() {
     assert!(!root.path().join(".llama").exists(), "{}", text(&out));
 }
 
+/// `gglib up` stops at its engines step when the installed llama-server
+/// does not work, saying so and why, rather than going on to a model that
+/// could not be served (#1959 A1). Nothing is installed or asked.
+#[test]
+fn up_stops_at_an_installed_llama_server_that_does_not_work() {
+    let root = tempfile::tempdir().unwrap();
+    // Joined a name at a time: the path is compared with what gglib prints,
+    // and a `/` inside one name is not what Windows prints.
+    let bin = root.path().join(".llama").join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let server = bin.join(format!("llama-server{}", std::env::consts::EXE_SUFFIX));
+    std::fs::write(&server, "not a program").unwrap();
+
+    let out = gglib(root.path(), &["up"], None);
+
+    assert_eq!(out.status.code(), Some(1), "{}", text(&out));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("llama.cpp installed, not working"),
+        "{}",
+        text(&out)
+    );
+    assert!(
+        !stdout.contains("(Y/n)"),
+        "nobody was asked: {}",
+        text(&out)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains(&server.display().to_string()),
+        "the reason names the binary: {}",
+        text(&out)
+    );
+}
+
 #[test]
 fn uninstall_with_nothing_installed_says_so_and_asks_nothing() {
     let root = tempfile::tempdir().unwrap();

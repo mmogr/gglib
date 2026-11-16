@@ -21,6 +21,11 @@ use crate::binary_install::{
     Recorded, ReleaseSelector, ReleaseSpec, installed_release, leftovers, recorded_install,
     resolve_selector, standing,
 };
+pub use check::{NotWorking, validate_engine, validate_engine_at};
+pub(crate) use check::{first_line, validate_binary};
+
+#[path = "engine_check.rs"]
+mod check;
 
 /// Where an engine's install stands against its pin.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

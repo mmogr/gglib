@@ -14,8 +14,8 @@ use super::{require_tty, row, sgr, step};
 use crate::bootstrap::CliContext;
 use crate::handlers::config::engine::ensure_installed;
 use crate::presentation::style::{RESET, SUCCESS};
-use gglib_core::domain::RuntimeKind;
-use gglib_runtime::engine::{PinStanding, pin_state};
+use gglib_core::domain::{EngineState, RuntimeKind};
+use gglib_runtime::engine::{self, PinStanding, pin_state};
 
 /// Run steps 1 and 2, returning the memory figures the model choice needs.
 ///
@@ -57,9 +57,11 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
         // installed already runs.
         PinStanding::Older => {
             ensure_installed(RuntimeKind::Llama, yes).await?;
+            require_working_chat()?;
             row("chat", "llama.cpp installed", None);
         }
         PinStanding::AtPin | PinStanding::Newer | PinStanding::Unknown => {
+            require_working_chat()?;
             row("chat", "llama.cpp already installed", None);
         }
     }
@@ -96,17 +98,60 @@ async fn ensure_images(yes: bool) {
         },
         // As for llama.cpp, a declined or failed update keeps what is there.
         ImagesAction::OfferUpdate => match ensure_installed(kind, yes).await {
-            Ok(()) => row("images", &format!("{} installed", kind.label()), None),
+            Ok(()) if images_work() => {
+                row("images", &format!("{} installed", kind.label()), None);
+            }
+            Ok(()) => {}
             Err(e) => images_skipped(&format!("{e:#}")),
         },
         ImagesAction::AlreadyThere => {
-            row(
-                "images",
-                &format!("{} already installed", kind.label()),
-                None,
-            );
+            if images_work() {
+                row(
+                    "images",
+                    &format!("{} already installed", kind.label()),
+                    None,
+                );
+            }
         }
     }
+}
+
+/// Stop `up` when the installed llama.cpp does not work, saying why: chat
+/// needs it. A fresh install has been checked by the install itself.
+fn require_working_chat() -> Result<()> {
+    engine::validate_engine(RuntimeKind::Llama).inspect_err(|_| {
+        row("chat", &not_working(RuntimeKind::Llama), None);
+    })
+}
+
+/// Whether the installed stable-diffusion.cpp works; when it does not, say
+/// why, and that chat goes on without it.
+fn images_work() -> bool {
+    let Err(e) = engine::validate_engine(RuntimeKind::StableDiffusion) else {
+        return true;
+    };
+    row("images", &not_working(RuntimeKind::StableDiffusion), None);
+    for line in images_not_working_lines(&format!("{e:#}")) {
+        println!("{line}");
+    }
+    false
+}
+
+/// The row an installed engine that does not work gets.
+fn not_working(kind: RuntimeKind) -> String {
+    format!(
+        "{} {}",
+        kind.label(),
+        EngineState::NotWorking.word().to_lowercase()
+    )
+}
+
+/// What [`images_work`] prints under its row, as data.
+fn images_not_working_lines(reason: &str) -> Vec<String> {
+    vec![
+        format!("  \u{26a0}\u{fe0f}  {reason}"),
+        "     Chat works without it.".to_owned(),
+    ]
 }
 
 /// What [`ensure_images`] does about the image runtime.
@@ -300,6 +345,25 @@ mod tests {
             [
                 "  \u{26a0}\u{fe0f}  stable-diffusion.cpp was not installed: the download failed",
                 "     Chat works without it. To draw images later, run 'gglib config sd install'.",
+            ]
+        );
+    }
+
+    /// An engine that is installed and does not work says so in the word
+    /// every status uses, and the image runtime's reason is printed under it.
+    #[test]
+    fn an_engine_that_does_not_work_says_so_and_why() {
+        assert_eq!(
+            not_working(RuntimeKind::Llama),
+            "llama.cpp installed, not working"
+        );
+        assert_eq!(
+            images_not_working_lines(
+                "sd-server cannot start: the library libvulkan.so.1 it needs is missing."
+            ),
+            [
+                "  \u{26a0}\u{fe0f}  sd-server cannot start: the library libvulkan.so.1 it needs is missing.",
+                "     Chat works without it.",
             ]
         );
     }

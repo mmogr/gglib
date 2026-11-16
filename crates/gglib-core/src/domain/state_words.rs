@@ -232,11 +232,10 @@ impl fmt::Display for KeyState {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum EngineState {
-    /// Its server binary is there and, where gglib checks it, works.
+    /// Its server binary is there and answers `--version`.
     Installed,
-    /// Its server binary is there and failed gglib's check (llama.cpp's
-    /// validation; stable-diffusion.cpp's is not checked, so it is never in
-    /// this state).
+    /// Its server binary is there and does not answer `--version`: it
+    /// cannot start, crashes or fails. Both engines are checked alike.
     NotWorking,
     /// No server binary.
     #[default]

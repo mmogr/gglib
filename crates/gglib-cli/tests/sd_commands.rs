@@ -88,8 +88,11 @@ fn status_with_nothing_installed_says_how_to_install() {
     );
 }
 
+/// A download whose `sd-server` is not a program is installed and not
+/// working, and says why, as `config llama status` does (#1959 B3); it once
+/// read as installed.
 #[test]
-fn status_of_a_download_reads_its_record() {
+fn status_of_a_download_that_is_not_a_program_is_not_working() {
     let root = tempfile::tempdir().unwrap();
     install(root.path());
 
@@ -97,20 +100,20 @@ fn status_of_a_download_reads_its_record() {
 
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success(), "{}", text(&out));
-    for line in [
-        "Status: Installed",
-        "Pre-built download:",
-        "  Release: master-948-228c707",
-        "  Platform: macOS (Metal)",
-        // A file that is not a program answers no --version.
-        "Binary version: sd-server did not answer --version",
-    ] {
-        assert!(
-            stdout.lines().any(|l| l == line),
-            "{line:?}\n{}",
-            text(&out)
-        );
-    }
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l == "Status: Installed, not working"),
+        "{}",
+        text(&out)
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l.starts_with("Health: \u{2717} Error - sd-server")),
+        "{}",
+        text(&out)
+    );
     let binary = sd_server(root.path());
     assert!(
         stdout.contains(&format!("Binary: {}", binary.display())),

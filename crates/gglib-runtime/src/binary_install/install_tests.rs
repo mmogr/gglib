@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use tokio::sync::mpsc;
 
-use super::fake_github::{FakeGitHub, Reply};
+use super::fake_github::{FakeGitHub, Reply, a_working_server};
 use super::install::install_prebuilt_from;
 use super::*;
 use crate::llama::LlamaProgressEvent;
@@ -51,14 +51,34 @@ fn pinned() -> ReleaseSelector {
     ReleaseSelector::Tag("v1".to_owned())
 }
 
-/// A zip holding `names`, each a few bytes.
+/// The server the target names, as a member of a release archive.
+const SERVER: &str = "widget-server";
+
+/// A zip holding `names`, each a few bytes, except the server, which is a
+/// program that runs.
 fn zip_of(names: &[&str]) -> Vec<u8> {
+    let members: Vec<(&str, Vec<u8>)> = names
+        .iter()
+        .map(|name| {
+            let bytes = if *name == SERVER {
+                a_working_server()
+            } else {
+                b"fixture".to_vec()
+            };
+            (*name, bytes)
+        })
+        .collect();
+    zip_with(&members)
+}
+
+/// A zip holding each member with its bytes.
+fn zip_with(members: &[(&str, Vec<u8>)]) -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let options =
         zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-    for name in names {
+    for (name, bytes) in members {
         zip.start_file(*name, options).expect("a member");
-        zip.write_all(b"fixture").expect("its bytes");
+        zip.write_all(bytes).expect("its bytes");
     }
     zip.finish().expect("finish the zip").into_inner()
 }
@@ -109,6 +129,7 @@ fn target<'a>(dirs: &'a Dirs, matcher: AssetMatcher<'a>) -> PrebuiltTarget<'a> {
         required: &["widget-server", "libwidget.so"],
         bin_dir: &dirs.bin,
         server_path: &dirs.server,
+        install_command: "gglib config widget install",
         cuda_runtime: None,
     }
 }
@@ -379,6 +400,37 @@ async fn an_archive_missing_a_required_member_records_nothing_and_leaves_no_arch
     assert_eq!(
         frames(&run.events).last().map(String::as_str),
         Some(phase("started", "extract").as_str())
+    );
+}
+
+/// An install whose server cannot start fails at its Verify phase, saying
+/// why, instead of being called done (#1959 A1). The server here prints what
+/// glibc's loader prints for a missing library and exits 127, as it does.
+#[tokio::test]
+async fn an_install_whose_server_cannot_start_fails_its_verify_saying_why() {
+    let dirs = dirs();
+    let instructions = "eprint ./widget-server: error while loading shared libraries: \
+        libwidget.so: cannot open shared object file: No such file or directory\nexit 127";
+    let zip = zip_with(&[
+        (SERVER, a_working_server()),
+        ("widget-server.proc", instructions.as_bytes().to_vec()),
+        ("libwidget.so", b"fixture".to_vec()),
+    ]);
+    let fake = serve(&["w-v1-bin-Linux-Ubuntu-24.04-x86_64.zip"], &zip).await;
+
+    let run = run(&fake, &spec(AssetChoice::First), target(&dirs, LINUX)).await;
+
+    let refusal = run
+        .result
+        .expect_err("a server that cannot start")
+        .to_string();
+    assert!(
+        refusal.contains("the library libwidget.so it needs is missing"),
+        "{refusal}"
+    );
+    assert_eq!(
+        frames(&run.events).last().map(String::as_str),
+        Some(phase("started", "verify").as_str())
     );
 }
 

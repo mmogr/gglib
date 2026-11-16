@@ -59,6 +59,7 @@ pub async fn install_sd_prebuilt(tx: mpsc::Sender<LlamaProgressEvent>) -> Result
         required: asset.required,
         bin_dir,
         server_path: &server_path,
+        install_command: gglib_core::paths::SD_INSTALL_COMMAND,
         cuda_runtime: asset.cuda_runtime,
     };
 

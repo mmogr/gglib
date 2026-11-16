@@ -145,10 +145,12 @@ fn built(version: &str, acceleration: &str) -> Vec<String> {
 /// word, how (a download or a
 /// source build) with its release, platform and date, and then what the
 /// binary itself says, with the commit its line names. Not installed says
-/// the command that installs it.
+/// the command that installs it; a binary that fails its check stops at why.
 fn status_lines(status: &SdStatus) -> Vec<String> {
-    // sd-server's binary is not checked, so it is installed or it is not.
-    let state = format!("Status: {}", EngineState::of(status.installed, false));
+    let state = format!(
+        "Status: {}",
+        EngineState::of(status.installed, status.health_error.is_some())
+    );
     if !status.installed {
         return vec![
             state,
@@ -162,6 +164,10 @@ fn status_lines(status: &SdStatus) -> Vec<String> {
 
     let mut lines = vec![state, format!("Binary: {}", status.binary_path)];
     lines.extend(gglib_runtime::engine::standing_line(&status.pin));
+    if let Some(e) = &status.health_error {
+        lines.push(format!("Health: \u{2717} Error - {e}"));
+        return lines;
+    }
     lines.push(String::new());
     let release = status.release.as_deref().unwrap_or("unknown");
     let platform = status.platform.as_deref().unwrap_or("unknown");

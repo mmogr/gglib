@@ -9,6 +9,22 @@ use std::sync::{Arc, Mutex};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
+/// The bytes of a server that answers `--version` and exits 0, for a
+/// release archive to hold: the stand-in program, which does that with no
+/// instruction file beside it. An install's Verify phase runs the server.
+pub(crate) fn a_working_server() -> Vec<u8> {
+    static BYTES: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+    BYTES
+        .get_or_init(|| {
+            let dir = tempfile::tempdir().expect("a temp dir");
+            let program = gglib_test_proc::install(dir.path(), "server", "");
+            std::fs::remove_file(gglib_test_proc::instructions_path(&program))
+                .expect("no instructions");
+            std::fs::read(program).expect("the stand-in's bytes")
+        })
+        .clone()
+}
+
 /// One canned answer: a status line's code and the body.
 #[derive(Clone)]
 pub(crate) struct Reply {
