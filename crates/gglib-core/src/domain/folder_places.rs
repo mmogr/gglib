@@ -18,7 +18,94 @@
 use std::path::{Path, PathBuf};
 
 use crate::host::HostOs;
-use crate::paths::canonical;
+use crate::paths::{canonical, drive_root, inside_on};
+
+/// How much of a system folder is refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reach {
+    /// The folder itself; a folder below it is adopted.
+    Itself,
+    /// The folder and everything below it.
+    AndBelow,
+}
+
+use Reach::{AndBelow, Itself};
+
+/// Linux's system folders.
+///
+/// - `/proc`, `/sys` and `/boot`, and all below: the kernel and live process
+///   state, never a project, and some of their files never end when read.
+/// - The rest, themselves only: the root, the devices (`/dev`, whose
+///   `/dev/shm` is a RAM disk people build in), the folders that hold the
+///   system's programs, settings and data (`/usr`, `/etc`, `/var`, ...),
+///   every user's home (`/home`) and every mount (`/mnt`, `/media`, `/run`,
+///   under which some systems mount a USB drive). A project below one is
+///   adopted: `/usr/local/src/x`, `/usr/src/linux`, `/opt/app`, `/srv/site`,
+///   `/mnt/data/x`, `/run/media/me/usb/x`, `/dev/shm/build`.
+const LINUX: &[(&str, Reach)] = &[
+    ("/", Itself),
+    ("/bin", Itself),
+    ("/boot", AndBelow),
+    ("/dev", Itself),
+    ("/etc", Itself),
+    ("/home", Itself),
+    ("/lib", Itself),
+    ("/lib64", Itself),
+    ("/media", Itself),
+    ("/mnt", Itself),
+    ("/opt", Itself),
+    ("/proc", AndBelow),
+    ("/run", Itself),
+    ("/sbin", Itself),
+    ("/srv", Itself),
+    ("/sys", AndBelow),
+    ("/usr", Itself),
+    ("/usr/bin", Itself),
+    ("/usr/include", Itself),
+    ("/usr/lib", Itself),
+    ("/usr/lib64", Itself),
+    ("/usr/libexec", Itself),
+    ("/usr/local", Itself),
+    ("/usr/sbin", Itself),
+    ("/usr/share", Itself),
+    ("/var", Itself),
+];
+
+/// macOS's system folders.
+///
+/// - `/System` and `/dev`, and all below: the sealed system volume and the
+///   devices, never a project.
+/// - The rest, themselves only: the root, the Unix folders that hold the
+///   system's programs and settings (`/usr`, `/bin`, `/etc`, which resolves
+///   to `/private/etc`, ...), the folders of every app (`/Applications`,
+///   `/Library`), every user's home (`/Users`) and every volume
+///   (`/Volumes`). A project below one is adopted: `/usr/local/src/x`,
+///   `/Volumes/Work/x`. `/private/var` is refused itself only, since every
+///   temporary folder is below it.
+const MACOS: &[(&str, Reach)] = &[
+    ("/", Itself),
+    ("/Applications", Itself),
+    ("/Library", Itself),
+    ("/System", AndBelow),
+    ("/Users", Itself),
+    ("/Volumes", Itself),
+    ("/bin", Itself),
+    ("/dev", AndBelow),
+    ("/etc", Itself),
+    ("/opt", Itself),
+    ("/private", Itself),
+    ("/private/etc", Itself),
+    ("/private/var", Itself),
+    ("/sbin", Itself),
+    ("/usr", Itself),
+    ("/usr/bin", Itself),
+    ("/usr/lib", Itself),
+    ("/usr/libexec", Itself),
+    ("/usr/local", Itself),
+    ("/usr/sbin", Itself),
+    ("/usr/share", Itself),
+    ("/var", Itself),
+];
 
 /// The places on one machine a launched chat's folder is checked against.
 ///
@@ -79,13 +166,39 @@ impl Places {
     /// Whether the canonical `dir` is this user's home folder.
     #[must_use]
     pub fn is_home(&self, dir: &Path) -> bool {
-        self.home.as_deref() == Some(dir)
+        self.home.as_deref().is_some_and(|home| self.is(dir, home))
     }
 
     /// Whether the canonical `dir` is one of this machine's system folders.
     #[must_use]
     pub fn is_system(&self, dir: &Path) -> bool {
-        dir.parent().is_none()
+        let refuses = |folder: &Path, reach: Reach| match reach {
+            Itself => self.is(dir, folder),
+            AndBelow => inside_on(self.os, dir, folder).is_some(),
+        };
+        let listed = |list: &[(&str, Reach)]| {
+            list.iter()
+                .any(|(folder, reach)| refuses(Path::new(folder), *reach))
+        };
+        match self.os {
+            HostOs::Linux => listed(LINUX),
+            HostOs::MacOs => listed(MACOS),
+            HostOs::Windows => {
+                let windows = self.windows_dir.as_deref();
+                let drive = windows.and_then(drive_root);
+                windows.is_some_and(|folder| refuses(folder, AndBelow))
+                    || drive.is_some_and(|root| refuses(&root, Itself))
+                    || self
+                        .program_files
+                        .iter()
+                        .any(|folder| refuses(folder, AndBelow))
+            }
+        }
+    }
+
+    /// Whether `dir` and `folder` are one folder, compared as this OS does.
+    fn is(&self, dir: &Path, folder: &Path) -> bool {
+        inside_on(self.os, dir, folder).is_some_and(|rest| rest.as_os_str().is_empty())
     }
 }
 

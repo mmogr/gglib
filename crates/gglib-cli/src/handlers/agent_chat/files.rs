@@ -107,8 +107,9 @@ fn files_line(root: &Result<PathBuf, NotAdopted>, sent_to: Option<&str>) -> Stri
             "Files: {} on this machine (read-only; what is read is sent to {machine})",
             dir.display()
         ),
-        (Err(NotAdopted::Home | NotAdopted::System(_)), _) => {
-            format!("Files: off in your home folder or /; {HOW}")
+        (Err(NotAdopted::Home), _) => format!("Files: off in your home folder; {HOW}"),
+        (Err(NotAdopted::System(dir)), _) => {
+            format!("Files: off in {}, a system folder; {HOW}", dir.display())
         }
     }
 }

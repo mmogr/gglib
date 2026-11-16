@@ -94,16 +94,32 @@ pub fn inside(path: &Path, folder: &Path) -> Option<PathBuf> {
 /// is compared as one on every OS.
 #[must_use]
 pub fn inside_on(os: HostOs, path: &Path, folder: &Path) -> Option<PathBuf> {
-    let _ = os;
-    inside(path, folder)
+    if !matches!(os, HostOs::Windows | HostOs::MacOs) {
+        return inside(path, folder);
+    }
+    // Each is written in one form before it is folded, so the `UNC` a
+    // share's verbatim form adds is folded with the rest.
+    let lowered = |given: &Path| {
+        let text = given.to_str()?;
+        Some(
+            verbatim_form(text)
+                .unwrap_or_else(|| text.to_owned())
+                .to_lowercase(),
+        )
+    };
+    match (lowered(path), lowered(folder)) {
+        (Some(path), Some(folder)) => inside(Path::new(&path), Path::new(&folder)),
+        _ => inside(path, folder),
+    }
 }
 
 /// The root of the drive a Windows path names, `C:\` for `C:\Windows` in
 /// either form; `None` for a path with no drive, a share's or a Unix one.
 #[must_use]
 pub fn drive_root(path: &Path) -> Option<PathBuf> {
-    let _ = path;
-    None
+    let text = path.to_str()?;
+    let text = text.strip_prefix(VERBATIM).unwrap_or(text);
+    is_drive(text).then(|| PathBuf::from(&text[..3]))
 }
 
 /// The prefix of a verbatim path.

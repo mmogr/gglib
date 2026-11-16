@@ -63,7 +63,12 @@ functions keep that exact. `child` gives an entry's canonical path in a
 canonical folder, and `join` joins a relative path onto a folder, each in the
 verbatim form when a name needs it, since a plain `C:\proj\notes.` would open
 `C:\proj\notes`. `inside` says whether a canonical path lies in a canonical
-folder, and what part of it is under the folder, for either form of each.
+folder, and what part of it is under the folder, for either form of each;
+`inside_on` is the same, compared as an OS (a `HostOs` value) compares
+names, without case on Windows and macOS, and `drive_root` reads the root of
+the drive a Windows path names (`C:\` for `C:\Windows`), both from the text
+alone, so a chat's system folders (`domain::folder::Places`) are compared
+alike on every OS.
 `is_verbatim` says whether a string has the prefix, for the one check that
 refuses a library an older build wrote on Windows.
 

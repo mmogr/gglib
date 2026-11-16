@@ -158,7 +158,13 @@ fn unix_folders_people_keep_projects_in_are_adopted() {
     ] {
         assert!(adopts(&macos(), dir), "{dir} was not adopted on macOS");
     }
-    for dir in ["/home/me/src/gglib", "/mnt/data/api", "/media/me/usb"] {
+    for dir in [
+        "/home/me/src/gglib",
+        "/mnt/data/api",
+        "/media/me/usb",
+        "/run/media/me/usb/api",
+        "/dev/shm/build",
+    ] {
         assert!(adopts(&linux(), dir), "{dir} was not adopted on Linux");
     }
 }

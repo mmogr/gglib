@@ -1,5 +1,6 @@
 //! `gglib q` against a stand-in daemon: the chat it makes keeps what its
 //! command line named, and its one turn says the folder it was asked in.
+//! Which folders a question adopts is `agent_chat::files`' rule and tests.
 
 use serde_json::{Value, json};
 
@@ -31,14 +32,25 @@ fn question(no_tools: bool, notes: &std::path::Path) -> QuestionArgs {
     }
 }
 
-/// Ask `args` of a stand-in daemon that answers: the chat it made, and the
-/// body of the turn it sent.
+/// Ask the question of a stand-in daemon that answers: the chat it made,
+/// and the body of the turn it sent.
 async fn asked(no_tools: bool) -> (gglib_core::domain::chat::Conversation, Value) {
+    asked_with(no_tools, &[]).await
+}
+
+/// [`asked`], with `--tools` naming `tools`.
+async fn asked_with(
+    no_tools: bool,
+    tools: &[&str],
+) -> (gglib_core::domain::chat::Conversation, Value) {
     gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().expect("tempdir");
     let notes = dir.path().join("notes.txt");
     std::fs::write(&notes, "a cat on a mat").unwrap();
-    let args = question(no_tools, &notes);
+    let args = QuestionArgs {
+        tools: tools.iter().map(|name| (*name).to_owned()).collect(),
+        ..question(no_tools, &notes)
+    };
     let ctx = test_context(dir.path()).await;
     let path = dir.path().join("qwen.gguf");
     let model =
@@ -83,11 +95,54 @@ async fn no_tools_is_saved_with_the_questions_chat() {
     assert_eq!(saved(&toolless), Some(true));
 }
 
+/// The directory a test runs in, its crate's, canonical: neither home nor a
+/// system folder, so a question asked there reads it.
+fn canonical_here() -> String {
+    let here = std::env::current_dir().unwrap();
+    let here = gglib_core::paths::canonical(here).unwrap();
+    here.display().to_string()
+}
+
+/// A question whose file tools read no folder is told of no file tool and
+/// no folder, though it keeps its other tools; one with a folder is told of
+/// both.
+#[test]
+fn a_question_that_reads_no_folder_is_not_told_of_file_tools() {
+    let told = system_prompt(false, None);
+    for named in [
+        "read_file",
+        "list_directory",
+        "grep_search",
+        "Working directory",
+    ] {
+        assert!(!told.contains(named), "{named} in: {told}");
+    }
+    assert!(told.contains("cannot read files"), "{told}");
+    assert!(!told.contains("no tools"), "{told}");
+
+    let told = system_prompt(false, Some("/work/api"));
+    assert!(told.contains("read_file"), "{told}");
+    assert!(told.contains("Working directory: /work/api"), "{told}");
+}
+
+/// A `--tools` list that names no file tool is honoured as typed, as
+/// `gglib chat`'s is: the turn says no folder, so the daemon adds no file
+/// tool to the list, and the model is told of none.
+#[tokio::test]
+async fn a_question_whose_tools_name_no_file_tool_reads_no_folder() {
+    let (chat, body) = asked_with(false, &["tavily_search"]).await;
+
+    assert_eq!(body["folder"], Value::Null);
+    let told = chat.system_prompt.unwrap_or_default();
+    assert!(!told.contains("read_file"), "{told}");
+    assert!(told.contains("cannot read files"), "{told}");
+}
+
 /// The question's turn says the directory it was asked in as its folder,
-/// and the question as its words.
+/// canonical, and the question as its words.
 #[tokio::test]
 async fn the_questions_turn_says_the_folder_it_was_asked_in() {
-    let here = std::env::current_dir().unwrap().display().to_string();
+    let here = canonical_here();
 
     let (chat, body) = asked(false).await;
 
@@ -102,7 +157,7 @@ async fn the_questions_turn_says_the_folder_it_was_asked_in() {
 /// one asked with its tools is told of both.
 #[tokio::test]
 async fn a_question_without_tools_is_not_told_it_has_them() {
-    let here = std::env::current_dir().unwrap().display().to_string();
+    let here = canonical_here();
     let (plain, _) = asked(false).await;
     let (toolless, _) = asked(true).await;
 
