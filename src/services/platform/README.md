@@ -37,6 +37,7 @@ OS-specific utilities that cannot be cleanly abstracted through the transport la
 | `fileDialogs.ts` | Native GGUF file picker, and the native folder picker for a chat's folder and the models folder (`pickFolder(title)`, `null` on web) (Tauri only) |
 | `menuSync.ts` | Synchronises native menu bar item state with application state |
 | `menuEvents.ts` | Listens for native menu click events |
+| `secondLaunch.ts` | `listenToSecondLaunch()`: hears `second-launch`, which Rust sends the main window when gglib is launched again, and keeps the latest arguments and folder (`lastSecondLaunch()`) for a later feature to read; a no-op on web |
 | `serverLogs.ts` | Fetches and streams llama-server log output |
 | `logging/` | Strictly typed logger with categories, levels, and multi-target transports |
 

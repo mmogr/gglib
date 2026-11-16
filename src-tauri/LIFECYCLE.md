@@ -10,6 +10,16 @@
 
 ## Startup
 
+Before any of it, `tauri-plugin-single-instance`, the first plugin
+registered, looks for a running copy of the app (a named mutex on Windows, a
+D-Bus name on Linux, a socket in `/tmp` on macOS, all keyed on the bundle
+identifier). If one answers, this launch hands it its arguments and working
+directory and exits, before it has a window or a daemon connection; the
+running copy shows its main window and tells the page
+(`second_launch.rs`). A debug build registers no such guard: keyed on the
+identifier alone, it would make a build under development exit and raise an
+installed gglib running beside it.
+
 `main.rs`'s setup hook, in order:
 
 1. **Connect to the daemon** — `daemon::Daemon::connect_or_launch` probes
@@ -120,4 +130,5 @@ gglib daemon status          # still running
 - `src-tauri/src/daemon/watch.rs` — the poller that keeps every surface true
 - `src-tauri/src/main.rs` — setup hook, window events, `RunEvent` handling
 - `src-tauri/src/autostart.rs` — login item and initial visibility
+- `src-tauri/src/second_launch.rs` — a second launch: the first window shown, the arguments passed on
 - `crates/gglib-axum/src/daemon/` — the teardown itself, and its watchdog
