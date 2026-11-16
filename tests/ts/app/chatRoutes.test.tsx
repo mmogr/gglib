@@ -32,9 +32,17 @@ interface Chat {
 }
 const daemon = vi.hoisted(() => ({ chats: [] as Chat[], settings: {} as object }));
 const mounts = vi.hoisted(() => ({ count: 0 }));
+/** Who listens for the event stream to open; a test opens it by calling them. */
+const openListeners = vi.hoisted(() => new Set<() => void>());
 
 const transport = vi.hoisted(() => ({
   subscribe: vi.fn(() => () => {}),
+  onEventStreamOpen: vi.fn((listener: () => void) => {
+    openListeners.add(listener);
+    return () => void openListeners.delete(listener);
+  }),
+  onEventStreamClose: vi.fn(() => () => {}),
+  isEventStreamOpen: vi.fn(() => false),
   listModels: vi.fn(async () => []),
   listPairedModels: vi.fn(async () => pairedModels([farEntry('qwen3-8b', 7)])),
   getSettings: vi.fn(async () => daemon.settings),
@@ -122,6 +130,9 @@ function stop(modelId: number) {
 }
 
 const page = () => screen.findByTestId('chat-page');
+
+/** The event stream opens, as when the service starts answering. */
+const openStream = () => act(() => [...openListeners].forEach((listener) => listener()));
 
 /** The library, as its first read answers it: models `ids`. */
 function library(...ids: number[]) {
@@ -444,6 +455,60 @@ describe('the chat routes', () => {
     expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
     library(34);
     expect(await page()).toHaveTextContent('Chatting with model 34');
+    expect(at()).toBe('/chat/new');
+  });
+
+  // A window that came up before the service listened (A3): its first reads
+  // of the library and the settings were refused. The server list lands
+  // first; a pick made then, from no settings and no library, would send
+  // the window to the library for good.
+  it('on a window that came up before the service, picks only once the settings and the library have been read', async () => {
+    resetModelLibrary();
+    act(() => applyLibraryRead({ failed: 'Failed to fetch' }));
+    transport.getSettings.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    daemon.settings = { defaultModelId: 30 };
+    const { at } = renderApp('/chat/new');
+    await act(async () => {});
+    await act(async () => {});
+    expect(at()).toBe('/chat/new');
+    expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
+
+    // The service answers: the stream opens, and the library and the settings are read.
+    library(30);
+    await openStream();
+    expect(await page()).toHaveTextContent('Chatting with model 30');
+    expect(at()).toBe('/chat/new');
+  });
+
+  // While it waits, a read it waits on that failed is said in the error's
+  // own words, with Retry, rather than a bare loading screen.
+  it('says a settings read that failed in its own words, and Retry reads it again and opens the chat', async () => {
+    const user = userEvent.setup();
+    library(30);
+    transport.getSettings.mockRejectedValueOnce(new Error('gglib did not answer in 30 seconds.'));
+    daemon.settings = { defaultModelId: 30 };
+    const { at } = renderApp('/chat/new');
+    expect(await screen.findByRole('alert')).toHaveTextContent("Can't open the chat yet: gglib did not answer in 30 seconds.");
+    expect(at()).toBe('/chat/new');
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await page()).toHaveTextContent('Chatting with model 30');
+    expect(at()).toBe('/chat/new');
+  });
+
+  it('says a server list read that failed in its own words, and Retry reads it again and opens the chat', async () => {
+    const user = userEvent.setup();
+    cleanupServerEvents();
+    forgetServerList();
+    library(30);
+    transport.listServers.mockRejectedValueOnce(new Error('gglib did not answer in 30 seconds.'));
+    initServerEvents();
+    daemon.settings = { defaultModelId: 30 };
+    const { at } = renderApp('/chat/new');
+    expect(await screen.findByRole('alert')).toHaveTextContent("Can't open the chat yet: gglib did not answer in 30 seconds.");
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await page()).toHaveTextContent('Chatting with model 30');
     expect(at()).toBe('/chat/new');
   });
 
