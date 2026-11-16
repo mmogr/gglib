@@ -31,15 +31,16 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate, type Location } from 'react-router';
 
 import { useServers, type ServerViewModel } from '../hooks/useServers';
-import { useServerListHeard } from '../services/serverEvents';
+import { refreshServers, useServerListError, useServerListHeard } from '../services/serverEvents';
 import { useSettings } from '../hooks/useSettings';
 import { lastUsedModel, modelOf, refreshChats, useChats, type ChatModel } from '../services/chatRegistry';
+import { refreshModels } from '../services/modelEvents';
 import { useModel, useModelLibrary } from '../services/modelRegistry';
 import type { GgufModel } from '../types';
 import type { ConversationSummary } from '../services/transport';
 import type { Machine } from '../types/generated/Machine';
 import { clearChatHandoff, peekChatHandoff, wasHanded, type ChatHandoff } from './chatHandoff';
-import { CHAT_LOADING, ChatUnread } from './chatLoading';
+import { CHAT_LOADING, ChatUnread, ChatWaitFailed } from './chatLoading';
 import { PairedChat } from './PairedChat';
 import { chatAddress, paths } from './paths';
 import { useChatSwitch } from './useChatSwitch';
@@ -143,7 +144,8 @@ export function ChatRoute() {
   const { servers } = useServers();
   const heard = useServerListHeard();
   const library = useModelLibrary();
-  const { settings } = useSettings();
+  const { settings, error: settingsError, refresh: refreshSettings } = useSettings();
+  const serversError = useServerListError();
   // The chat this route just opened, and on what: kept until a run names it.
   const [opened, setOpened] = useState<{ id: number; target: Target } | null>(null);
   // The location whose missing conversation the list was read again for.
@@ -186,8 +188,20 @@ export function ChatRoute() {
   if (target === null) {
     if (missing) return rechecked === location.key ? <Navigate to={paths.newChat()} replace /> : CHAT_LOADING;
     if (unread) return reread === location.key ? <ChatUnread onRetry={() => setReread(null)} /> : CHAT_LOADING;
-    // The fallback reads the models loaded and the library: not before both are heard.
-    if (list === null || !heard || library.loading) return CHAT_LOADING;
+    // The fallback reads the models loaded, the library and the default model
+    // the settings name: not before all three have been read. A read that
+    // failed is not one (a window opened before the service listened), or
+    // the fallback would send it to the library for good; it is said, with
+    // Retry, while the stream's own retry also asks again.
+    if (list === null || !heard || !library.heard || settings === null) {
+      const failed = [
+        !heard && serversError !== null ? { words: serversError, retry: refreshServers } : null,
+        !library.heard && library.error !== null ? { words: library.error, retry: () => void refreshModels() } : null,
+        settings === null && settingsError !== null ? { words: settingsError, retry: () => void refreshSettings() } : null,
+      ].filter((f) => f !== null);
+      if (failed.length === 0) return CHAT_LOADING;
+      return <ChatWaitFailed words={failed[0].words} onRetry={() => failed.forEach((f) => f.retry())} />;
+    }
     target = fallback(list, settings?.defaultModelId ?? null, servers, library.models);
   }
   if (target.kind === 'go') return <Navigate to={target.to} replace />;

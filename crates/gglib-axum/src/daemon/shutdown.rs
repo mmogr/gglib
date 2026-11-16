@@ -7,11 +7,18 @@
 //! catches anything that slipped through. The whole
 //! sequence runs under a force-exit watchdog so a wedged child (D-state on
 //! a blocked CUDA ioctl) cannot keep the daemon alive forever.
+//!
+//! A stop that leaves only seconds, a closed console window on Windows, kills
+//! every engine at once first ([`shutdown_signal`]), and the same teardown
+//! follows for as long as the process lives.
 
 use std::future::Future;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::state::AppState;
+use gglib_app_services::ServerOps;
+use gglib_core::utils::process::stop::{Pace, stop_requested};
 use gglib_runtime::process::residency::RENDER_STOP_WAIT;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
@@ -44,8 +51,8 @@ const RUNS_DRAIN: Duration = Duration::from_secs(2);
 /// token. Without the cancel the token would stay live on the signal path, so
 /// anything bounded by it would never end: `/api/events` streams would hold
 /// `with_graceful_shutdown` open, `perform_shutdown` would never run, and the
-/// liveness watchdog would force-exit later (#891). Ctrl-C, `systemctl stop`
-/// and `kill` all take that path; `POST /api/daemon/shutdown` cancels the
+/// liveness watchdog would force-exit later (#891). Ctrl-C, `systemctl stop`,
+/// `kill` and a closed console all take that path; `POST /api/daemon/shutdown` cancels the
 /// token itself.
 ///
 /// `CancellationToken::cancel` is idempotent, so firing it on the API path too
@@ -63,41 +70,27 @@ where
     token.cancel();
 }
 
-/// Resolve when the process is asked to stop.
+/// Resolve when the process is asked to stop; on a hurried stop, kill every
+/// engine first.
 ///
-/// Completes on SIGINT (Ctrl-C) on every platform, and additionally on
-/// SIGTERM on Unix, which is what a service manager sends.
-pub(crate) async fn shutdown_signal() {
-    let interrupt = async {
-        if let Err(e) = tokio::signal::ctrl_c().await {
-            warn!("could not listen for Ctrl-C ({e}); shutdown will not be graceful");
-            // Never resolve: let the other branch (or the server) decide.
-            std::future::pending::<()>().await;
-        }
-    };
-
-    #[cfg(unix)]
-    {
-        let terminate = async {
-            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
-                Ok(mut sig) => {
-                    sig.recv().await;
-                }
-                Err(e) => {
-                    warn!("could not listen for SIGTERM ({e})");
-                    std::future::pending::<()>().await;
-                }
-            }
-        };
-
-        tokio::select! {
-            () = interrupt => {}
-            () = terminate => {}
-        }
+/// What counts as a stop, and how hurried each is, is
+/// [`stop_requested`]'s to say: Ctrl-C, SIGTERM and Ctrl-Break leave time
+/// for the whole teardown; a closed console window on Windows leaves about
+/// five seconds, which an orderly stop of an image model that is drawing
+/// could outlast ([`RENDER_STOP_WAIT`]). So a hurried stop kills every
+/// engine's process here, at once and before anything else, even a log
+/// line. The teardown then runs unchanged for as long as the process lives,
+/// over engines already killed.
+///
+/// This holds for a stop that arrives while the daemon serves. The
+/// listeners go when the first stop is heard, so a console closed during
+/// the teardown that follows an orderly stop ends the process at once, as
+/// it did before any listener existed.
+pub(crate) async fn shutdown_signal(servers: Arc<ServerOps>) {
+    if stop_requested().await == Pace::Hurried {
+        servers.kill_all_now().await;
+        warn!("the console is closing or the session is ending: every engine was killed at once");
     }
-
-    #[cfg(not(unix))]
-    interrupt.await;
 }
 
 /// Tear the daemon down in order, under a force-exit watchdog.
@@ -106,7 +99,6 @@ pub(crate) async fn shutdown_signal() {
 /// still runs, because each protects a different resource (proxy clients,
 /// llama-server children, download partials, pidfiles).
 pub(super) async fn perform_shutdown(state: &AppState) {
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     info!("daemon shutting down");

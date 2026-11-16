@@ -167,6 +167,15 @@ impl ServerOps {
         Ok(())
     }
 
+    /// Kill every running server at once, waiting for none of them.
+    ///
+    /// For a service that has seconds left, before its orderly teardown runs
+    /// [`Self::stop_all`]; see
+    /// [`ModelRuntimePort::kill_all_now`](gglib_core::ports::ModelRuntimePort::kill_all_now).
+    pub async fn kill_all_now(&self) {
+        self.deps.proxy.runtime().kill_all_now().await;
+    }
+
     /// List all running servers as GUI DTOs.
     pub async fn list_servers(&self) -> Vec<ServerInfo> {
         self.deps

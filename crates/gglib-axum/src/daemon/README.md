@@ -28,11 +28,17 @@ This module is responsible for:
   Host-header allowlist, and the daemon token minted anew at every start,
 - sweeping orphaned llama-server pidfiles at startup (moved here from the
   desktop app, which used to kill a concurrent CLI's servers),
-- SIGINT/SIGTERM handling and the `POST /api/daemon/shutdown` route's
-  cancellation token,
-- ordered teardown: proxy drained, every llama-server child stopped
-  gracefully (SIGTERM → grace → SIGKILL), downloads cancelled, a final
-  pidfile audit — all under a force-exit watchdog.
+- stopping when asked, through `gglib_core::utils::process::stop`: Ctrl-C,
+  SIGTERM and, on Windows, Ctrl-Break, and the `POST /api/daemon/shutdown`
+  route's cancellation token,
+- on Windows, a console window closed while the daemon serves, which leaves
+  about five seconds: every engine (llama-server and `sd-server`) is killed
+  at once, before the teardown below. Closed during the teardown of an
+  earlier stop, the window still ends the process at once. A logoff and a system shutdown are listened for too, but
+  Windows does not send them to this process, because it loads `user32.dll`,
+- ordered teardown: proxy drained, every engine stopped gracefully
+  (SIGTERM → grace → SIGKILL), downloads cancelled, a final pidfile audit —
+  all under a force-exit watchdog.
 
 It is **not** responsible for deciding *when* to run: clients auto-launch
 `gglib daemon run` on demand (see `gglib-cli`'s `daemon_client`), and the

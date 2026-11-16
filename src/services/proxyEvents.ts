@@ -40,11 +40,6 @@ export function initProxyEvents(): void {
   bridge.init();
 }
 
-/** Read the status again, as hydration does: for a reader whose daemon has come back. */
-export function refreshProxyStatus(): void {
-  void bridge.refresh();
-}
-
 /**
  * Cleanup proxy event handling.
  * Should be called on app unmount or hot-reload.

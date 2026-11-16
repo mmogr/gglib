@@ -2,7 +2,7 @@
  * Tests for useSettings hook.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { ReactNode } from 'react';
 import { useSettings } from '../../../src/hooks/useSettings';
@@ -14,6 +14,10 @@ import { MOCK_PROXY_PORT, MOCK_BASE_PORT } from '../fixtures/ports';
 const transport = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
+  onEventStreamOpen: vi.fn(() => () => {}),
+  onEventStreamClose: vi.fn(() => () => {}),
+  /** Whether the event stream is open: while it is, a failed read is asked again. */
+  isEventStreamOpen: vi.fn(() => false),
 }));
 
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
@@ -282,5 +286,102 @@ describe('useSettings', () => {
     });
 
     expect(result.current.settings?.proxyPort).toBe(9191);
+  });
+
+  /**
+   * A read that fails is not newer than one begun before it: the mount's
+   * slow read, landing after a refresh that failed, is still put up.
+   */
+  it('puts up an earlier read that lands after a later one failed', async () => {
+    let answer: (s: AppSettings) => void = () => {};
+    vi.mocked(fetchSettings)
+      .mockReturnValueOnce(new Promise<AppSettings>((resolve) => (answer = resolve)))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.error).toBe('Failed to fetch');
+
+    await act(async () => {
+      answer(mockSettings);
+    });
+
+    expect(result.current.settings).toEqual(mockSettings);
+    expect(result.current.error).toBeNull();
+  });
+
+  /**
+   * A save answered before any read is the daemon answering: the read it
+   * overtook is dropped, and loading must not wait on it for ever.
+   */
+  it('is no longer loading once a save has answered, though no read has', async () => {
+    vi.mocked(fetchSettings).mockReturnValue(new Promise<AppSettings>(() => {}));
+    vi.mocked(updateSettings).mockResolvedValue(mockSettings);
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      await result.current.save({ proxyPort: 9090 });
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.settings).toEqual(mockSettings);
+  });
+
+  it('is no longer loading once a save has failed, though no read has answered', async () => {
+    vi.mocked(fetchSettings).mockReturnValue(new Promise<AppSettings>(() => {}));
+    vi.mocked(updateSettings).mockRejectedValue(new Error('refused'));
+    const { result } = renderHook(() => useSettings(), { wrapper });
+
+    await act(async () => {
+      await result.current.save({ proxyPort: 9090 }).catch(() => {});
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBe('refused');
+  });
+
+  // The stream is open, so the daemon answers, but its settings read keeps
+  // failing (a 30 s time limit): the read is asked again, after 1 s, then 2 s.
+  describe('while the event stream is open', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+      transport.isEventStreamOpen.mockReturnValue(true);
+    });
+    afterEach(() => {
+      transport.isEventStreamOpen.mockReturnValue(false);
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    it('asks a read that failed again, after a wait that grows, until the settings land', async () => {
+      const timedOut = new Error('gglib did not answer in 30 seconds.');
+      vi.mocked(fetchSettings).mockRejectedValueOnce(timedOut).mockRejectedValueOnce(timedOut).mockResolvedValue(mockSettings);
+      const { result } = renderHook(() => useSettings(), { wrapper });
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(result.current.error).toBe('gglib did not answer in 30 seconds.');
+      expect(fetchSettings).toHaveBeenCalledTimes(1);
+
+      await act(() => vi.advanceTimersByTimeAsync(1000));
+      expect(fetchSettings).toHaveBeenCalledTimes(2);
+      await act(() => vi.advanceTimersByTimeAsync(2000));
+      expect(fetchSettings).toHaveBeenCalledTimes(3);
+      expect(result.current.settings).toEqual(mockSettings);
+      expect(result.current.error).toBeNull();
+
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(fetchSettings).toHaveBeenCalledTimes(3);
+    });
+
+    it('asks nothing again once the provider is gone', async () => {
+      vi.mocked(fetchSettings).mockRejectedValue(new Error('refused'));
+      const { unmount } = renderHook(() => useSettings(), { wrapper });
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      unmount();
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(fetchSettings).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -246,6 +246,23 @@ impl ProcessManager {
             .collect()
     }
 
+    /// Kill every engine this manager runs, chat and image alike, and wait
+    /// for none of them to let go: for a service that has seconds left, as
+    /// on Windows after its console window is closed. See
+    /// [`ModelRuntimePort::kill_all_now`](gglib_core::ports::ModelRuntimePort::kill_all_now).
+    ///
+    /// The orderly stops ([`Self::stop_model`]) ask a drawing image model's
+    /// render to let go first and wait up to
+    /// [`RENDER_STOP_WAIT`](crate::process::residency::RENDER_STOP_WAIT) for
+    /// it; this asks nothing. It leaves the slots as they are, so an orderly
+    /// stop afterwards still empties them and reaps each process.
+    ///
+    /// The one wait is for the process table's lock, which another stop holds
+    /// only while it kills its own engine and reaps it.
+    pub async fn kill_all_now(&self) {
+        self.core.write().await.kill_all_now();
+    }
+
     /// The single model this manager is pinned to, if any.
     ///
     /// `Some(pin)` is `gglib serve`: every model whose id is not `pin.id` is
@@ -329,3 +346,7 @@ mod tests;
 #[cfg(test)]
 #[path = "manager_gate_tests.rs"]
 mod gate_tests;
+
+#[cfg(test)]
+#[path = "manager_kill_tests.rs"]
+mod kill_tests;

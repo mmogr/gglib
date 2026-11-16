@@ -26,7 +26,7 @@ Axum backend (HTTP response) → typed result
 |------|------|
 | `client.ts` | HTTP client with auth injection, retry, and error normalization; `apiFetch` for a stream or a body that is not JSON. Both make their `fetch` through `timeLimit.ts` |
 | `timeLimit.ts` | The time limits and the one `fetch` every request to the daemon is made through (`fetchWithin`): 30 s on a read (through `get`, its body included; through `apiFetch`, until its headers come, since the caller reads the body); 1.5 s on the health probe; a stream (`stream: true`) until its headers come and never after; none on a mutation unless its caller sets `timeoutMs`. A read answered from the Hugging Face Hub gets 5 minutes (`HUB_READ_LIMIT_MS`); an image or a run's events from the paired machine 90 s to its headers (`FAR_STREAMED_LIMIT_MS`). One that runs out rejects with a `TIMEOUT` `TransportError`, "gglib did not answer in 30 seconds.", never an abort |
-| `renew.ts` | A stream refused with a 401 renews the session's credential before it reconnects |
+| `renew.ts` | A stream refused with a 401 renews the session's credential before it reconnects, and says it did, so the stream reconnects at once |
 | `daemonToken.ts` | The daemon's token from the link `gglib web` prints: stripped from the address bar, kept until the daemon next starts |
 | `chat.ts` | Conversations and messages, a conversation's model, tools and tool limits (`settings` on `PUT /api/conversations/{id}`, each one sent and no other), a chat's title asked of its model (`POST /api/chat`), and a picture kept beside the one it was made from (`POST /api/conversations/{id}/pictures`) |
 | `servers.ts` | llama.cpp server lifecycle and the running list |

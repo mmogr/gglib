@@ -67,9 +67,10 @@ pub struct DaemonOptions {
 ///    machine told once to be reachable is reachable again after a reboot,
 ///    and, unless that would mint a proxy key, after its proxy is stopped
 ///    and started again.
-/// 6. On SIGINT/SIGTERM/shutdown-route: drain the proxy, stop every child,
-///    write what the loop guard's log still holds, audit pidfiles — under a
-///    force-exit watchdog.
+/// 6. On Ctrl-C, SIGTERM, Ctrl-Break or the shutdown route: drain the proxy,
+///    stop every child, write what the loop guard's log still holds, audit
+///    pidfiles — under a force-exit watchdog. A closed console window on
+///    Windows kills every child at once first.
 ///
 /// # Errors
 ///
@@ -188,7 +189,10 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     }
 
     // 6. Serve until signalled, then tear down in order.
-    let graceful = shutdown::await_shutdown(shutdown::shutdown_signal(), shutdown_token.clone());
+    let graceful = shutdown::await_shutdown(
+        shutdown::shutdown_signal(Arc::clone(&state.servers)),
+        shutdown_token.clone(),
+    );
 
     axum::serve(listener, app)
         .with_graceful_shutdown(graceful)

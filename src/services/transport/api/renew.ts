@@ -12,13 +12,17 @@
 import { TransportError } from '../errors';
 import { getClient, resetClientCache } from './client';
 
-/** Renew the credential when `error` is a stream's 401; otherwise nothing. */
-export async function renewAfterRefusal(error: unknown): Promise<void> {
+/**
+ * Renew the credential when `error` is a stream's 401; otherwise nothing.
+ * Says whether it renewed: a 401 is the daemon answering, so the caller may
+ * try again at once with the new credential.
+ */
+export async function renewAfterRefusal(error: unknown): Promise<boolean> {
   const status = TransportError.isTransportError(error)
     ? (error.details as { status?: number } | undefined)?.status
     : undefined;
-  if (status === 401) {
-    resetClientCache();
-    await getClient();
-  }
+  if (status !== 401) return false;
+  resetClientCache();
+  await getClient();
+  return true;
 }
