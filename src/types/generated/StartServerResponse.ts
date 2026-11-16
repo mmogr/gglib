@@ -3,4 +3,11 @@
 /**
  * Response for starting a server.
  */
-export type StartServerResponse = { port: number, message: string, };
+export type StartServerResponse = { port: number, message: string, 
+/**
+ * Why the endpoint is off, when the load could not turn it on because
+ * another program holds its port: the status's own sentence. The model
+ * loaded all the same. Absent when the endpoint is on, so a reader that
+ * does not know it sees the shape it always did.
+ */
+endpoint_off?: string, };

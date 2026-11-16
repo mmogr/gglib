@@ -12,7 +12,9 @@
  * it) turns Load into Install llama.cpp: the library banner's install
  * (`places/library/engineInstall`), then the load (or the chat) that asked
  * for it once the install completes. A failed load or unload is one line,
- * in the daemon's words, saying which it was.
+ * in the daemon's words, saying which it was. A load that left the endpoint
+ * off, its port held by another program, is a success, with why beside it
+ * as a warning (`services/server/endpointOff`).
  *
  * `loadWith` is the Load with options sheet's start: the request the sheet
  * built from what was typed (`inspector/loadOptions`), after the pin when
@@ -24,10 +26,12 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useToastContext } from '../../contexts/ToastContext';
 import { useLlamaStatus } from '../../hooks/useLlamaStatus';
 import type { ServerViewModel } from '../../hooks/useServers';
 import { installLlama, useEngineInstall } from '../../places/library/engineInstall';
 import { startEndpointPinned } from '../../services/proxyEvents';
+import { sayEndpointOff } from '../../services/server/endpointOff';
 import { getTransport } from '../../services/transport';
 import { TransportError } from '../../services/transport/errors';
 import { toStartServerRequest } from '../../services/transport/mappers';
@@ -60,6 +64,7 @@ export function useLoad(
   const [busy, setBusy] = useState<LoadState['busy']>(null);
   const [error, setError] = useState<LoadState['error']>(null);
   const [refused, setRefused] = useState(false);
+  const { showToast } = useToastContext();
   const { status: llama, checkStatus } = useLlamaStatus();
   const install = useEngineInstall();
   const after = useRef<Then | null>(null);
@@ -69,8 +74,9 @@ export function useLoad(
     setError(null);
     setBusy(then);
     try {
-      const { port } = await getTransport().serveModel({ id: model.id });
-      if (then === 'chat') onServerStarted({ modelId: model.id, modelName: model.name, port, status: 'running' });
+      const answer = await getTransport().serveModel({ id: model.id });
+      sayEndpointOff(answer, showToast);
+      if (then === 'chat') onServerStarted({ modelId: model.id, modelName: model.name, port: answer.port, status: 'running' });
     } catch (err) {
       if (TransportError.hasCode(err, 'LLAMA_SERVER_NOT_INSTALLED')) setRefused(true);
       else setError({ action: 'load', message: formatError(err) });
@@ -105,7 +111,7 @@ export function useLoad(
     try {
       // The pin is the choice itself: an endpoint on otherwise is switched.
       if (pin) await startEndpointPinned({ model_id: model.id, options: toStartServerRequest(config), proxy: { replace: true } });
-      await getTransport().serveModel(config);
+      sayEndpointOff(await getTransport().serveModel(config), showToast);
       return null;
     } catch (err) {
       if (TransportError.hasCode(err, 'LLAMA_SERVER_NOT_INSTALLED')) setRefused(true);

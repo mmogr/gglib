@@ -115,6 +115,8 @@ pub(super) async fn load_on(
         }
     })?;
     lines.push(format!("  {}", started.message));
+    // Loaded, with the endpoint off: why, in the status's sentence (#2047).
+    lines.extend(started.endpoint_off.map(|why| format!("  {why}")));
     Ok(lines)
 }
 

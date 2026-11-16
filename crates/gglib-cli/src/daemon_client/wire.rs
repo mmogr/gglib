@@ -146,13 +146,17 @@ pub(crate) struct StartServerBody {
 }
 
 /// `POST /api/servers/start` response: the daemon's own sentence about the
-/// start, which `gglib model load` prints as it came.
+/// start, which `gglib model load` prints as it came, and why the endpoint
+/// is off when the load could not turn it on, which it prints after.
 ///
 /// The CLI's reading of `gglib_app_services::types::StartServerResponse`;
 /// `a_start_server_response_deserializes_into_the_narrowing` pins it.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct StartServerDto {
     pub message: String,
+    /// Absent from an older daemon's answer, and whenever the endpoint is on.
+    #[serde(default)]
+    pub endpoint_off: Option<String>,
 }
 
 /// Body for `POST /api/servers/stop` — the client-side twin of

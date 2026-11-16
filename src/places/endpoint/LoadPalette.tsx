@@ -32,6 +32,7 @@ import { useClickOutside } from '../../hooks/useClickOutside';
 import type { PairedModelsState } from '../../hooks/usePairedModels';
 import { useModelLibrary } from '../../services/modelRegistry';
 import { useThisMachine } from '../../services/hostRegistry';
+import { sayEndpointOff } from '../../services/server/endpointOff';
 import { getTransport } from '../../services/transport';
 import { cn } from '../../utils/cn';
 import { loadFailed } from '../../utils/errors';
@@ -120,7 +121,7 @@ export const LoadPalette: FC<LoadPaletteProps> = ({ loaded, paired }) => {
     }
     close(true);
     if (withOptions) navigate(paths.endpointServe(choice.id));
-    else getTransport().serveModel({ id: choice.id }).catch(failed);
+    else getTransport().serveModel({ id: choice.id }).then((answer) => sayEndpointOff(answer, showToast), failed);
   };
 
   const point = (at: number) => setActive({ key: choices[at] ? keyOf(choices[at]) : null, at });

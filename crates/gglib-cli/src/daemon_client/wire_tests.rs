@@ -145,6 +145,7 @@ fn a_start_server_response_deserializes_into_the_narrowing() {
     let sent = gglib_app_services::types::StartServerResponse {
         port: 8081,
         message: "Server started on port 8081".into(),
+        endpoint_off: Some("The endpoint is off: port 8080 is in use.".into()),
     };
 
     let json = serde_json::to_value(&sent).expect("response serialises");
@@ -152,6 +153,10 @@ fn a_start_server_response_deserializes_into_the_narrowing() {
         serde_json::from_value(json).expect("the narrowing reads what the daemon sends");
 
     assert_eq!(got.message, sent.message, "the daemon's sentence is kept");
+    assert_eq!(
+        got.endpoint_off, sent.endpoint_off,
+        "and why the endpoint is off"
+    );
 }
 
 /// The stop body's key is the contract's: the one the daemon reads the
