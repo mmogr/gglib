@@ -10,6 +10,7 @@
 //! | 2b | Strip unsupported tools | [`super::tools`] | `tools`, capabilities |
 //! | 3 | Truncate stale history | [`super::truncation`] | `messages`, payload size |
 //! | 4 | Resolve the sampling hierarchy | [`super::sampling`] | top-level keys |
+//! | 4b | Tell the template thinking is off | [`super::thinking_off`] | the resolved budget, `chat_template_kwargs` |
 //! | — | Log the sampling decision | [`super::sampling_log`] | the decision |
 //!
 //! Stages 5 and 6 have gone (ADR 0022); their numbers are not reused.
@@ -38,7 +39,12 @@
 //! sampling keys. Resolving sampling first would have truncation size its
 //! budget against keys the client never sent. The margin is small, but it is
 //! the difference between measuring the conversation and measuring our own
-//! additions to it.
+//! additions to it. Stage 4b's one kwarg is such an addition too.
+//!
+//! **4 before 4b.** Stage 4b reads the budget the ladder resolved, which
+//! stage 4 writes over the client's own and whose alias it removes: a `0`
+//! from the settings counts, and a client's `0` an operator's flag overrules
+//! does not.
 //!
 //! # Why the seam is `&mut Value` and not a typed request struct
 //!
@@ -65,7 +71,9 @@ use serde_json::Value;
 use super::measure::ContextBudget;
 use super::sampling::SamplingDecision;
 use super::truncation::{TruncationError, TruncationReport};
-use super::{ModelContext, SamplingLayers, messages, sampling, sampling_log, tools, truncation};
+use super::{
+    ModelContext, SamplingLayers, messages, sampling, sampling_log, thinking_off, tools, truncation,
+};
 
 /// What the pipeline did, for the caller that has to report or verify it.
 ///
@@ -113,6 +121,7 @@ pub fn apply(
     };
 
     let sampling = sampling::resolve_sampling(body, ctx, layers);
+    thinking_off::tell_template_thinking_is_off(body);
     sampling_log::log_resolution(&sampling);
     Ok(PipelineReport {
         truncation,
