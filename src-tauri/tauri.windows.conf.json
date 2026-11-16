@@ -1,3 +1,11 @@
 {
-  "productName": "gglib-gui"
+  "productName": "gglib-gui",
+  "bundle": {
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "windows/installer-hooks.nsh"
+      }
+    }
+  }
 }

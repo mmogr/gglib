@@ -146,7 +146,7 @@ For more details on the architecture and how all interfaces work together, see:
   - `src/commands/`: Tauri command handlers (organized by domain)
   - `tauri.conf.json`: Tauri configuration
   - `tauri.linux.conf.json`: on Linux, names the deb and rpm `gglib-gui` (the CLI's package is `gglib`), retires the old `gg-lib-gui` package, and keeps the menu entry named gglib through `linux/gglib.desktop`
-  - `tauri.windows.conf.json`: on Windows, names the app `gglib-gui`, so the per-user install goes to `%LOCALAPPDATA%\gglib-gui` and not into gglib's data folder `%LOCALAPPDATA%\gglib`
+  - `tauri.windows.conf.json`: on Windows, names the app `gglib-gui`, so the per-user install goes to `%LOCALAPPDATA%\gglib-gui` and not into gglib's data folder `%LOCALAPPDATA%\gglib`, keeps the install per-user, and hands the installer `windows/installer-hooks.nsh`, which runs the `gglib.exe` it installs to put that folder on the user's own PATH after the install (`gglib config path-entry add`) and, before the uninstall, after asking to close a running app, take it off if the install put it there (`remove`)
 
 ## Backend Module Architecture
 

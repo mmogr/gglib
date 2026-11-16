@@ -91,6 +91,9 @@ gglib config llama install
 gglib config llama status
 gglib config llama uninstall
   --yes -y
+gglib config path-entry (hidden)
+gglib config path-entry add (hidden)
+gglib config path-entry remove (hidden)
 gglib config paths
 gglib config profile
 gglib config profile install-templates

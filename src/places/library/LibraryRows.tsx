@@ -1,6 +1,7 @@
 /**
- * The library's groups, in order: Downloading, Loaded, On this Mac, then the
- * paired machine's. A model is in one of them and moves when its state does
+ * The library's groups, in order: Downloading, Loaded, On this Mac (the
+ * machine in the service's words, `useThisMachine`), then the paired
+ * machine's. A model is in one of them and moves when its state does
  * (`groups.ts`). Each group of models is a listbox (`Listbox`), one Tab
  * stop whose rows ↑ ↓ move through, picking as they go; its rows are options.
  *
@@ -26,6 +27,7 @@ import type { ServerViewModel } from '../../hooks/useServers';
 import { refreshModels } from '../../services/modelEvents';
 import { useModelLibrary } from '../../services/modelRegistry';
 import { useRemoteState } from '../../services/remoteRegistry';
+import { useThisMachine } from '../../services/hostRegistry';
 import type { GgufModel } from '../../types';
 import type { InspectorSubject } from '../../app/paths';
 import { canSee } from '../../utils/canSee';
@@ -53,6 +55,7 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
   const { models, loading, error } = useModelLibrary();
   const residency = useResidency();
   const { status: remote } = useRemoteState();
+  const machine = useThisMachine();
 
   if (loading && models.length === 0) return <ModelListSkeleton />;
 
@@ -116,7 +119,7 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
           </Button>
         </div>
       ) : models.length === 0 ? (
-        <Note>{far ? `No models on this Mac. ${paired.name}'s models below work as they are.` : 'No models on this Mac.'}</Note>
+        <Note>{far ? `No models on ${machine.phrase}. ${paired.name}'s models below work as they are.` : `No models on ${machine.phrase}.`}</Note>
       ) : loaded.length + here.length === 0 ? (
         <Note>Nothing in your library matches. Press ↵ to search Hugging Face.</Note>
       ) : null}
@@ -129,8 +132,8 @@ export const LibraryRows: FC<LibraryRowsProps> = ({ query, sort, subject, server
         </Group>
       )}
       {here.length > 0 && (
-        <Group label="On this Mac">
-          <Listbox label="On this Mac" onPick={(i, replace) => onPickLocal(here[i].id, replace)}>
+        <Group label={`On ${machine.phrase}`}>
+          <Listbox label={`On ${machine.phrase}`} onPick={(i, replace) => onPickLocal(here[i].id, replace)}>
             {here.map(row)}
           </Listbox>
         </Group>

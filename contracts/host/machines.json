@@ -1,0 +1,17 @@
+[
+  {
+    "os": "macos",
+    "machine": "Mac",
+    "separators": "/"
+  },
+  {
+    "os": "windows",
+    "machine": "PC",
+    "separators": "\\/"
+  },
+  {
+    "os": "linux",
+    "machine": "computer",
+    "separators": "/"
+  }
+]

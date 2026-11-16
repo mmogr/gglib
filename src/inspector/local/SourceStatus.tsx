@@ -16,6 +16,7 @@ import { StatusMark } from '../../components/status/StatusMark';
 import { FILE_HEALTH_WORDS, VERDICT_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
+import { fileName, useHost } from '../../services/hostRegistry';
 import type { VerificationReport } from '../../services/transport';
 import type { VerifiedFileKind } from '../../types/generated/VerifiedFileKind';
 import type { Verification } from './useVerification';
@@ -51,7 +52,9 @@ const Good: FC<{ title?: string; children: ReactNode }> = ({ title, children }) 
 const Line: FC<{ children: ReactNode }> = ({ children }) => <span className="flex flex-wrap items-baseline gap-x-sm gap-y-xs">{children}</span>;
 
 /** Every file the check read, closed until opened from the line. */
-const FileList: FC<{ report: VerificationReport }> = ({ report }) => (
+const FileList: FC<{ report: VerificationReport }> = ({ report }) => {
+  const host = useHost();
+  return (
   <details className="group/files">
     <summary className="flex cursor-pointer list-none items-center gap-xs text-text-secondary [&::-webkit-details-marker]:hidden">
       <Icon icon={ChevronRight} size={12} className="group-open/files:rotate-90" />
@@ -65,13 +68,14 @@ const FileList: FC<{ report: VerificationReport }> = ({ report }) => (
           title={file.health.type === 'corrupt' ? `Expected ${file.health.expected}\nActual ${file.health.actual}` : undefined}
         >
           <span className="shrink-0 text-text-secondary">{fileLabel(file.kind)}</span>
-          <span className="min-w-0 flex-1 truncate font-mono">{file.file_path.split('/').pop()}</span>
+          <span className="min-w-0 flex-1 truncate font-mono">{fileName(file.file_path, host)}</span>
           <span className="shrink-0">{FILE_HEALTH_WORDS[file.health.type]}</span>
         </li>
       ))}
     </ul>
   </details>
-);
+  );
+};
 
 /** The daemon's verdict in its word, or how many files are damaged in its line, with Re-download for those. */
 const Verified: FC<{ v: Verification; report: VerificationReport }> = ({ v, report }) => {

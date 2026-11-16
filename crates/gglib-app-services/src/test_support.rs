@@ -9,14 +9,14 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use gglib_core::download::{DownloadError, DownloadId, QueueSnapshot};
 use gglib_core::events::AppEvent;
+use gglib_core::host::HostOs;
 use gglib_core::ports::{
     Admission, AppEventEmitter, DownloadManagerPort, LaunchOverrides, ModelRuntimeError,
     ModelRuntimePort, ProcessHandle, RunningTarget, SystemProbePort,
 };
 use gglib_core::services::AppCore;
 use gglib_core::utils::system::{
-    BuildOrigin, DependencyReport, GpuInfo, HostOs, LinuxDistro, SystemMemoryInfo,
-    dependency_report,
+    BuildOrigin, DependencyReport, GpuInfo, LinuxDistro, SystemMemoryInfo, dependency_report,
 };
 use gglib_db::{CoreFactory, setup_test_database};
 
@@ -188,7 +188,7 @@ impl Default for MockSystemProbePort {
 impl SystemProbePort for MockSystemProbePort {
     fn dependency_report(&self) -> DependencyReport {
         dependency_report(
-            HostOs::this(),
+            HostOs::current(),
             BuildOrigin::Installed,
             LinuxDistro::Unknown,
             &gglib_core::utils::system::Found::default(),

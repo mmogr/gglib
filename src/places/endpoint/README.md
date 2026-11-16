@@ -40,7 +40,7 @@ with `replace`: the daemon stops and starts it as one operation and puts
 back what ran when the start is refused, as `gglib serve` and `gglib proxy`
 do after a yes. Unload asks the daemon
 whatever this window believes (TX-12). Using it says "Apps on this Mac"
-for every request in flight: the proxy records no client's identity, so
+(the machine in the service's words, `useThisMachine`) for every request in flight: the proxy records no client's identity, so
 apps are not told apart. Not drawn here, for want of a fact:
 "Shared on your network" (the status reaches a wildcard bind on loopback,
 so no fact of the run says it is shared); the Copilot recipe's inline
@@ -63,8 +63,8 @@ the proxy's rate in `rate_words`' words, `readings/rate`); Activity's "N tool
 calls repaired", "N loop-guard trips" (the proxy's
 `loop_guard_trips_total`), "N client sampling fields ignored", "Nothing to report yet.", "Clear prompt cache",
 "Live numbers ›", "All ›"; ⋯'s "Live numbers", "Endpoint settings…"; and the palette's "Load a
-model" (its field), "fit unknown", "No model matches.", "No models on this
-Mac.", "Every model on this Mac is loaded.", "On <machine>", "Load on
+model" (its field), "fit unknown", "No model matches.", "No models on <this
+machine>.", "Every model on <this machine> is loaded." (`useThisMachine`), "On <machine>", "Load on
 <machine>", "<machine> is away; Load waits until it is back.",
 "<machine>'s models could not be read just now.", "<machine> does not offer
 Load.", "Didn't load: <the daemon's words>" and "⏎ Load · ⌥⏎ Load with

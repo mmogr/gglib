@@ -13,12 +13,12 @@
 import { useEffect, type FC } from 'react';
 import { useEngine } from '../hooks/useEngine';
 import { InstallProgress } from '../components/InstallProgress';
+import { fileName, useHost } from '../services/hostRegistry';
 import { StatusMark } from '../components/status/StatusMark';
 import { Button } from '../components/ui/Button';
 import type { ComponentLinkDto, GgufModel } from '../types';
 import { ENGINE_PRODUCT } from '../types/setup';
 import { componentRoleLabel, imageFamilyLabel } from '../utils/imageFamily';
-import { fileName } from './local/rows';
 
 interface ImagePartsProps {
   model: GgufModel;
@@ -32,6 +32,7 @@ const SD = ENGINE_PRODUCT.stable_diffusion;
 
 export const ImageParts: FC<ImagePartsProps> = ({ model, components, onReady }) => {
   const sd = useEngine('stable_diffusion');
+  const host = useHost();
   const installed = sd.status?.installed === true;
   const ready = installed && model.missingComponents.length === 0;
   useEffect(() => {
@@ -40,7 +41,7 @@ export const ImageParts: FC<ImagePartsProps> = ({ model, components, onReady }) 
 
   const parts = [
     model.imageFamily ? imageFamilyLabel(model.imageFamily) : null,
-    ...(components ?? []).filter((c) => c.path).map((c) => `${componentRoleLabel(c.role)} ${fileName(c.path ?? '')}${c.present ? '' : ' (file missing)'}`),
+    ...(components ?? []).filter((c) => c.path).map((c) => `${componentRoleLabel(c.role)} ${fileName(c.path ?? '', host)}${c.present ? '' : ' (file missing)'}`),
     ...model.missingComponents.map((role) => `▲ ${componentRoleLabel(role)} missing`),
   ].filter(Boolean);
 
