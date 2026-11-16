@@ -32,9 +32,10 @@ by its fingerprint.
 
 ## Words this folder says that Rust does not
 
-"End-to-end encrypted. No account.", "This Mac", "Let your laptop and phone
-use this Mac's models.", "Share with my devices", "Clients on this Mac will
-need an API key from now on." / "Turn on", "Finding a relay…", "Invite a
+"End-to-end encrypted. No account.", "<This machine>", "Let your laptop and
+phone use <this machine>'s models.", "Share with my devices", "Clients on
+<this machine> will need an API key from now on." (the machine in the
+service's words, `useThisMachine`: This Mac, This PC, This computer) / "Turn on", "Finding a relay…", "Invite a
 device", "Offering…", "Stop sharing", "Sharing now waits for it, or arms it
 again.", "Scan with ggchat", "Code", "On a
 computer:", "This code pairs <id>.", "Expires in", "<label> joined." / "A

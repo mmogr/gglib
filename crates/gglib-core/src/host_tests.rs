@@ -9,8 +9,7 @@ fn this_machine_writes_for_its_own_shell() {
 }
 
 /// An OS is read from its `std::env::consts::OS` spelling, as a value: any
-/// spelling gglib does not name reads as Linux. This build's is the one the
-/// standard library was built for.
+/// spelling gglib does not name reads as Linux.
 #[test]
 fn an_os_is_read_from_its_spelling() {
     assert_eq!(HostOs::from_consts("macos"), HostOs::MacOs);
@@ -18,7 +17,6 @@ fn an_os_is_read_from_its_spelling() {
     for os in ["linux", "freebsd", "android", ""] {
         assert_eq!(HostOs::from_consts(os), HostOs::Linux, "{os}");
     }
-    assert_eq!(HostOs::current(), HostOs::from_consts(std::env::consts::OS));
 }
 
 #[test]
@@ -48,7 +46,6 @@ fn the_separators_are_the_ones_this_machines_paths_use() {
         .filter(|c| std::path::is_separator(*c))
         .collect();
     assert_eq!(HostOs::current().separators(), std_splits);
-    assert_eq!(Host::current(), Host::of(HostOs::current()));
 }
 
 /// `contracts/host/machines.json` is every OS's host as `GET /api/version`

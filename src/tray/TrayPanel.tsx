@@ -44,6 +44,7 @@ import { formatError } from '../utils/errors';
 import { cleanupProxyEvents, initProxyEvents } from '../services/proxyEvents';
 import { useEndpointFacts, useProxyState } from '../services/proxyRegistry';
 import { cleanupRemoteEvents, initRemoteEvents } from '../services/remoteEvents';
+import { keepHostCurrent } from '../services/hostEvents';
 import { useRemoteState } from '../services/remoteRegistry';
 import { cleanupServerEvents, initServerEvents, useServerListHeard } from '../services/serverEvents';
 import { Devices } from './Devices';
@@ -67,10 +68,12 @@ export const TrayPanel: FC = () => {
     initProxyEvents();
     initServerEvents();
     initRemoteEvents();
+    const stopHost = keepHostCurrent();
     return () => {
       cleanupProxyEvents();
       cleanupServerEvents();
       cleanupRemoteEvents();
+      stopHost();
     };
   }, []);
 

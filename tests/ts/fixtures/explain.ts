@@ -9,6 +9,7 @@
  * different impossible response.
  */
 import type { LaunchExplanation, SamplingExplanation } from '../../../src/types';
+import type { CommandLine } from '../../../src/types/generated/CommandLine';
 import type { LaunchPlan } from '../../../src/types/generated/LaunchPlan';
 import { resolvedConfig } from './inference';
 
@@ -29,9 +30,21 @@ export function samplingExplanation(
 }
 
 /**
+ * The line a daemon on a Mac serves for `plan`, for a plan none of whose
+ * values a shell would quote: each flag and its value as they are. The
+ * quoting is Rust's (`LaunchPlan::command_line`); a test of it serves the
+ * lines `contracts/models/launch_line.json` records instead.
+ */
+export function unquotedCommand(plan: Pick<LaunchPlan, 'program' | 'args'>): CommandLine {
+  const args = plan.args.map((a) => (a.value == null ? a.flag : `${a.flag} ${a.value}`));
+  return { shell: 'posix', program: plan.program, args, line: [plan.program, ...args].join(' ') };
+}
+
+/**
  * A whole explanation around `sampling`: by default the launch half is the
  * smallest plan the daemon can send, a program with no arguments and no
- * fit, for a test that reads only the sampling.
+ * fit, for a test that reads only the sampling; its line is `command`, else
+ * the plan's unquoted.
  */
 export function launchExplanation(
   sampling: SamplingExplanation,
@@ -41,8 +54,9 @@ export function launchExplanation(
     narration: { model_name: 'model', quantization: null, weights_bytes: 0, decisions: [], fit: null },
     fit: null,
   },
+  command: CommandLine = unquotedCommand(plan),
 ): LaunchExplanation {
-  return { plan, sampling };
+  return { plan, command, sampling };
 }
 
 /**

@@ -127,6 +127,10 @@ fn a_powershell_line_quotes_a_value_in_powershell_single_quotes() {
     assert_eq!(token(shell, r#"say "hi""#), r#"'say "hi"'"#);
     assert_eq!(token(shell, "127.0.0.1"), "127.0.0.1");
     assert_eq!(token(shell, "0.95"), "0.95");
+    assert_eq!(token(shell, "08"), "08");
+    assert_eq!(token(shell, "1e3"), "1e3");
+    // A folder with a space keeps its last backslash inside the quotes.
+    assert_eq!(token(shell, r"D:\My Cache\"), r"'D:\My Cache\'");
 }
 
 #[test]
@@ -148,7 +152,7 @@ fn a_program_that_needs_quoting_is_quoted_and_powershell_calls_it_with_an_ampers
 }
 
 /// The values the round trip sends, each a case the unit tests above name.
-const VALUES: [&str; 14] = [
+const VALUES: [&str; 17] = [
     "/Users/m/Library/Application Support/g/a.gguf",
     r"C:\Users\m\AppData\Local\gglib\a b.gguf",
     r"C:\Users\m\q.Q8_0.gguf",
@@ -161,14 +165,18 @@ const VALUES: [&str; 14] = [
     r"blk\.\d+\.ffn_.*=CPU",
     "k=v,a+b%c:d@e",
     "0.95",
+    "08",
+    "1e3",
     "",
     r#"say "hi""#,
+    r"D:\My Cache\",
 ];
 
 /// What Windows PowerShell 5.1 does not pass to a program as written, in
-/// any quoting: it drops an empty argument, and does not escape a double
-/// quote inside one. PowerShell 7.3 and later pass both.
-const WINDOWS_POWERSHELL_LOSES: [&str; 2] = ["", r#"say "hi""#];
+/// any quoting: it drops an empty argument, does not escape a double quote
+/// inside one, and does not escape the backslash that ends one with a
+/// space. PowerShell 7.3 and later pass all three.
+const WINDOWS_POWERSHELL_LOSES: [&str; 3] = ["", r#"say "hi""#, r"D:\My Cache\"];
 
 /// The arguments a program received when `interpreter` ran the line `shell`
 /// writes for `values`, or `None` when this machine has no such program.

@@ -245,8 +245,9 @@ mod tests {
     /// prints them, and an installed copy's build tools go out unrequired.
     #[test]
     fn the_report_goes_out_with_the_words_check_deps_prints() {
+        use gglib_core::host::HostOs;
         use gglib_core::utils::system::{
-            BuildOrigin, EngineInstall, Found, HostOs, LinuxDistro, dependency_report,
+            BuildOrigin, EngineInstall, Found, LinuxDistro, dependency_report,
         };
 
         let report = dependency_report(

@@ -99,6 +99,11 @@ import { guiModel } from '../fixtures/model';
 import { chatPlan, launchExplanation, samplingExplanation } from '../fixtures/explain';
 import { resolvedConfig } from '../fixtures/inference';
 import { rust } from '../contracts/rustSource';
+import { applyHost } from '../../../src/services/hostRegistry';
+import type { CommandLine } from '../../../src/types/generated/CommandLine';
+
+/** `contracts/models/launch_line.json`: plans beside the line `LaunchPlan::command_line` writes for each shell, POSIX first. */
+const RECORDED_LINES = () => JSON.parse(rust('contracts/models/launch_line.json')) as { plan: LaunchPlan; commands: CommandLine[] }[];
 
 const GEMMA = guiModel({ id: 9, name: 'Gemma-3-4B-It', openaiId: 'Gemma-3-4B-It', quantization: 'Q4_K_M', imageInput: true });
 
@@ -149,6 +154,7 @@ describe('the inspector, a model on this machine', () => {
     cleanup();
     cleanupModelEvents();
     serve('stopped');
+    applyHost({ os: 'macos', machine: 'Mac', separators: '/' });
   });
 
   it('says the fit sentence the daemon serves, a refusal as a refusal, and the Context row its note', async () => {
@@ -193,14 +199,14 @@ describe('the inspector, a model on this machine', () => {
     expect(within(inspector()).getByText(/Client sampling is ignored, except max_tokens/)).toBeInTheDocument();
   });
 
-  it('draws the launch line as the CLI records the command line, each token saying why', async () => {
-    const recorded = JSON.parse(rust('contracts/models/launch_line.json')) as { plan: LaunchPlan; line: string }[];
-    const quoted = recorded[1];
-    explain.answer = launchExplanation(samplingExplanation(), { ...quoted.plan, fit: chatPlan().fit });
+  it('draws the launch line the daemon wrote for its shell, each token saying why', async () => {
+    const quoted = RECORDED_LINES()[1];
+    const [posix] = quoted.commands;
+    explain.answer = launchExplanation(samplingExplanation(), { ...quoted.plan, fit: chatPlan().fit }, posix);
     renderInspector();
 
     const line = await screen.findByLabelText('Launch line');
-    expect(line.textContent).toBe(quoted.line);
+    expect(line.textContent).toBe(posix.line);
 
     await userEvent.setup().click(within(line).getByRole('button', { name: "--mmproj '/it'\\''s/mmproj.gguf'" }));
     const note = screen.getByRole('note', { name: '--mmproj' });
@@ -208,9 +214,40 @@ describe('the inspector, a model on this machine', () => {
     expect(note).toHaveTextContent('chosen by you');
   });
 
+  it("on a PC, the line is the daemon's for PowerShell and a path's file is named as Windows splits it", async () => {
+    applyHost({ os: 'windows', machine: 'PC', separators: '\\/' });
+    const windows = RECORDED_LINES()[3];
+    const powershell = windows.commands[1];
+    expect(powershell.shell).toBe('powershell');
+    explain.answer = launchExplanation(samplingExplanation(), { ...windows.plan, fit: chatPlan().fit }, powershell);
+    renderInspector();
+
+    const line = await screen.findByLabelText('Launch line');
+    expect(line.textContent).toBe(
+      "llama-server -m C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf --mmproj 'C:\\Users\\m\\My Models\\mmproj-F16.gguf' --port auto",
+    );
+    expect(within(row('Images')).getByText('mmproj-F16.gguf')).toBeInTheDocument();
+  });
+
+  it('says a running service older than the line does not give it, and still draws the rows', async () => {
+    // An older service's answer has no `command` (the desktop app adopts a service already running).
+    const { command: _none, ...older } = launchExplanation(samplingExplanation(), chatPlan());
+    explain.answer = older;
+    renderInspector();
+
+    expect(
+      await screen.findByText(
+        'The running service is an older build and does not give its launch line. Stop gglib in Settings › About, then start it, to run this build.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText('Launch line')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Copy as command' })).not.toBeInTheDocument();
+    expect(within(row('Images')).getByText('mmproj-F16.gguf')).toBeInTheDocument();
+  });
+
   it('⧉ beside the launch line copies the whole command as one shell line, then says Copied for one second', async () => {
-    const recorded = JSON.parse(rust('contracts/models/launch_line.json')) as { plan: LaunchPlan; line: string }[];
-    explain.answer = launchExplanation(samplingExplanation(), { ...recorded[1].plan, fit: chatPlan().fit });
+    const recorded = RECORDED_LINES()[1];
+    explain.answer = launchExplanation(samplingExplanation(), { ...recorded.plan, fit: chatPlan().fit }, recorded.commands[0]);
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       renderInspector();

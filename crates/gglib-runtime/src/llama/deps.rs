@@ -62,7 +62,7 @@ pub fn missing_build_tools(tools: &[BuildTool]) -> Vec<&'static str> {
 /// the same compilers.
 fn cpp_compiler() -> Option<String> {
     let compilers = gglib_core::utils::system::need("C++ compiler").map_or(&[][..], |row| {
-        row.names(gglib_core::utils::system::HostOs::this())
+        row.names(gglib_core::host::HostOs::current())
     });
 
     compilers

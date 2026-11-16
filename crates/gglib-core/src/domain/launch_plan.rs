@@ -243,17 +243,20 @@ pub struct CommandLine {
 }
 
 impl LaunchPlan {
-    /// The command line written for `shell`: the program, then one token per
-    /// argument, each value quoted as that shell needs.
+    /// The command line written for `shell` ([`Shell::program`] and
+    /// [`Shell::token`]): the program, then one token per argument, each
+    /// value quoted as that shell needs.
     #[must_use]
     pub fn command_line(&self, shell: Shell) -> CommandLine {
-        let program = self.program.clone();
+        let program = shell.program(&self.program);
         let args: Vec<String> = self
             .args
             .iter()
-            .map(|arg| match &arg.value {
-                Some(value) => format!("{} {}", arg.flag, quote(value)),
-                None => arg.flag.clone(),
+            .map(|arg| {
+                arg.value.as_ref().map_or_else(
+                    || arg.flag.clone(),
+                    |value| format!("{} {}", arg.flag, shell.token(value)),
+                )
             })
             .collect();
         let line = std::iter::once(program.as_str())
@@ -266,22 +269,6 @@ impl LaunchPlan {
             args,
             line,
         }
-    }
-}
-
-/// `value` as a shell token: as it is when every character is one a shell
-/// reads as itself (a letter, a digit, or one of `_./:@%+=,-`), otherwise
-/// (or when empty) in single quotes, so the line pastes into a shell as the
-/// command gglib runs: a space, a quote, `$`, `*` or `\` included.
-fn quote(value: &str) -> String {
-    let plain = !value.is_empty()
-        && value
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "_./:@%+=,-".contains(c));
-    if plain {
-        value.to_owned()
-    } else {
-        format!("'{}'", value.replace('\'', "'\\''"))
     }
 }
 
