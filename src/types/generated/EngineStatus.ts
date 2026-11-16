@@ -17,8 +17,8 @@ kind: RuntimeKind,
  */
 installed: boolean, 
 /**
- * Why the installed binary does not work, when gglib checked and it does
- * not (llama.cpp's validation); null otherwise.
+ * Why the installed binary does not work, when it does not answer
+ * `--version` (the check both engines share); null otherwise.
  */
 broken: string | null, 
 /**

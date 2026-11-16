@@ -1,15 +1,13 @@
 //! What is installed for image generation, as data.
 
 use gglib_core::paths::{sd_config_path, sd_cpp_dir, sd_server_path};
-use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
-use gglib_core::utils::process::cmd;
 use serde::Serialize;
 use std::path::Path;
 
 use super::release::{PINNED_SD_RELEASE, SD_RELEASE};
 use crate::binary_install::{InstallRecord, recorded_install};
 use crate::binary_install::{ReleaseSelector, resolve_selector};
-use crate::engine::{PinState, pin_state_at, update_downloads};
+use crate::engine::{PinState, first_line, pin_state_at, update_downloads, validate_engine_at};
 use gglib_core::domain::RuntimeKind;
 
 /// Everything a status report says about the installed `sd-server`.
@@ -23,6 +21,10 @@ use gglib_core::domain::RuntimeKind;
 pub struct SdStatus {
     /// Whether the binary is there.
     pub installed: bool,
+    /// Why the binary that is there does not work, with what to do; null
+    /// when it answers `--version` or is not there. The check is
+    /// llama.cpp's too.
+    pub health_error: Option<String>,
     pub binary_path: String,
     pub config_path: String,
     /// The release gglib installs by default.
@@ -70,6 +72,7 @@ pub(crate) fn sd_status_at(
 ) -> SdStatus {
     let mut status = SdStatus {
         installed: binary_path.is_file(),
+        health_error: None,
         binary_path: binary_path.display().to_string(),
         config_path: config_path.display().to_string(),
         pinned_release: PINNED_SD_RELEASE.to_owned(),
@@ -108,24 +111,17 @@ pub(crate) fn sd_status_at(
         }
     }
 
+    // One `--version` run is both the check and the version line.
     if status.installed {
-        status.version_line = version_line(binary_path);
-        status.commit = status.version_line.as_deref().and_then(commit_of);
+        match validate_engine_at(RuntimeKind::StableDiffusion, binary_path) {
+            Ok(output) => {
+                status.version_line = first_line(&output.stdout);
+                status.commit = status.version_line.as_deref().and_then(commit_of);
+            }
+            Err(not_working) => status.health_error = Some(not_working.to_string()),
+        }
     }
     status
-}
-
-/// The first line `binary --version` prints, when it runs and prints one.
-fn version_line(binary: &Path) -> Option<String> {
-    let output = run_bounded(cmd(binary).arg("--version"), PROBE_WAIT).ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty())
-        .map(str::to_owned)
 }
 
 /// The commit a `… version <v>, commit <c>` line names.

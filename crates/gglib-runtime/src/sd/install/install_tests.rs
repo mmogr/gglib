@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 
 use super::pipeline::{SD_SOURCE, sd_build_args, sd_cmake_flag, sd_configure_args};
 use super::release::{SD_RELEASE, sd_platform_asset};
-use crate::binary_install::fake_github::{FakeGitHub, Reply};
+use crate::binary_install::fake_github::{FakeGitHub, Reply, a_working_server};
 use crate::binary_install::{
     PrebuiltRecord, PrebuiltTarget, ReleaseSelector, ReleaseSpec, clone_args, extract_binaries,
     install_prebuilt_from,
@@ -77,13 +77,20 @@ fn no_gpu() -> GpuInfo {
     }
 }
 
+/// A zip holding `names`, each a few bytes, except `sd-server`, which is a
+/// program that answers `--version`, as the install's Verify phase asks.
 fn zip_of(names: &[&str]) -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let options =
         zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     for name in names {
         zip.start_file(*name, options).expect("a member");
-        zip.write_all(b"fixture").expect("its bytes");
+        let bytes = if *name == "sd-server" {
+            a_working_server()
+        } else {
+            b"fixture".to_vec()
+        };
+        zip.write_all(&bytes).expect("its bytes");
     }
     zip.finish().expect("finish the zip").into_inner()
 }
@@ -140,6 +147,7 @@ async fn install(
         required: asset.required,
         bin_dir: &bin,
         server_path: &server,
+        install_command: gglib_core::paths::SD_INSTALL_COMMAND,
         cuda_runtime: asset.cuda_runtime,
     };
     let (tx, _rx) = mpsc::channel::<LlamaProgressEvent>(256);

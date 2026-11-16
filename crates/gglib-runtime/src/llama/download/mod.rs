@@ -181,7 +181,7 @@ pub(crate) fn llama_platform_asset(os: &str, arch: &str, gpu: &GpuInfo) -> Prebu
 ///
 /// Resolves the pinned llama.cpp release, downloads this platform's archive,
 /// extracts `llama-server` and its shared libraries, records the install and
-/// verifies the binary landed where the launcher looks for it. Every stage is
+/// verifies that the binary the launcher runs answers `--version`. Every stage is
 /// bracketed by [`LlamaProgressEvent::PhaseStarted`] and
 /// [`LlamaProgressEvent::PhaseCompleted`] on `tx`; the download itself also
 /// reports bytes, rate and ETA.
@@ -221,6 +221,7 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
         required: LLAMA_REQUIRED,
         bin_dir,
         server_path: &server_path,
+        install_command: gglib_core::paths::LLAMA_INSTALL_COMMAND,
         cuda_runtime,
     };
 
@@ -340,6 +341,7 @@ pub(super) mod tests {
             required: LLAMA_REQUIRED,
             bin_dir: tmp.path(),
             server_path: &server,
+            install_command: gglib_core::paths::LLAMA_INSTALL_COMMAND,
             cuda_runtime: None,
         };
         let (tx, _rx) = mpsc::channel(64);

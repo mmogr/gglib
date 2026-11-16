@@ -1,7 +1,8 @@
 //! The pre-built install pipeline, from the release listing to the verified
 //! binary.
 
-use anyhow::{Result, bail};
+use anyhow::Result;
+use gglib_core::utils::process::bounded::PROBE_WAIT;
 use reqwest::Client;
 use std::fs;
 use std::path::Path;
@@ -26,6 +27,8 @@ pub(crate) struct PrebuiltTarget<'a> {
     pub(crate) bin_dir: &'a Path,
     /// The binary the launcher runs, checked once everything is unpacked.
     pub(crate) server_path: &'a Path,
+    /// The command that installs it, for what a failed check says.
+    pub(crate) install_command: &'static str,
     /// For a CUDA build, a name the release's CUDA runtime package holds.
     pub(crate) cuda_runtime: Option<&'a str>,
 }
@@ -48,8 +51,8 @@ pub(crate) async fn completed(tx: &mpsc::Sender<LlamaProgressEvent>, phase: Inst
 ///
 /// Resolves the release `spec`'s pin or override names, downloads this
 /// platform's archive, extracts the binary and its shared libraries, hands
-/// the record to `save_record` and verifies the binary landed where the
-/// launcher looks for it. Every stage from [`InstallPhase::FetchRelease`] on
+/// the record to `save_record` and verifies that the binary the launcher
+/// runs answers `--version`. Every stage from [`InstallPhase::FetchRelease`] on
 /// is bracketed by [`LlamaProgressEvent::PhaseStarted`] and
 /// [`LlamaProgressEvent::PhaseCompleted`] on `tx`; the download itself also
 /// reports bytes, rate and ETA. Deciding the target is the caller's
@@ -131,10 +134,11 @@ pub(crate) async fn install_prebuilt_from(
 
     save_record(PrebuiltRecord::new(&release.tag_name, target.description))?;
 
+    // The server is asked `--version`, as every status asks it: an install
+    // that leaves one that cannot start says why now, not at its first
+    // launch. Its record is kept, so the status then says the same.
     started(tx, InstallPhase::Verify).await;
-    if !target.server_path.exists() {
-        bail!("Installation verification failed: binaries not found after extraction");
-    }
+    crate::engine::validate_binary(target.server_path, target.install_command, PROBE_WAIT)?;
     completed(tx, InstallPhase::Verify).await;
 
     let _ = tx

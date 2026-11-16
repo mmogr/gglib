@@ -1,7 +1,9 @@
 //! How a run failed, read from what each OS reports, on every OS.
 //!
-//! Each sample is what a real run printed or exited with; where it came from
-//! is said beside it. The exit status is a value here, so the samples of all
+//! Where each sample came from is said beside it: a real run (the Windows
+//! VM's log, a quoted llama.cpp issue, runs on this Mac, with the paths
+//! shortened), or, where none was seen, the loader's own format with a
+//! name filled in. The exit status is a value here, so the samples of all
 //! three OSes are read on whichever OS runs the tests.
 
 use std::time::Duration;
@@ -61,20 +63,29 @@ fn the_linux_loader_names_the_library_that_is_missing() {
     );
 }
 
-/// glibc's `wrong ELF class` (elf/dl-load.c): the library is there, built
-/// for another word size.
+/// glibc's other reasons (elf/dl-load.c), composed in its format: the
+/// library is there, built for another word size or not a library at all.
+/// Only `cannot open shared object file` is a missing one.
 #[test]
-fn the_linux_loader_names_a_library_of_another_architecture() {
-    assert_eq!(
-        exited(
-            Some(127),
-            "./llama-server: error while loading shared libraries: libggml.so: \
-             wrong ELF class: ELFCLASS32\n"
-        ),
-        Failure::BadLibrary {
-            name: Some("libggml.so".to_owned())
-        }
-    );
+fn the_linux_loader_names_a_library_that_is_there_and_will_not_load() {
+    for reason in [
+        "wrong ELF class: ELFCLASS32",
+        "invalid ELF header",
+        "file too short",
+    ] {
+        assert_eq!(
+            exited(
+                Some(127),
+                &format!(
+                    "./llama-server: error while loading shared libraries: libggml.so: {reason}\n"
+                )
+            ),
+            Failure::BadLibrary {
+                name: Some("libggml.so".to_owned())
+            },
+            "{reason}"
+        );
+    }
 }
 
 /// dyld on macOS 27.2, from a program linked to `@rpath/libfoo.dylib` run
@@ -104,8 +115,24 @@ fn macos_dyld_names_a_library_of_another_architecture() {
     );
 }
 
+/// A library dyld refuses for another reason, here its signature (composed
+/// in dyld's format), is there and will not load, not missing.
+#[test]
+fn macos_dyld_names_a_library_it_refuses() {
+    let stderr = "dyld[4242]: Library not loaded: @rpath/libfoo.dylib\n  \
+        Referenced from: <86584836-5CD4-3B7D-90BF-695EF0E02F32> /tmp/dyld/prog\n  \
+        Reason: tried: '/tmp/dyld/libfoo.dylib' (code signature in '/tmp/dyld/libfoo.dylib' \
+        not valid for use in process: library load disallowed by system policy)\n";
+    assert_eq!(
+        exited(None, stderr),
+        Failure::BadLibrary {
+            name: Some("libfoo.dylib".to_owned())
+        }
+    );
+}
+
 /// dyld before macOS 12 wrote `dyld: Library not loaded: <path>`, with no
-/// pid.
+/// pid, and `image not found` (composed in that format).
 #[test]
 fn macos_dyld_before_12_names_the_library_too() {
     let stderr = "dyld: Library not loaded: @rpath/libggml.dylib\n  \

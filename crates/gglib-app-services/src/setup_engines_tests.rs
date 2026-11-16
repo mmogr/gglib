@@ -61,6 +61,7 @@ impl ModelRuntimePort for Serving {
 fn nothing_installed() -> SdStatus {
     SdStatus {
         installed: false,
+        health_error: None,
         binary_path: "/data/.sd/bin/sd-server".to_owned(),
         config_path: "/data/.sd/sd-config.json".to_owned(),
         pinned_release: PINNED_SD_RELEASE.to_owned(),
@@ -171,6 +172,25 @@ fn an_sd_install_is_read_from_its_record_and_its_binary() {
         Some("stable-diffusion.cpp version x, commit 228c707")
     );
     assert_eq!(status.broken, None);
+    assert_eq!(json_state(&status), "installed");
+}
+
+/// An sd-server that fails its check is installed and not working, with the
+/// reason, as llama-server is (#1959 B3).
+#[test]
+fn an_sd_install_that_does_not_work_says_why() {
+    let reason = "sd-server cannot start: the library libvulkan.so.1 it needs is missing.";
+    let status = sd_engine_status(
+        SdStatus {
+            installed: true,
+            health_error: Some(reason.to_owned()),
+            ..nothing_installed()
+        },
+        Ok(("Linux x64 (Vulkan)".to_owned(), None)),
+    );
+
+    assert_eq!(status.broken.as_deref(), Some(reason));
+    assert_eq!(json_state(&status), "not_working");
 }
 
 /// llama.cpp's download record, its validation and what the binary reports

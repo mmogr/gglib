@@ -68,6 +68,193 @@ pub fn run_bounded(command: &mut Command, wait: Duration) -> std::io::Result<Out
     })
 }
 
+/// How a run of a program ended, as [`failure_kind`] reads it.
+#[derive(Debug, Clone, Copy)]
+pub enum Ended<'a> {
+    /// It could not be started.
+    NotStarted(&'a std::io::Error),
+    /// It was still running when its wait was up, and was stopped.
+    TimedOut,
+    /// It exited with `code`, which is `None` when a signal ended it, having
+    /// written `stderr`.
+    Exited { code: Option<i32>, stderr: &'a str },
+}
+
+/// Why a run of a program failed.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum Failure {
+    /// There is no program at that path.
+    #[error("it is not there")]
+    NotFound,
+    /// The path is not something this system runs: not executable, or not a
+    /// file.
+    #[error("it is not a program this system can run")]
+    NotExecutable,
+    /// It could not be started for another reason, which the system gave.
+    #[error("it could not be started: {reason}")]
+    CouldNotStart { reason: String },
+    /// A library it needs was not found when the system loaded it. `name`
+    /// is the library the loader named: Linux's and macOS's always do, so
+    /// `None` is Windows, whose status says only that a DLL was not found.
+    #[error("{}", missing_words(name.as_deref()))]
+    MissingLibrary { name: Option<String> },
+    /// A library it needs is there but could not be loaded: for another
+    /// architecture, damaged, or refused. `name` as for
+    /// [`Self::MissingLibrary`].
+    #[error("{}", bad_words(name.as_deref()))]
+    BadLibrary { name: Option<String> },
+    /// It did not exit within its wait.
+    #[error("it did not answer in time")]
+    TimedOut,
+    /// It was ended by a crash: a Windows exception status in `code`, or a
+    /// Unix signal, with no code.
+    #[error("{}", crash_words(*code))]
+    Crashed { code: Option<i32> },
+    /// It ran and exited with `code`, not 0.
+    #[error("it exited with status {code}")]
+    Failed { code: i32 },
+}
+
+/// Windows' `STATUS_DLL_NOT_FOUND` ([MS-ERREF] 2.3.1): a DLL the program
+/// needs was not found when it was loaded.
+const STATUS_DLL_NOT_FOUND: u32 = 0xC000_0135;
+
+/// Windows' `STATUS_INVALID_IMAGE_FORMAT` ([MS-ERREF] 2.3.1): an image it
+/// loads is not one this system runs, such as an x86 DLL found by an x64
+/// program.
+const STATUS_INVALID_IMAGE_FORMAT: u32 = 0xC000_007B;
+
+/// What glibc's loader writes before the library's name
+/// (`fatal_error`, elf/dl-catch.c); it then exits 127 (elf/dl-printf.c).
+const GLIBC_LOADER: &str = "error while loading shared libraries: ";
+
+/// What glibc's loader says of a library it did not find (elf/dl-load.c).
+/// Its other reasons (`wrong ELF class`, `invalid ELF header`, `file too
+/// short`) are a library that is there.
+const GLIBC_NOT_FOUND: &str = "cannot open shared object file";
+
+/// What macOS's dyld writes before the library's path, after `dyld: ` or
+/// `dyld[<pid>]: `; it then aborts the program.
+const DYLD_NOT_LOADED: &str = "Library not loaded: ";
+
+/// What dyld says of a path it tried and found nothing at: macOS 12 and
+/// later, and before.
+const DYLD_NOT_FOUND: [&str; 2] = ["(no such file)", "image not found"];
+
+/// What dyld says of a library built for another architecture, which can
+/// sit in the list of tried paths beside ones with nothing there.
+const DYLD_WRONG_ARCH: &str = "incompatible architecture";
+
+/// Why a run of a program failed, from how it [`Ended`].
+///
+/// The one place that knows what each OS reports for a library that cannot
+/// be loaded: Windows' exit status, glibc's loader's words with exit 127,
+/// and dyld's words. The status is matched as a value, so every OS's report
+/// is read on any OS. A run that exited 0 is not a failure and is not asked
+/// about: [`failure_of`] answers `None` for it.
+#[must_use]
+pub fn failure_kind(ended: Ended<'_>) -> Failure {
+    match ended {
+        Ended::NotStarted(e) => match e.kind() {
+            std::io::ErrorKind::NotFound => Failure::NotFound,
+            std::io::ErrorKind::PermissionDenied => Failure::NotExecutable,
+            std::io::ErrorKind::TimedOut => Failure::TimedOut,
+            _ => Failure::CouldNotStart {
+                reason: e.to_string(),
+            },
+        },
+        Ended::TimedOut => Failure::TimedOut,
+        Ended::Exited { code, stderr } => exited(code, stderr),
+    }
+}
+
+/// Why `run`, the answer of [`run_bounded`], failed; `None` when the program
+/// ran and exited 0.
+#[must_use]
+pub fn failure_of(run: &std::io::Result<Output>) -> Option<Failure> {
+    match run {
+        Ok(output) if output.status.success() => None,
+        Ok(output) => Some(failure_kind(Ended::Exited {
+            code: output.status.code(),
+            stderr: &String::from_utf8_lossy(&output.stderr),
+        })),
+        Err(e) => Some(failure_kind(Ended::NotStarted(e))),
+    }
+}
+
+fn exited(code: Option<i32>, stderr: &str) -> Failure {
+    match code.map(i32::cast_unsigned) {
+        Some(STATUS_DLL_NOT_FOUND) => return Failure::MissingLibrary { name: None },
+        Some(STATUS_INVALID_IMAGE_FORMAT) => return Failure::BadLibrary { name: None },
+        _ => {}
+    }
+    // Each loader is read as missing only on its own not-found words; any
+    // other reason it gives (another architecture, a bad header, a refused
+    // signature) is a library that is there and could not be loaded.
+    if code == Some(127)
+        && let Some(line) = line_after(stderr, GLIBC_LOADER)
+    {
+        let name = Some(line.split(':').next().unwrap_or(line).trim().to_owned());
+        return if line.contains(GLIBC_NOT_FOUND) {
+            Failure::MissingLibrary { name }
+        } else {
+            Failure::BadLibrary { name }
+        };
+    }
+    if let Some(line) = line_after(stderr, DYLD_NOT_LOADED) {
+        let path = line.trim();
+        let name = Some(path.rsplit('/').next().unwrap_or(path).to_owned());
+        let not_found = DYLD_NOT_FOUND.iter().any(|words| stderr.contains(words));
+        return if not_found && !stderr.contains(DYLD_WRONG_ARCH) {
+            Failure::MissingLibrary { name }
+        } else {
+            Failure::BadLibrary { name }
+        };
+    }
+    match code {
+        // Unix exit codes are 0 to 255; a negative one is a Windows
+        // exception status (0xC0000005, an access violation, and the like).
+        Some(code) if code >= 0 => Failure::Failed { code },
+        code => Failure::Crashed { code },
+    }
+}
+
+/// The rest of the first line of `text` that holds `marker`, after it.
+fn line_after<'t>(text: &'t str, marker: &str) -> Option<&'t str> {
+    text.lines()
+        .find_map(|line| line.split_once(marker).map(|(_, rest)| rest))
+}
+
+fn missing_words(name: Option<&str>) -> String {
+    name.map_or_else(
+        || {
+            "a library it needs is missing. Windows does not say which; for a program \
+             built with Visual C++ it is most likely the Microsoft Visual C++ \
+             Redistributable (x64), from Microsoft at \
+             https://aka.ms/vc14/vc_redist.x64.exe (not the x86 one)"
+                .to_owned()
+        },
+        |name| format!("the library {name} it needs is missing"),
+    )
+}
+
+fn bad_words(name: Option<&str>) -> String {
+    let which = name.map_or_else(
+        || "a library it needs (Windows does not say which)".to_owned(),
+        |name| format!("the library {name} it needs"),
+    );
+    format!(
+        "{which} is there but could not be loaded: it may be for another architecture, or damaged"
+    )
+}
+
+fn crash_words(code: Option<i32>) -> String {
+    code.map_or_else(
+        || "it was ended by a signal".to_owned(),
+        |code| format!("it crashed (status {:#010x})", code.cast_unsigned()),
+    )
+}
+
 /// Read `stream` to its end on a thread of its own, so a stream something
 /// keeps open cannot hold the caller.
 fn read_on_a_thread(stream: Option<impl Read + Send + 'static>) -> mpsc::Receiver<Vec<u8>> {

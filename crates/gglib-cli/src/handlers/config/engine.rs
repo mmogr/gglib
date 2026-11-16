@@ -187,13 +187,7 @@ fn install_command(kind: RuntimeKind) -> &'static str {
 /// update that failed, whether what was there before is intact, or was
 /// half replaced.
 fn still_runs(kind: RuntimeKind) -> bool {
-    match kind {
-        RuntimeKind::Llama => llama_server_path()
-            .is_ok_and(|path| gglib_runtime::llama::validate_llama_binary(&path).is_ok()),
-        RuntimeKind::StableDiffusion => {
-            gglib_runtime::sd::sd_status().is_ok_and(|status| status.version_line.is_some())
-        }
-    }
+    engine::validate_engine(kind).is_ok()
 }
 
 /// Carry `plan` out for `kind`. `agreed` is the user's yes to a source

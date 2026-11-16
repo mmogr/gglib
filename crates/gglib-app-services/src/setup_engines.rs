@@ -29,8 +29,8 @@ pub struct EngineStatus {
     pub kind: RuntimeKind,
     /// Whether its server binary is there.
     pub installed: bool,
-    /// Why the installed binary does not work, when gglib checked and it does
-    /// not (llama.cpp's validation); null otherwise.
+    /// Why the installed binary does not work, when it does not answer
+    /// `--version` (the check both engines share); null otherwise.
     pub broken: Option<String>,
     /// Installed, installed and not working, or not installed: `installed`
     /// and `broken` as the one state every surface words.
@@ -216,6 +216,8 @@ pub(super) fn sd_engine_status(
         _ => None,
     };
     EngineStatus {
+        state: EngineState::of(status.installed, status.health_error.is_some()),
+        broken: status.health_error,
         install,
         record_error: status.record_error,
         reports: status.version_line,

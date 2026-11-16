@@ -36,7 +36,7 @@ use std::sync::Mutex;
 use std::time::SystemTime;
 
 use gglib_core::domain::RuntimeCapabilities;
-use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
+use gglib_core::utils::process::bounded::{PROBE_WAIT, failure_of, run_bounded};
 use gglib_core::utils::process::cmd;
 use tracing::{debug, warn};
 
@@ -110,14 +110,15 @@ fn probe_uncached(binary: &Path) -> RuntimeCapabilities {
         return RuntimeCapabilities::unknown("binary not found");
     }
 
+    // A failed run is worded as the engine's status words it: a missing
+    // library is named as one, not as a bare exit status.
     let output = match run_bounded(cmd(binary).arg("--version"), PROBE_WAIT) {
-        Ok(output) => output,
-        Err(e) => return RuntimeCapabilities::unknown(format!("probe failed: {e}")),
+        Ok(output) if output.status.success() => output,
+        run => {
+            let failure = failure_of(&run).map(|f| f.to_string()).unwrap_or_default();
+            return RuntimeCapabilities::unknown(format!("probe failed: {failure}"));
+        }
     };
-
-    if !output.status.success() {
-        return RuntimeCapabilities::unknown(format!("probe exited with status {}", output.status));
-    }
 
     // Which stream carries llama.cpp's version banner varies by build, so both
     // are read. stderr first: when a build prints to both, the banner is the

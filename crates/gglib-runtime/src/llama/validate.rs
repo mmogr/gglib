@@ -1,56 +1,13 @@
 //! Binary validation and status checking for llama-server.
 
-use anyhow::{Context, Result, bail};
-use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
-use gglib_core::utils::process::cmd;
+use anyhow::Result;
+use gglib_core::domain::RuntimeKind;
 use std::path::Path;
-use std::time::Duration;
 
-/// Validate that the llama-server binary is functional
+/// Validate that the llama-server binary is functional: the check both
+/// engines share, [`crate::engine::validate_engine_at`].
 pub fn validate_llama_binary(path: &Path) -> Result<()> {
-    validate_binary(path, "llama-server", PROBE_WAIT)
-}
-
-fn validate_binary(path: &Path, binary_name: &str, wait: Duration) -> Result<()> {
-    if !path.exists() {
-        bail!(
-            "{} not found at: {}\n\nRun 'gglib config llama install' to install it.",
-            binary_name,
-            path.display()
-        );
-    }
-
-    if !path.is_file() {
-        bail!("{} path is not a file: {}", binary_name, path.display());
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let metadata = path.metadata().context("Failed to read binary metadata")?;
-        let perms = metadata.permissions();
-        if perms.mode() & 0o111 == 0 {
-            bail!("{} is not executable: {}", binary_name, path.display());
-        }
-    }
-
-    let output = match run_bounded(cmd(path).arg("--version"), wait) {
-        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => bail!(
-            "{binary_name} did not answer `--version` within {} s: {}",
-            wait.as_secs(),
-            path.display()
-        ),
-        answer => answer.with_context(|| format!("Failed to execute {binary_name}"))?,
-    };
-
-    if !output.status.success() {
-        bail!(
-            "{} binary appears corrupted: {}\n\nRun 'gglib config llama install --force' to reinstall it.",
-            binary_name,
-            path.display()
-        );
-    }
-
+    crate::engine::validate_engine_at(RuntimeKind::Llama, path)?;
     Ok(())
 }
 
@@ -139,6 +96,8 @@ fn human_time(rfc3339: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gglib_core::paths::LLAMA_INSTALL_COMMAND;
+    use std::time::Duration;
     // `tempdir` is used by the always-compiled tests; `fs` only by the
     // `#[cfg(unix)]` one that sets a file's permission bits.
     #[cfg(unix)]
@@ -155,8 +114,11 @@ mod tests {
 
         let (sent, done) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let _ = sent
-                .send(validate_binary(&engine, "llama-server", wait).map_err(|e| e.to_string()));
+            let _ = sent.send(
+                crate::engine::validate_binary(&engine, LLAMA_INSTALL_COMMAND, wait)
+                    .map(drop)
+                    .map_err(|e| e.to_string()),
+            );
         });
         let answer = done
             .recv_timeout(Duration::from_secs(15))
@@ -227,8 +189,15 @@ mod tests {
         perms.set_mode(0o644);
         fs::set_permissions(&file_path, perms).unwrap();
 
-        let result = validate_llama_binary(&file_path);
-        assert!(result.is_err());
+        // The system's refusal to run it is what says so: no permission bits
+        // are read by gglib.
+        let refusal = validate_llama_binary(&file_path)
+            .expect_err("a file that is not executable is not working")
+            .to_string();
+        assert!(
+            refusal.contains("is not a program this system can run"),
+            "{refusal}"
+        );
     }
 
     /// What `status` reports for an install that is `installed`, and if so

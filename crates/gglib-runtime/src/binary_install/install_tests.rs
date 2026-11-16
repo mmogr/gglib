@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use tokio::sync::mpsc;
 
-use super::fake_github::{FakeGitHub, Reply};
+use super::fake_github::{FakeGitHub, Reply, a_working_server};
 use super::install::install_prebuilt_from;
 use super::*;
 use crate::llama::LlamaProgressEvent;
@@ -53,21 +53,6 @@ fn pinned() -> ReleaseSelector {
 
 /// The server the target names, as a member of a release archive.
 const SERVER: &str = "widget-server";
-
-/// The bytes of a program that answers `--version` and exits 0: the
-/// stand-in program, which does that with no instruction file beside it.
-fn a_working_server() -> Vec<u8> {
-    static BYTES: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
-    BYTES
-        .get_or_init(|| {
-            let dir = tempfile::tempdir().expect("a temp dir");
-            let program = gglib_test_proc::install(dir.path(), SERVER, "");
-            std::fs::remove_file(gglib_test_proc::instructions_path(&program))
-                .expect("no instructions");
-            std::fs::read(program).expect("the stand-in's bytes")
-        })
-        .clone()
-}
 
 /// A zip holding `names`, each a few bytes, except the server, which is a
 /// program that runs.
@@ -144,6 +129,7 @@ fn target<'a>(dirs: &'a Dirs, matcher: AssetMatcher<'a>) -> PrebuiltTarget<'a> {
         required: &["widget-server", "libwidget.so"],
         bin_dir: &dirs.bin,
         server_path: &dirs.server,
+        install_command: "gglib config widget install",
         cuda_runtime: None,
     }
 }
