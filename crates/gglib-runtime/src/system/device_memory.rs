@@ -5,6 +5,8 @@
 //! The answer is deliberately allowed to be "we do not know" — see
 //! [`other_gpu_memory_bytes`].
 
+use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
+
 use gglib_core::utils::process::cmd;
 
 /// The first physical device `vulkaninfo` reports, reduced to what a budget needs.
@@ -128,7 +130,7 @@ fn parse_vram_sysfs(contents: &str) -> Option<u64> {
 /// one hung probe blocks every later caller. Measured at 37–42 ms on a healthy
 /// host; it is the tail that matters.
 fn read_vulkan_device() -> Option<VulkanDevice> {
-    let output = cmd("vulkaninfo").output().ok()?;
+    let output = run_bounded(&mut cmd("vulkaninfo"), PROBE_WAIT).ok()?;
     if !output.status.success() {
         return None;
     }

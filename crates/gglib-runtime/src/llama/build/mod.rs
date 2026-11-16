@@ -8,6 +8,8 @@ use anyhow::{Context, Result, bail};
 
 use super::build_events::{BuildEvent, BuildPhase};
 use crate::binary_install::release_number;
+#[cfg(target_os = "linux")]
+use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
 use gglib_core::utils::process::cmd;
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
@@ -179,10 +181,10 @@ fn configure_cmake(
                 // If "gcc" (system default), don't set explicitly
             } else {
                 // Non-CUDA builds on Linux: prefer Clang over GCC (GCC 14/15 have compiler bugs)
-                if cmd("clang").arg("--version").output().is_ok() {
+                if run_bounded(cmd("clang").arg("--version"), PROBE_WAIT).is_ok() {
                     command.env("CC", "clang");
                     command.env("CXX", "clang++");
-                } else if cmd("gcc-14").arg("--version").output().is_ok() {
+                } else if run_bounded(cmd("gcc-14").arg("--version"), PROBE_WAIT).is_ok() {
                     command.env("CC", "gcc-14");
                     command.env("CXX", "g++-14");
                 }

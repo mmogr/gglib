@@ -4,6 +4,8 @@
 //! and memory detection, implementing the runtime side of the
 //! `SystemProbePort` contract.
 
+use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
+
 use gglib_core::utils::process::cmd;
 use gglib_core::utils::system::{GpuInfo, SystemMemoryInfo};
 use sysinfo::System;
@@ -111,9 +113,7 @@ fn gpu_device_under(dev: &std::path::Path) -> bool {
 /// Detect if NVIDIA GPU hardware is present (regardless of CUDA installation).
 fn detect_nvidia_hardware() -> bool {
     // Try nvidia-smi (most reliable if NVIDIA drivers are installed)
-    if cmd("nvidia-smi")
-        .arg("--list-gpus")
-        .output()
+    if run_bounded(cmd("nvidia-smi").arg("--list-gpus"), PROBE_WAIT)
         .is_ok_and(|o| o.status.success())
     {
         return true;
@@ -122,7 +122,7 @@ fn detect_nvidia_hardware() -> bool {
     // Try lspci on Linux
     #[cfg(target_os = "linux")]
     {
-        if cmd("lspci").output().is_ok_and(|output| {
+        if run_bounded(&mut cmd("lspci"), PROBE_WAIT).is_ok_and(|output| {
             output.status.success()
                 && String::from_utf8_lossy(&output.stdout)
                     .to_lowercase()
@@ -135,10 +135,10 @@ fn detect_nvidia_hardware() -> bool {
     // Try wmic on Windows
     #[cfg(target_os = "windows")]
     {
-        if let Ok(output) = cmd("wmic")
-            .args(["path", "win32_VideoController", "get", "name"])
-            .output()
-            && output.status.success()
+        if let Ok(output) = run_bounded(
+            cmd("wmic").args(["path", "win32_VideoController", "get", "name"]),
+            PROBE_WAIT,
+        ) && output.status.success()
         {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if stdout.to_lowercase().contains("nvidia") {
@@ -153,7 +153,7 @@ fn detect_nvidia_hardware() -> bool {
 /// Check if NVIDIA CUDA toolkit is installed.
 pub(crate) fn check_cuda() -> Option<String> {
     // Try nvcc first (CUDA compiler)
-    if let Ok(output) = cmd("nvcc").arg("--version").output()
+    if let Ok(output) = run_bounded(cmd("nvcc").arg("--version"), PROBE_WAIT)
         && output.status.success()
     {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -196,13 +196,14 @@ pub(crate) fn get_nvidia_free_vram_bytes() -> Option<u64> {
 /// Multi-GPU hosts report one line per device; the first is taken, matching
 /// what llama-server does by default with no `CUDA_VISIBLE_DEVICES` set.
 fn query_nvidia_memory(field: &str) -> Option<u64> {
-    let output = cmd("nvidia-smi")
-        .args([
+    let output = run_bounded(
+        cmd("nvidia-smi").args([
             &format!("--query-gpu={field}"),
             "--format=csv,noheader,nounits",
-        ])
-        .output()
-        .ok()?;
+        ]),
+        PROBE_WAIT,
+    )
+    .ok()?;
 
     if !output.status.success() {
         return None;
