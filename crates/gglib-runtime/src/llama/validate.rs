@@ -3,13 +3,17 @@
 use anyhow::{Context, Result, bail};
 use gglib_core::utils::process::cmd;
 use std::path::Path;
+use std::time::Duration;
+
+/// How long an engine has to answer `--version`.
+const VERSION_WAIT: Duration = Duration::from_secs(10);
 
 /// Validate that the llama-server binary is functional
 pub fn validate_llama_binary(path: &Path) -> Result<()> {
-    validate_binary(path, "llama-server")
+    validate_binary(path, "llama-server", VERSION_WAIT)
 }
 
-fn validate_binary(path: &Path, binary_name: &str) -> Result<()> {
+fn validate_binary(path: &Path, binary_name: &str, _wait: Duration) -> Result<()> {
     if !path.exists() {
         bail!(
             "{} not found at: {}\n\nRun 'gglib config llama install' to install it.",
@@ -138,6 +142,27 @@ mod tests {
     #[cfg(unix)]
     use std::fs;
     use tempfile::tempdir;
+
+    /// An engine that never answers `--version` is reported within the
+    /// wait, not waited on (#1984).
+    #[test]
+    fn an_engine_that_never_answers_is_reported_within_the_wait() {
+        let dir = tempdir().unwrap();
+        let engine = gglib_test_proc::install(dir.path(), "llama-server", "sleep 60");
+        let wait = Duration::from_millis(500);
+
+        let (sent, done) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sent
+                .send(validate_binary(&engine, "llama-server", wait).map_err(|e| e.to_string()));
+        });
+        let answer = done
+            .recv_timeout(Duration::from_secs(15))
+            .expect("validate still waiting 15 s on an engine that never exits");
+
+        let refusal = answer.expect_err("an engine that never answers is not working");
+        assert!(refusal.contains("did not answer"), "{refusal}");
+    }
 
     #[test]
     fn test_validate_nonexistent() {
