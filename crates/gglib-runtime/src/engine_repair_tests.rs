@@ -75,7 +75,8 @@ fn a_damaged_runtime_is_repaired_in_windows_not_offered_again() {
         offer.offer,
         "The Microsoft Visual C++ Redistributable (x64) is installed but damaged: its files are \
          missing. Repair it in Windows: Settings › Apps › Installed apps › Microsoft Visual C++ \
-         2015-2022 Redistributable (x64) › Modify › Repair, then check again."
+         v14 Redistributable (x64) (2015-2022 on an older one) › Modify › Repair, then check \
+         again."
     );
 }
 

@@ -2,12 +2,13 @@
 //! llama.cpp and stable-diffusion.cpp need and Windows does not come with:
 //! where it stands, and installing it.
 //!
-//! The one place that knows about it: the DLLs it puts in Windows' system
-//! folder and the key it registers, where its installer comes from
-//! (`engine_vc_download.rs`), how the download is checked before it runs
-//! (`engine_vc_signature.rs`), how it is run, and what its exit codes mean.
-//! The OS is a value here ([`HostOs`]), not a `cfg`: off Windows nothing is
-//! downloaded or run. A `#[path]` child of `engine_repair.rs`.
+//! The one place that knows about it: where it stands on this machine
+//! (`engine_vc_state.rs`: its DLLs and its registry key), where its
+//! installer comes from (`engine_vc_download.rs`), how the download is
+//! checked before it runs (`engine_vc_signature.rs`), how it is run, and
+//! what its exit codes mean. The OS is a value here ([`HostOs`]), not a
+//! `cfg`: off Windows nothing is downloaded or run. A `#[path]` child of
+//! `engine_repair.rs`.
 //!
 //! The installer runs only when a person has asked for it: Repair in the
 //! app, or a yes to the question `gglib config <engine> install` and
@@ -15,14 +16,31 @@
 //! administrator rights, so Windows shows its own prompt for them, which
 //! every surface says first.
 //!
-//! # The file that is checked is the file that runs
+//! # From the check to the run
 //!
-//! The installer is saved in a folder made for this install, with a random
-//! name, made so that it fails rather than reuse a folder that is there
-//! already; the file is created the same way. It is then held
-//! ([`hold_unchanged`]) from before it is checked until the installer has
-//! exited, so on Windows nobody else can write, delete or rename it in
-//! between: the path checked and the path run are the one held file.
+//! What is prevented, on Windows, against another process of the same user
+//! that tries to have a file run that was never checked:
+//!
+//! - The folder has a random name and is created so that one already there
+//!   is never reused; it is then held ([`hold_folder`]) until the installer
+//!   has exited, so it cannot be renamed or deleted, and a junction in its
+//!   place is refused.
+//! - The file is created only where nothing is, and is shared for reading
+//!   only while it is written ([`create_private`]), so it cannot be renamed
+//!   aside or replaced during the download.
+//! - Between the download's handle closing and the file's hold being taken
+//!   there is a moment in which it could be replaced; so once it is held
+//!   ([`hold_unchanged`], read-only sharing, a link refused) its contents
+//!   are read through the hold and must have the SHA-256 the download had.
+//!   From then on, until the installer exits, nobody can write, delete or
+//!   rename it, and the file checked is the file run.
+//!
+//! What is not prevented: a process of the same user can already write
+//! gglib's own memory, or the memory of the PowerShell that checks the
+//! signature, and so make any check say anything. What such a process
+//! cannot make is Windows' own permission prompt, which names the publisher
+//! Windows itself verified: that prompt, which the person answers, is the
+//! last check, and it is not gglib's.
 //!
 //! # One install at a time, whoever stops waiting
 //!
@@ -42,16 +60,15 @@ use tokio::fs::File;
 
 use gglib_core::domain::RuntimeKind;
 use gglib_core::host::HostOs;
-use gglib_core::utils::process::bounded::{
-    PROBE_WAIT, VISUAL_CPP_RUNTIME_X64_URL, run_bounded, run_bounded_silent,
-};
+use gglib_core::utils::process::bounded::{VISUAL_CPP_RUNTIME_X64_URL, run_bounded_silent};
 use gglib_core::utils::process::cmd;
-use gglib_core::utils::process::held::hold_unchanged;
+use gglib_core::utils::process::held::{create_private, hold_folder, hold_unchanged};
 
 use crate::engine::validate_engine;
 
 pub(crate) use download::download_from_microsoft;
-pub(crate) use signature::signed_by_microsoft;
+pub(crate) use signature::installer_checked;
+pub(crate) use state::{RuntimeState, runtime_state};
 
 #[path = "engine_vc_download.rs"]
 mod download;
@@ -59,22 +76,16 @@ mod download;
 #[path = "engine_vc_signature.rs"]
 mod signature;
 
+#[path = "engine_vc_state.rs"]
+mod state;
+
 /// What the runtime is called wherever gglib names it.
 pub(super) const RUNTIME: &str = "Microsoft Visual C++ Redistributable (x64)";
 
 /// How a damaged runtime is repaired: by Windows, which gglib cannot do.
 pub(super) const REPAIR_IT: &str = "Repair it in Windows: Settings › Apps › Installed apps › \
-     Microsoft Visual C++ 2015-2022 Redistributable (x64) › Modify › Repair, then check again.";
-
-/// The DLLs the runtime puts in Windows' system folder that the engines'
-/// builds load. All three are there once it is installed; a runtime from
-/// before 2019 lacks the last.
-const RUNTIME_DLLS: [&str; 3] = ["vcruntime140.dll", "msvcp140.dll", "vcruntime140_1.dll"];
-
-/// Where the runtime records that it is installed: a value `Installed` of
-/// 1, which Microsoft documents for telling whether it is there. Its
-/// installer writes the 32-bit view; both views are read.
-const RUNTIME_KEY: &str = r"HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64";
+     Microsoft Visual C++ v14 Redistributable (x64) (2015-2022 on an older one) › Modify › \
+     Repair, then check again.";
 
 /// The name the downloaded installer is saved under, before the OS's
 /// suffix for a program.
@@ -87,59 +98,6 @@ const INSTALLER_SWITCHES: [&str; 3] = ["/install", "/quiet", "/norestart"];
 /// How long gglib waits for the installer, including the time a person
 /// takes to answer Windows' prompt.
 const INSTALL_WAIT: Duration = Duration::from_mins(10);
-
-/// Where the runtime stands on this machine.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RuntimeState {
-    /// Its DLLs are in Windows' system folder.
-    Installed,
-    /// Windows lists it as installed, and its DLLs are not there.
-    Damaged,
-    /// Not installed; on every other OS, always.
-    Missing,
-}
-
-/// Where the runtime stands, read from this machine.
-pub(crate) fn runtime_state() -> RuntimeState {
-    let Some(root) = std::env::var_os("SystemRoot") else {
-        return RuntimeState::Missing;
-    };
-    let system = Path::new(&root).join("System32");
-    if runtime_dlls_in(&system) {
-        RuntimeState::Installed
-    } else if registered(&system) {
-        RuntimeState::Damaged
-    } else {
-        RuntimeState::Missing
-    }
-}
-
-/// Whether every one of [`RUNTIME_DLLS`] is in `system`.
-pub(crate) fn runtime_dlls_in(system: &Path) -> bool {
-    RUNTIME_DLLS.iter().all(|dll| system.join(dll).is_file())
-}
-
-/// Whether Windows lists the runtime as installed, asked of `reg.exe` in
-/// `system` in both registry views.
-fn registered(system: &Path) -> bool {
-    ["/reg:32", "/reg:64"].iter().any(|view| {
-        run_bounded(
-            cmd(system.join("reg.exe")).args(["query", RUNTIME_KEY, "/v", "Installed", view]),
-            PROBE_WAIT,
-        )
-        .is_ok_and(|run| {
-            run.status.success() && says_installed(&String::from_utf8_lossy(&run.stdout))
-        })
-    })
-}
-
-/// Whether `reg query`'s answer gives `Installed` the value 1.
-pub(crate) fn says_installed(printed: &str) -> bool {
-    printed.lines().any(|line| {
-        let words: Vec<&str> = line.split_whitespace().collect();
-        matches!(words.as_slice(), ["Installed", "REG_DWORD", value] if value.eq_ignore_ascii_case("0x1"))
-    })
-}
 
 /// What became of an install of the runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -265,7 +223,7 @@ pub(crate) fn production(
     Installer {
         os,
         dir,
-        verify: signed_by_microsoft,
+        verify: installer_checked,
         wait: INSTALL_WAIT,
         recheck: move || validate_engine(kind).is_ok(),
         runtime: runtime_state,
@@ -286,26 +244,28 @@ where
     C: FnOnce() -> bool + Send + 'static,
     R: FnOnce() -> RuntimeState + Send + 'static,
     D: FnOnce(PathBuf, File) -> F + Send + 'static,
-    F: Future<Output = Result<(), String>> + Send,
+    F: Future<Output = Result<Digest, String>> + Send,
 {
     let Some(installing) = Installing::take(lock) else {
         return report(kind, RuntimeInstall::AlreadyRunning, None, None);
     };
     let task = tokio::spawn(async move {
         let _installing = installing;
-        let folder = match fresh_folder() {
-            Ok(folder) => folder,
+        let prepared = fresh_folder().and_then(|folder| {
+            let held = hold_folder(folder.path())?;
+            Ok((folder, held))
+        });
+        let (folder, held) = match prepared {
+            Ok(prepared) => prepared,
             Err(e) => {
-                return report(
-                    kind,
-                    RuntimeInstall::NotDownloaded,
-                    Some(&e.to_string()),
-                    None,
-                );
+                let reason = format!("a folder for it could not be made and held ({e})");
+                return report(kind, RuntimeInstall::NotDownloaded, Some(&reason), None);
             }
         };
         let report = make(folder.path().to_path_buf()).run(kind, download).await;
-        // The folder goes with the install, before the lock is let go.
+        // The folder is let go once the installer has exited, and goes with
+        // the install, before the lock is let go.
+        drop(held);
         drop(folder);
         report
     });
@@ -321,6 +281,25 @@ pub(crate) fn fresh_folder() -> io::Result<tempfile::TempDir> {
         .prefix("gglib-visual-cpp-runtime-")
         .rand_bytes(16)
         .tempdir()
+}
+
+/// A SHA-256 digest.
+pub(crate) type Digest = [u8; 32];
+
+/// The SHA-256 of what `file` holds, read from its start.
+pub(crate) fn digest_of(mut file: &std::fs::File) -> io::Result<Digest> {
+    use sha2::Digest as _;
+    use std::io::{Read as _, Seek as _};
+    file.seek(io::SeekFrom::Start(0))?;
+    let mut hasher = sha2::Sha256::new();
+    let mut buffer = vec![0_u8; 1 << 16];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            return Ok(hasher.finalize().into());
+        }
+        hasher.update(&buffer[..read]);
+    }
 }
 
 /// The parts of an install of the runtime, each one a test can replace.
@@ -348,12 +327,13 @@ where
     R: FnOnce() -> RuntimeState + Send + 'static,
 {
     /// Create the installer's file, which must not be there yet, and have
-    /// `download` write it; then hold it, check it, run it and check `kind`
+    /// `download` write it and say the SHA-256 of what it wrote; then hold
+    /// it, check it is what was written, check it, run it and check `kind`
     /// again.
     pub(crate) async fn run<D, F>(self, kind: RuntimeKind, download: D) -> RepairReport
     where
         D: FnOnce(PathBuf, File) -> F,
-        F: Future<Output = Result<(), String>>,
+        F: Future<Output = Result<Digest, String>>,
     {
         if self.os != HostOs::Windows {
             return report(kind, RuntimeInstall::NotNeeded, None, None);
@@ -361,26 +341,25 @@ where
         let path = self
             .dir
             .join(format!("{INSTALLER_STEM}{}", std::env::consts::EXE_SUFFIX));
-        let created = File::options()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .await;
-        let downloaded = match created {
-            Ok(file) => download(path.clone(), file).await,
+        let downloaded = match create_private(&path) {
+            Ok(file) => download(path.clone(), File::from_std(file)).await,
             Err(e) => Err(format!("{} could not be created ({e})", path.display())),
         };
-        if let Err(reason) = downloaded {
-            return report(kind, RuntimeInstall::NotDownloaded, Some(&reason), None);
-        }
-        tokio::task::spawn_blocking(move || self.run_downloaded(kind, &path))
+        let digest = match downloaded {
+            Ok(digest) => digest,
+            Err(reason) => {
+                return report(kind, RuntimeInstall::NotDownloaded, Some(&reason), None);
+            }
+        };
+        tokio::task::spawn_blocking(move || self.run_downloaded(kind, &path, digest))
             .await
             .unwrap_or_else(|e| report(kind, RuntimeInstall::Failed, Some(&e.to_string()), None))
     }
 
-    /// Hold the installer at `path`, check it, run it, and check `kind`
-    /// again; let it go once it has exited.
-    fn run_downloaded(self, kind: RuntimeKind, path: &Path) -> RepairReport {
+    /// Hold the installer at `path`, check it holds what was downloaded
+    /// (`digest`), check it, run it, and check `kind` again; let it go once
+    /// it has exited.
+    fn run_downloaded(self, kind: RuntimeKind, path: &Path, digest: Digest) -> RepairReport {
         let held = match hold_unchanged(path) {
             Ok(held) => held,
             Err(e) => {
@@ -388,6 +367,17 @@ where
                 return report(kind, RuntimeInstall::NotVerified, Some(&reason), None);
             }
         };
+        match digest_of(&held) {
+            Ok(held_digest) if held_digest == digest => {}
+            Ok(_) => {
+                let reason = "the file was changed after it was downloaded";
+                return report(kind, RuntimeInstall::NotVerified, Some(reason), None);
+            }
+            Err(e) => {
+                let reason = format!("it could not be read back ({e})");
+                return report(kind, RuntimeInstall::NotVerified, Some(&reason), None);
+            }
+        }
         let Self {
             verify,
             wait,

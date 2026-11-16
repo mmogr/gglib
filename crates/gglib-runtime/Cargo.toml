@@ -62,6 +62,9 @@ tar = "0.4"
 # The folder a Visual C++ runtime install downloads into: a random name,
 # created so that a folder already there is never reused, removed after.
 tempfile = { workspace = true }
+# The digest of that installer as it was downloaded, checked again once the
+# file is held, before it is run.
+sha2 = { workspace = true }
 
 # Unix signal handling
 [target.'cfg(unix)'.dependencies]

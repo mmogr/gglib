@@ -1,5 +1,5 @@
-//! Where the Visual C++ runtime stands, and an install of it with its
-//! download, its check and its installer faked.
+//! An install of the Visual C++ runtime with its download, its check and
+//! its installer faked.
 //!
 //! The installer stand-in is `gglib-test-proc`, which exits with a byte: a
 //! Unix exit status is 8 bits, so 3010, 1638 and 1602 cannot be exited on
@@ -18,37 +18,9 @@ use gglib_core::host::HostOs;
 use tokio::fs::File;
 
 use super::{
-    INSTALLER_STEM, Installer, Installing, RuntimeInstall, RuntimeState, after_exit, detached,
-    exit_outcome, fresh_folder, production, report, runtime_dlls_in, says_installed,
+    Digest, INSTALLER_STEM, Installer, Installing, RuntimeInstall, RuntimeState, after_exit,
+    detached, digest_of, exit_outcome, fresh_folder, production, report,
 };
-
-/// The runtime is there when all three of its DLLs are.
-#[test]
-fn the_runtime_is_there_when_its_dlls_are() {
-    let system = tempfile::tempdir().unwrap();
-    for dll in ["vcruntime140.dll", "msvcp140.dll"] {
-        std::fs::write(system.path().join(dll), "").unwrap();
-    }
-    assert!(!runtime_dlls_in(system.path()), "one is missing");
-    std::fs::write(system.path().join("vcruntime140_1.dll"), "").unwrap();
-    assert!(runtime_dlls_in(system.path()));
-}
-
-/// `reg query`'s answer says the runtime is installed only when its
-/// `Installed` value is 1.
-#[test]
-fn the_registry_says_installed_only_for_a_value_of_1() {
-    let key = "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64";
-    assert!(says_installed(&format!(
-        "\r\n{key}\r\n    Installed    REG_DWORD    0x1\r\n\r\n"
-    )));
-    assert!(!says_installed(&format!(
-        "\r\n{key}\r\n    Installed    REG_DWORD    0x0\r\n"
-    )));
-    assert!(!says_installed(
-        "ERROR: The system was unable to find the specified registry key or value.\r\n"
-    ));
-}
 
 /// Each exit code the installer documents.
 #[test]
@@ -97,8 +69,8 @@ fn each_outcome_says_what_happened() {
         says(RuntimeInstall::Damaged, Some("1638"), None),
         "Windows says a newer Microsoft Visual C++ Redistributable (x64) is already installed, \
          but its files are missing, so it is damaged and installing it again does not help. \
-         Repair it in Windows: Settings › Apps › Installed apps › Microsoft Visual C++ \
-         2015-2022 Redistributable (x64) › Modify › Repair, then check again."
+         Repair it in Windows: Settings › Apps › Installed apps › Microsoft Visual C++ v14 \
+         Redistributable (x64) (2015-2022 on an older one) › Modify › Repair, then check again."
     );
     assert_eq!(
         says(RuntimeInstall::Declined, Some("1602"), None),
@@ -254,13 +226,18 @@ impl Fake {
     }
 }
 
+/// The SHA-256 of the file at `path`.
+fn digest_at(path: &Path) -> Digest {
+    digest_of(&std::fs::File::open(path).unwrap()).unwrap()
+}
+
 /// A download that puts the stand-in where the installer goes, following
-/// `instructions`, and marks `downloaded`. The stand-in is copied over the
-/// file the install created for it.
+/// `instructions`, marks `downloaded`, and says the digest of what it put
+/// there. The stand-in is copied over the file the install created for it.
 fn download(
     instructions: String,
     downloaded: &Ran,
-) -> impl FnOnce(PathBuf, File) -> std::future::Ready<Result<(), String>> + Send + 'static {
+) -> impl FnOnce(PathBuf, File) -> std::future::Ready<Result<Digest, String>> + Send + 'static {
     let downloaded = downloaded.clone();
     move |path: PathBuf, file: File| {
         downloaded.set();
@@ -268,8 +245,39 @@ fn download(
         let program =
             gglib_test_proc::install(path.parent().unwrap(), INSTALLER_STEM, &instructions);
         assert_eq!(program, path, "the stand-in is where the installer goes");
-        std::future::ready(Ok(()))
+        std::future::ready(Ok(digest_at(&path)))
     }
+}
+
+/// A file changed after it was downloaded (here, its digest says other
+/// bytes than it holds) is never checked or run: what is held must be what
+/// was written.
+#[tokio::test]
+async fn a_file_changed_after_its_download_is_not_run() {
+    let dir = tempfile::tempdir().unwrap();
+    let argv = dir.path().join("argv");
+    let rechecked = Ran::default();
+    let instructions = format!("argv {}\nexit 0", argv.display());
+    let swapped = move |path: PathBuf, file: File| {
+        drop(file);
+        gglib_test_proc::install(path.parent().unwrap(), INSTALLER_STEM, &instructions);
+        std::future::ready(Ok::<Digest, String>([7; 32]))
+    };
+
+    // The fake check passes everything: only the digest can refuse it.
+    let report = Fake::default()
+        .installer(dir.path(), &rechecked)
+        .run(RuntimeKind::Llama, swapped)
+        .await;
+
+    assert_eq!(report.outcome, RuntimeInstall::NotVerified);
+    assert!(
+        report.says.contains("changed after it was downloaded"),
+        "{}",
+        report.says
+    );
+    assert!(!argv.exists(), "the installer ran");
+    assert!(!rechecked.get());
 }
 
 /// An installer that exits 0 is run with its quiet switches, and the engine

@@ -134,9 +134,11 @@ pub(super) fn agreed(
 /// What came of an offer of the runtime.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Offered {
-    /// The error was not the runtime's, or the runtime is damaged, which
-    /// only Windows repairs: nothing was offered.
+    /// The error was not the runtime's: nothing was offered.
     Nothing,
+    /// The runtime is damaged, which only Windows repairs: nothing was
+    /// offered, and this says how Windows repairs it.
+    Damaged(String),
     /// Offered, and not agreed to: nothing was installed.
     Declined,
     /// The installer was run, with this report.
@@ -144,9 +146,9 @@ pub(crate) enum Offered {
 }
 
 /// When `error`, from `kind`'s check or install, is the runtime's, say so:
-/// offer its install and make it on a yes, or say how Windows repairs a
-/// damaged one. A report that `kind` works is printed; one that it does
-/// not is the command's ending ([`ending`]).
+/// offer its install and make it on a yes, or (as the command's ending)
+/// say how Windows repairs a damaged one. A report that `kind` works is
+/// printed; one that it does not is the command's ending ([`ending`]).
 ///
 /// # Errors
 ///
@@ -162,10 +164,10 @@ pub(crate) async fn offer_runtime(
     println!();
     println!("{not_working}");
     println!();
-    println!("{}", fix.offer(kind));
     if fix != Fix::InstallVisualCppRuntime {
-        return Ok(Offered::Nothing);
+        return Ok(Offered::Damaged(fix.offer(kind)));
     }
+    println!("{}", fix.offer(kind));
     let action = repair_action(asker.yes(), std::io::stdin().is_terminal());
     if !agreed(action, asker, || {
         input::prompt_confirmation_default_yes(QUESTION)
@@ -182,11 +184,13 @@ pub(crate) async fn offer_runtime(
 
 /// How a command that met `error` ends after `offered`: well when an
 /// install made the engine work; with the install's own words when one ran
-/// and it still does not; with `error` when nothing ran.
+/// and it still does not; with how Windows repairs a damaged runtime; with
+/// `error` when nothing ran.
 pub(crate) fn ending(error: anyhow::Error, offered: Offered) -> Result<()> {
     match offered {
         Offered::Ran(report) if report.works => Ok(()),
         Offered::Ran(report) => Err(anyhow!(report.says)),
+        Offered::Damaged(how) => Err(anyhow!(how)),
         Offered::Nothing | Offered::Declined => Err(error),
     }
 }

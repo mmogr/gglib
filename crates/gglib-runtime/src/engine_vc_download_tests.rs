@@ -4,7 +4,7 @@
 
 use futures_util::stream;
 
-use super::{CAP, copy_capped, refused_hop};
+use super::{CAP, MOST_HOPS, copy_capped, refused_hop, too_many_hops};
 
 /// The permalink and its redirect targets are followed over HTTPS only: a
 /// hop down to HTTP, or to anything else, is refused.
@@ -31,16 +31,30 @@ fn only_https_is_followed() {
     }
 }
 
-/// A body within the cap is written whole.
+/// A body within the cap is written whole, and its digest is the digest of
+/// what was written.
 #[tokio::test]
 async fn a_body_within_the_cap_is_written_whole() {
+    use sha2::Digest as _;
     let body = stream::iter([Ok::<_, String>(vec![1_u8; 10]), Ok(vec![2_u8; 5])]);
     let mut written = Vec::new();
 
-    let length = copy_capped(body, &mut written, 15).await.unwrap();
+    let (length, digest) = copy_capped(body, &mut written, 15).await.unwrap();
 
     assert_eq!(length, 15);
     assert_eq!(written.len(), 15);
+    assert_eq!(digest, <[u8; 32]>::from(sha2::Sha256::digest(&written)));
+}
+
+/// Ten redirects are followed, and the eleventh is refused: `previous`
+/// counts the first address as well as each redirect's.
+#[test]
+fn ten_redirects_are_followed_and_no_more() {
+    assert_eq!(MOST_HOPS, 10);
+    for previous in 1..=10 {
+        assert!(!too_many_hops(previous), "redirect {previous}");
+    }
+    assert!(too_many_hops(11));
 }
 
 /// A body that passes the cap is refused at the chunk that passes it, and

@@ -121,3 +121,22 @@ fn a_command_ends_with_what_its_install_did() {
         assert!(ended.contains("from Microsoft at"), "{ended}");
     }
 }
+
+/// A damaged runtime ends the command with how Windows repairs it, not
+/// with the error that says to install it from Microsoft.
+#[test]
+fn a_damaged_runtime_ends_with_how_windows_repairs_it() {
+    let how = gglib_runtime::engine::Fix::RepairVisualCppRuntime.offer(RuntimeKind::Llama);
+    let before = anyhow::anyhow!(
+        "… most likely the Microsoft Visual C++ Redistributable (x64), \
+                                  from Microsoft at https://aka.ms/vc14/vc_redist.x64.exe …"
+    );
+
+    let ended = ending(before, Offered::Damaged(how.clone()))
+        .unwrap_err()
+        .to_string();
+
+    assert_eq!(ended, how);
+    assert!(ended.contains("Modify › Repair"), "{ended}");
+    assert!(!ended.contains("from Microsoft at"), "{ended}");
+}

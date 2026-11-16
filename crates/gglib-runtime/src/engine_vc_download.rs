@@ -18,6 +18,8 @@ use tokio::io::{AsyncWrite, AsyncWriteExt as _};
 
 use gglib_core::utils::process::bounded::VISUAL_CPP_RUNTIME_X64_URL;
 
+use super::Digest;
+
 /// The most a download may be. Far above the real installer's size, far
 /// below what would trouble the service's memory or the disk.
 pub(crate) const CAP: u64 = 200 * 1024 * 1024;
@@ -25,22 +27,30 @@ pub(crate) const CAP: u64 = 200 * 1024 * 1024;
 /// How long the download from Microsoft has.
 const DOWNLOAD_WAIT: Duration = Duration::from_mins(10);
 
-/// The most redirects followed.
-const MOST_HOPS: usize = 10;
+/// The most redirects followed: ten, and the eleventh is refused.
+pub(crate) const MOST_HOPS: usize = 10;
+
+/// Whether a redirect is one too many, given how many addresses its chain
+/// has asked already (`previous`, the first one among them): the redirect
+/// asked now is redirect number `previous`.
+pub(crate) const fn too_many_hops(previous: usize) -> bool {
+    previous > MOST_HOPS
+}
 
 /// Download Microsoft's current installer into `file`, just created at the
-/// path given (which is not needed: the file is written through its handle).
+/// path given (which is not needed: the file is written through its
+/// handle), and give the SHA-256 of what was written.
 pub(crate) async fn download_from_microsoft(
     _path: std::path::PathBuf,
     mut file: File,
-) -> Result<(), String> {
+) -> Result<Digest, String> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(30))
         .timeout(DOWNLOAD_WAIT)
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
             if let Some(reason) = refused_hop(attempt.url()) {
                 attempt.error(reason)
-            } else if attempt.previous().len() >= MOST_HOPS {
+            } else if too_many_hops(attempt.previous().len()) {
                 attempt.error(format!("more than {MOST_HOPS} redirects"))
             } else {
                 attempt.follow()
@@ -63,8 +73,9 @@ pub(crate) async fn download_from_microsoft(
     {
         return Err(too_large());
     }
-    copy_capped(response.bytes_stream(), &mut file, CAP).await?;
-    file.sync_all().await.map_err(|e| e.to_string())
+    let (_, digest) = copy_capped(response.bytes_stream(), &mut file, CAP).await?;
+    file.sync_all().await.map_err(|e| e.to_string())?;
+    Ok(digest)
 }
 
 /// Why a download, or a redirect it was sent on, is not followed: it is
@@ -74,18 +85,20 @@ pub(crate) fn refused_hop(url: &reqwest::Url) -> Option<String> {
 }
 
 /// Write `body` to `to` as it arrives, refusing it once it passes `cap`
-/// bytes; the bytes written.
+/// bytes; the bytes written, and their SHA-256.
 pub(crate) async fn copy_capped<B, E>(
     body: impl Stream<Item = Result<B, E>>,
     to: &mut (impl AsyncWrite + Unpin),
     cap: u64,
-) -> Result<u64, String>
+) -> Result<(u64, Digest), String>
 where
     B: AsRef<[u8]>,
     E: Display,
 {
+    use sha2::Digest as _;
     let mut body = std::pin::pin!(body);
     let mut written: u64 = 0;
+    let mut hasher = sha2::Sha256::new();
     while let Some(chunk) = body.next().await {
         let chunk = chunk.map_err(|e| e.to_string())?;
         let bytes = chunk.as_ref();
@@ -94,9 +107,10 @@ where
             return Err(too_large());
         }
         to.write_all(bytes).await.map_err(|e| e.to_string())?;
+        hasher.update(bytes);
     }
     to.flush().await.map_err(|e| e.to_string())?;
-    Ok(written)
+    Ok((written, hasher.finalize().into()))
 }
 
 fn too_large() -> String {

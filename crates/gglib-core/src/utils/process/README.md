@@ -24,8 +24,10 @@ The Windows-specific flag is applied here and nowhere else.
   read, with nothing on its pipes.
 - [`detached`]: starting the service, so it outlives the command that
   started it.
-- [`held`]: holding a downloaded program's file while it is checked and
-  run, so on Windows nobody else can write, delete or rename it in between.
+- [`held`]: a downloaded program's file, created only where nothing is,
+  and it and its folder held while it is checked and run, so on Windows
+  nobody else can write, delete or rename either in between, and a
+  junction or link in their place is refused.
 - [`stop`]: hearing that this process is asked to stop, and whether it has
   time for an orderly teardown or seconds before the OS ends it.
 - [`tied`]: tying a child to this process, so it ends when this process
