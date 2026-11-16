@@ -6,16 +6,21 @@
 //! log streaming remains robust.
 
 use super::logs::get_log_manager;
+use super::output_tail::OutputTail;
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tracing::debug;
 
 /// Read `stream` line by line until it closes, handing each line to the log
-/// manager under `port`.
+/// manager under `port` and keeping it in `tail`, its server's own.
 pub(crate) fn spawn_stream_reader(
     stream: impl AsyncRead + Unpin + Send + 'static,
     port: u16,
     stream_type: &'static str,
+    tail: OutputTail,
 ) {
+    // Counted before the task runs, so a launch that sees its server exit
+    // waits for this reader even if it has not been polled yet.
+    tail.opened();
     tokio::spawn(async move {
         let mut reader = BufReader::new(stream);
         let mut buf: Vec<u8> = Vec::with_capacity(1024);
@@ -36,6 +41,7 @@ pub(crate) fn spawn_stream_reader(
                     let line = String::from_utf8_lossy(&buf).to_string();
                     debug!(port = %port, %stream_type, "{}: {}", stream_type, line);
                     get_log_manager().add_log(port, &line);
+                    tail.push(&line);
                 }
                 Err(e) => {
                     debug!(port = %port, %stream_type, error = %e, "log stream reader exiting due to read error");
@@ -44,6 +50,7 @@ pub(crate) fn spawn_stream_reader(
             }
         }
 
+        tail.closed();
         debug!(port = %port, %stream_type, "log stream reader task exiting");
     });
 }

@@ -22,7 +22,7 @@ use crate::binary_install::{
     resolve_selector, standing,
 };
 pub use check::{NotWorking, validate_engine, validate_engine_at};
-pub(crate) use check::{first_line, validate_binary};
+pub(crate) use check::{first_line, refuse_if_known_not_working, validate_binary};
 
 #[path = "engine_check.rs"]
 mod check;

@@ -28,6 +28,7 @@ use crate::domain::{
     ModelSamplingDefaults, RuntimeKind,
 };
 use crate::ports::ProcessHandle;
+use crate::ports::load_failure::LoadFailure;
 use crate::ports::model_catalog::ModelLaunchSpec;
 pub use crate::ports::pinned::PinnedSpec;
 use crate::server_config::ServerConfigOptions;
@@ -440,6 +441,13 @@ pub enum ModelRuntimeError {
         budget_bytes: u64,
     },
 
+    /// The model's server did not come up: its engine was known not to
+    /// work, it stopped while loading, or it was not ready in time. The
+    /// failure is the whole message ([`LoadFailure`]'s words), and the code
+    /// [`LoadFailure::CODE`] on every wire.
+    #[error("{0}")]
+    LoadFailed(Box<LoadFailure>),
+
     /// Internal error during runtime operations.
     #[error("Internal error: {0}")]
     Internal(String),
@@ -468,7 +476,10 @@ impl ModelRuntimeError {
             Self::ImageModelCannotChat(_) | Self::ImageModelIncomplete { .. } => 400,
             // Insufficient Storage: this server cannot hold the model at all.
             Self::ChatModelDoesNotFit { .. } => 507,
-            Self::SpawnFailed(_) | Self::HealthCheckFailed(_) | Self::Internal(_) => 500,
+            Self::SpawnFailed(_)
+            | Self::HealthCheckFailed(_)
+            | Self::LoadFailed(_)
+            | Self::Internal(_) => 500,
         }
     }
 }
@@ -532,6 +543,7 @@ impl From<&ModelRuntimeError> for RuntimeErrorEnvelope {
             // fit the device.
             ModelRuntimeError::SpawnFailed(_)
             | ModelRuntimeError::HealthCheckFailed(_)
+            | ModelRuntimeError::LoadFailed(_)
             | ModelRuntimeError::ImageRuntimeNotInstalled
             | ModelRuntimeError::ChatModelDoesNotFit { .. }
             | ModelRuntimeError::Internal(_) => error_type::SERVER_ERROR,
@@ -736,6 +748,19 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
     /// implement it. Callers use it to avoid offering a model that would only
     /// be refused — `/v1/models` being the motivating case.
     fn pinned(&self) -> Option<PinnedSpec> {
+        None
+    }
+
+    /// The last load of model `model_id` (its catalog id) that failed in
+    /// this runtime, and when it failed.
+    ///
+    /// The endpoint tells its clients only the short form of a failed load
+    /// ([`LoadFailure::remote_sentence`]); a caller in this process that made
+    /// a load through the endpoint reads the whole sentence here, for the
+    /// model it asked for and no other. `None` when no load of it has
+    /// failed, or the runtime keeps none.
+    fn last_load_failure(&self, model_id: u32) -> Option<(std::time::Instant, LoadFailure)> {
+        let _ = model_id;
         None
     }
 

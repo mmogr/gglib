@@ -8,7 +8,7 @@ use std::time::Duration;
 use axum::http::StatusCode;
 use gglib_core::domain::chat::MessageRole;
 use gglib_core::domain::runs::RunStatus;
-use gglib_core::ports::{RunEvent, RunsPort as _};
+use gglib_core::ports::{RunEvent, RunScope, RunsPort as _};
 use tokio::sync::Notify;
 
 use super::hub_turn_tests::{chat, device, failed_with, stored_model, turn};
@@ -43,8 +43,10 @@ async fn frames(state: &AppState, name: &str, id: &str) -> Vec<String> {
 /// A model that cannot be loaded no longer refuses the `PUT`: the run is
 /// made, says it waits for the load, and ends `failed`, `model_not_found`
 /// naming a model deleted since the chat stored it, and `model_unavailable`
-/// for one that is here and cannot load. Nothing was written, the chat is
-/// free again, and so is the slot.
+/// for one that is here and cannot load. A device is not told the file
+/// that is not there, which is a path on this machine (#1959 C5; this
+/// machine's own turn is, below). Nothing was written, the chat is free
+/// again, and so is the slot.
 #[tokio::test]
 async fn a_load_that_fails_ends_the_run_failed_and_writes_nothing() {
     let (_dir, state) = state().await;
@@ -77,6 +79,76 @@ async fn a_load_that_fails_ends_the_run_failed_and_writes_nothing() {
         assert_eq!(state.agent_semaphore.available_permits(), 1);
         assert!(state.runs.live_on(id).is_none(), "the chat is free again");
     }
+}
+
+/// This machine's own turn (`gglib q`, `gglib chat`, the chat page) is told
+/// why its model did not load, in the runtime's words: here, the file that
+/// is not there (#1959 C5).
+#[tokio::test]
+async fn a_load_that_fails_on_this_machines_turn_says_why() {
+    let (_dir, state) = state().await;
+    let model_id = model(&state, "qwen3-8b", false).await;
+    let id = chat(&state, None).await;
+    let file = state
+        .core
+        .models()
+        .get_by_id(model_id)
+        .await
+        .unwrap()
+        .expect("catalogued")
+        .file_path;
+
+    let created = start(&state, RunScope::Local, "l1", turn(id, "second"), None)
+        .await
+        .unwrap();
+    assert!(created.created);
+    settled(&state).await;
+
+    let run = state.runs.existing(&RunScope::Local, "l1").unwrap();
+    let error = run
+        .expect("the run exists")
+        .error
+        .expect("it failed, saying why");
+    assert_eq!(error.code, "model_unavailable");
+    assert_eq!(
+        error.message,
+        format!("Model file not found: {}", file.display())
+    );
+}
+
+/// What a paired device and this machine are told of one failed load: the
+/// kind of failure, and the whole sentence (#1959 C5).
+#[test]
+fn a_failed_load_is_said_by_kind_to_a_device_and_in_full_here() {
+    use gglib_core::domain::RuntimeKind;
+    use gglib_core::ports::{LoadCause, LoadFailure, ModelRuntimeError};
+    use gglib_core::utils::process::bounded::Failure;
+
+    use crate::handlers::agent::hub_model::unavailable;
+
+    let failure = LoadFailure {
+        model: "qwen".to_owned(),
+        runtime: RuntimeKind::Llama,
+        cause: LoadCause::Stopped {
+            failure: Some(Failure::Failed { code: 1 }),
+            said: Some(
+                "gguf_init_from_file: failed to open GGUF file '/home/me/q.gguf'".to_owned(),
+            ),
+        },
+        fitted_context: None,
+    };
+    let told = |for_device| match unavailable(
+        ModelRuntimeError::LoadFailed(Box::new(failure.clone())),
+        for_device,
+    ) {
+        crate::error::HttpError::Coded { code, message, .. } => (code, message),
+        other => panic!("uncoded: {other}"),
+    };
+
+    assert_eq!(told(true), ("model_unavailable", failure.remote_sentence()));
+    assert_eq!(told(false), ("model_unavailable", failure.sentence()));
+    assert!(!told(true).1.contains("/home/me"));
+    assert!(told(false).1.contains("/home/me/q.gguf"));
 }
 
 /// A late step that waits for its model, as a cold load does, until

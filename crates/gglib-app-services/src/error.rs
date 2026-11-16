@@ -43,6 +43,11 @@ pub enum GuiError {
         reason: String,
     },
 
+    /// A model did not load, and why: the runtime's
+    /// [`LoadFailure`](gglib_core::ports::LoadFailure) in its own words,
+    /// which every surface shows as they stand.
+    LoadFailed(String),
+
     /// Unexpected internal error - should be refined over time.
     Internal(String),
 }
@@ -64,6 +69,7 @@ impl fmt::Display for GuiError {
                     "llama-server not installed: {reason} at {expected_path}\nRun: {suggested_command}"
                 )
             }
+            Self::LoadFailed(msg) => f.write_str(msg),
             Self::Internal(msg) => write!(f, "internal error: {msg}"),
         }
     }
@@ -159,7 +165,10 @@ impl GuiError {
             Self::Conflict(msg) => Self::Conflict(led(msg)),
             Self::Unavailable(msg) => Self::Unavailable(led(msg)),
             Self::Internal(msg) => Self::Internal(led(msg)),
-            named @ (Self::NotFound { .. } | Self::LlamaServerNotInstalled { .. }) => named,
+            // A failed load is its own sentence, which already says what.
+            named @ (Self::NotFound { .. }
+            | Self::LlamaServerNotInstalled { .. }
+            | Self::LoadFailed(_)) => named,
         }
     }
 }

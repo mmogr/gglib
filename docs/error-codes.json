@@ -51,6 +51,12 @@
       "meaning": "An image model's family needs a file it has none linked for, such as its VAE; the message names every missing role and the gglib model update --component command that links it."
     },
     {
+      "code": "model_load_failed",
+      "type": "server_error",
+      "status": 500,
+      "meaning": "The model did not load: its engine cannot start, its server could not be started or reached, stopped while loading, or was not ready in time. The proxy says which, and nothing of the machine; the daemon's API, which only its owner reaches, says why, with the line the engine printed."
+    },
+    {
       "code": "image_runtime_not_installed",
       "type": "server_error",
       "status": 503,
@@ -282,7 +288,7 @@
       "code": "model_unavailable",
       "type": "server_error",
       "status": 503,
-      "meaning": "The chat's model could not be loaded on the hub."
+      "meaning": "The chat's model could not be loaded on the hub. When it did not load or its file is missing, the message says why: in full on this machine's own turn, as its kind alone on a paired device's."
     },
     {
       "code": "unavailable",

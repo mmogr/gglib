@@ -150,6 +150,13 @@ impl ModelRuntimePort for RuntimePortImpl {
         self.mgr.pinned()
     }
 
+    fn last_load_failure(
+        &self,
+        model_id: u32,
+    ) -> Option<(std::time::Instant, gglib_core::ports::LoadFailure)> {
+        self.mgr.last_load_failure(model_id)
+    }
+
     fn set_pin(&self, pin: Option<gglib_core::ports::PinnedSpec>) -> Result<(), ModelRuntimeError> {
         self.mgr.set_pin(pin);
         Ok(())
