@@ -106,6 +106,7 @@ DEPENDS ON ───────────────────────
 - **`utils/`** — Shared utility functions and helpers
 - **`settings.rs`** — Application settings and configuration types
 - **`secret.rs`** — The secrets gglib stores (`SettingSecret`, `SecretRef`), what a held one is shown as (`SHOWN_AS`), and the blank rule (`held`). `services::SecretsService::reveal` is the one way a stored value comes back (ADR 0027)
+- **`host.rs`** — The machine gglib runs on: `HostOs::current` (the one read of which OS this is), what the machine is called (`machine`: Mac, PC, computer), its path separators, and the shell a command line is written for (`Shell`: POSIX, or PowerShell on Windows) with that shell's quoting (`Shell::token`, `Shell::program`). `Host` is what `GET /api/version` reports, so a page names the service's machine
 - **`hf_token.rs`** — The `HuggingFace` token: `from_env`, the one read of `HF_TOKEN`, and `normalised`, the one rule for what a value counts as (trimmed; a blank one is no token), whether it came from the environment or a caller. `AppCore` holds the token the bootstrap wired, its caller's or the environment's, and hands it out
 
 ## Design Principles

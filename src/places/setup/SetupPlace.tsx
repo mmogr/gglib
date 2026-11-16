@@ -1,6 +1,6 @@
 /**
  * Setup: five steps in one centred 560 px column, the window's only
- * content while `SetupGate` holds it. This Mac, Engines, First model,
+ * content while `SetupGate` holds it. This <machine>, Engines, First model,
  * Endpoint, Connect; each step says "n of 5" and its 22 px headline, with
  * Back as text and Continue the one ink button. No stepper, no sidebar.
  *
@@ -34,7 +34,7 @@ import { ConnectStep } from './ConnectStep';
 import { EndpointStep } from './EndpointStep';
 import { EnginesStep } from './EnginesStep';
 import { FirstModelStep } from './FirstModelStep';
-import { ThisMacStep } from './ThisMacStep';
+import { ThisMachineStep } from './ThisMachineStep';
 import { useEngines } from './useEngines';
 import { useFastDownloads } from './useFastDownloads';
 import { useFirstModel } from './useFirstModel';
@@ -169,7 +169,7 @@ const Steps: FC<StepsProps> = ({ status, rec, onDone }) => {
 
   switch (step) {
     case 1:
-      return <ThisMacStep status={status} rec={recommended} folder={folder} onFolder={setFolder} onNext={next} />;
+      return <ThisMachineStep status={status} rec={recommended} folder={folder} onFolder={setFolder} onNext={next} />;
     case 2:
       return <EnginesStep engines={engines} fast={fast} onNext={next} onBack={back} />;
     case 3:

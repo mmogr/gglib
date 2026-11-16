@@ -20,6 +20,7 @@ import { Star } from 'lucide-react';
 import { Icon } from '../../components/ui/Icon';
 import { StatusMark, type MarkKind } from '../../components/status/StatusMark';
 import { Button } from '../../components/ui/Button';
+import { HF_REPO, fileName } from '../../services/hostRegistry';
 import type { HfQuantization, VariantFit } from '../../types';
 import { cn } from '../../utils/cn';
 import { formatSize } from '../../utils/format';
@@ -39,7 +40,7 @@ const isModel = (q: HfQuantization) => q.role !== 'Sidecar';
 
 /** The files a variant is, for its size's hover. */
 function files(q: HfQuantization): string {
-  const first = q.file_path.split('/').pop() || q.file_path;
+  const first = fileName(q.file_path, HF_REPO);
   return q.is_sharded && q.shard_count ? `${q.shard_count} files, from ${first}` : first;
 }
 

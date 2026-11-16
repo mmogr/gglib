@@ -3,9 +3,10 @@
  * `AppContent`, with every store it starts, over a daemon that is not yet
  * listening when the page runs. Every first read is refused; the stream's
  * first connection fails too. Once the daemon answers, the stream opens and
- * every store the window reads is filled: the settings, the model library
- * and the built-in tools as well as the endpoint, the servers and the
- * remote. And a healthy start, counted: how many reads each store makes.
+ * every store the window reads is filled: the settings, the model library,
+ * the built-in tools and the service's host as well as the endpoint, the
+ * servers and the remote; the host is the service's (a PC) though the
+ * browser says it is on a Mac, and stays while the service is gone. And a healthy start, counted: how many reads each store makes.
  *
  * The stream is the real shared manager over a fake `apiFetch`; the
  * daemon's answers are the transport's. The shell is a stand-in that draws
@@ -51,6 +52,14 @@ vi.mock('../../../src/services/transport', async (importOriginal) => {
       listServers: read('servers', () => []),
       getRemoteStatus: read('remote', () => IDLE_STATUS),
       getDownloadQueue: read('downloads', () => queueSnapshot()),
+      // A service on Windows, whatever machine the page is drawn on.
+      getVersion: read('host', () => ({
+        semver: '0.37.0',
+        sha: 'a',
+        fingerprint: 'a',
+        display: '0.37.0',
+        host: { os: 'windows', machine: 'PC', separators: '\\/' },
+      })),
       probeDaemon: async () => daemon.up,
       tokenRefusal: async () => null,
       subscribe: sse.subscribeSseEvent,
@@ -85,14 +94,17 @@ vi.mock('../../../src/app/Shell', async () => {
   const { useModelLibrary } = await import('../../../src/services/modelRegistry');
   const { useProxyState } = await import('../../../src/services/proxyRegistry');
   const { useServerListHeard } = await import('../../../src/services/serverEvents');
+  const { useThisMachine } = await import('../../../src/services/hostRegistry');
   /** What the stores hold, drawn by a reader that never asks again itself. */
   function Shell() {
     const { settings } = useSettings();
     const { models } = useModelLibrary();
     const { status } = useProxyState();
     const serversHeard = useServerListHeard();
+    const machine = useThisMachine();
     return (
       <main aria-label="shell">
+        <p data-testid="machine">{machine.title}</p>
         <p data-testid="settings">{settings ? `context ${settings.defaultContextSize}` : 'no settings'}</p>
         <p data-testid="library">{models.map((m) => m.name).join(', ') || 'no models'}</p>
         <p data-testid="endpoint">{status ? `endpoint ${status.state}` : 'no endpoint'}</p>
@@ -109,6 +121,7 @@ import { ToastProvider } from '../../../src/contexts/ToastContext';
 import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
 import { getToolRegistry, resetToolRegistry } from '../../../src/services/tools/registry';
 import { forgetServerList } from '../../../src/services/serverEvents';
+import { applyHost, currentHost } from '../../../src/services/hostRegistry';
 
 function renderWindow() {
   const router = createAppRouter(<AppContent />, ['/']);
@@ -131,10 +144,14 @@ beforeEach(() => {
   Object.assign(daemon, { up: false, reads: {}, streams: [] });
   resetToolRegistry();
   forgetServerList();
+  // No host heard yet, and a browser that says it is on a Mac.
+  applyHost(null);
+  vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
 });
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  applyHost({ os: 'macos', machine: 'Mac', separators: '/' });
 });
 
 describe('the window on a cold start', () => {
@@ -156,6 +173,8 @@ describe('the window on a cold start', () => {
     expect.soft(screen.getByTestId('settings')).toHaveTextContent('context 8192');
     expect.soft(screen.getByTestId('library')).toHaveTextContent('Qwen3-4B');
     expect.soft(getToolRegistry().has('get_current_time'), 'the built-in tools registered').toBe(true);
+    // The service's machine, not the browser's.
+    expect.soft(screen.getByTestId('machine')).toHaveTextContent('This PC');
     // Each store: the refused first read, and the one the stream's opening set going.
     expect(daemon.reads).toEqual({
       settings: 2,
@@ -165,7 +184,16 @@ describe('the window on a cold start', () => {
       servers: 2,
       remote: 2,
       downloads: 2,
+      host: 2,
     });
+
+    // The service going keeps the last host it gave: the words do not flip
+    // to "This computer" and back on every outage.
+    daemon.up = false;
+    await nextProbe();
+    await nextProbe();
+    expect(await screen.findByText('Lost gglib. Reconnecting…')).toBeInTheDocument();
+    expect(currentHost()?.machine).toBe('PC');
     view.unmount();
   });
 });
@@ -206,6 +234,7 @@ describe('the window on a healthy start', () => {
 
     expect(screen.getByTestId('settings')).toHaveTextContent('context 8192');
     expect(screen.getByTestId('library')).toHaveTextContent('Qwen3-4B');
+    expect(screen.getByTestId('machine')).toHaveTextContent('This PC');
     expect(daemon.reads).toEqual({
       settings: 2,
       models: 2,
@@ -214,6 +243,7 @@ describe('the window on a healthy start', () => {
       servers: 2,
       remote: 2,
       downloads: 2,
+      host: 2,
     });
     expect(daemon.streams.filter((signal) => !signal.aborted)).toHaveLength(1);
     view.unmount();

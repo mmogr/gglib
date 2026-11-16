@@ -34,7 +34,7 @@ instructions for it.
 - **`instructions/`** - Platform-specific install commands for what is
   missing (Homebrew, apt, dnf, pacman, zypper, winget).
 - **`platform.rs`** - The Linux distribution, re-exported from
-  `gglib_runtime`. The OS is `gglib_core::utils::system::HostOs`.
+  `gglib_runtime`. The OS is `gglib_core::host::HostOs`.
 
 ## The report
 

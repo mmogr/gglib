@@ -1,5 +1,7 @@
 /**
- * Setup's step 1, This Mac: what gglib found, and where models go.
+ * Setup's step 1, This Mac (the machine in the service's words,
+ * `useThisMachine`: This PC on Windows): what gglib found, and where models
+ * go.
  *
  * The machine is said in the daemon's words: the download its llama.cpp
  * install would take (`macOS ARM64 (Metal)`), and the memory models are
@@ -13,13 +15,14 @@
  * Change: the folder typed, saved through the models-directory route, then
  * read back, so what is shown is what the daemon resolved.
  *
- * @module places/setup/ThisMacStep
+ * @module places/setup/ThisMachineStep
  */
 
 import { useState, type FC } from 'react';
 import { MODELS_DIR_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { useThisMachine } from '../../services/hostRegistry';
 import { getTransport } from '../../services/transport';
 import type { ModelsDirectoryInfo } from '../../types';
 import type { RecommendationDto, SetupStatus } from '../../types/setup';
@@ -27,7 +30,7 @@ import { formatError } from '../../utils/errors';
 import { formatBudget } from '../../utils/format';
 import { Item, Problem, Step } from './Step';
 
-interface ThisMacStepProps {
+interface ThisMachineStepProps {
   status: SetupStatus;
   rec: RecommendationDto | null;
   folder: ModelsDirectoryInfo;
@@ -40,7 +43,8 @@ function folderNote(folder: ModelsDirectoryInfo): string | null {
   return folder.state === 'writable' ? null : `(${MODELS_DIR_WORDS[folder.state]})`;
 }
 
-export const ThisMacStep: FC<ThisMacStepProps> = ({ status, rec, folder, onFolder, onNext }) => {
+export const ThisMachineStep: FC<ThisMachineStepProps> = ({ status, rec, folder, onFolder, onNext }) => {
+  const machine = useThisMachine();
   const [typed, setTyped] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +71,7 @@ export const ThisMacStep: FC<ThisMacStepProps> = ({ status, rec, folder, onFolde
   return (
     <Step
       n={1}
-      title="This Mac"
+      title={machine.title}
       actions={
         <Button onClick={onNext} disabled={typed !== null}>
           Continue

@@ -28,6 +28,7 @@ import { Checkbox } from '../components/ui/Checkbox';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { installLlama, useEngineInstall } from '../places/library/engineInstall';
+import { useHost } from '../services/hostRegistry';
 import type { GgufModel, LaunchExplanation, ModelDetail } from '../types';
 import { formatError, loadFailed } from '../utils/errors';
 import { ImageParts } from './ImageParts';
@@ -99,6 +100,7 @@ export const LoadOptionsSheet: FC<LoadOptionsSheetProps> = (props) => {
   const draws = model.imageFamily !== undefined;
   const plan = explanation?.plan ?? null;
   const sampling = explanation?.sampling ?? null;
+  const host = useHost();
   const argsOf = (decision: string) => plan?.args.filter((a) => a.decision === decision) ?? [];
   const mtpArgs = argsOf('mtp');
   const templatesArgs = argsOf('templates');
@@ -197,7 +199,7 @@ export const LoadOptionsSheet: FC<LoadOptionsSheetProps> = (props) => {
                 onChange={(e) => change({ context: e.target.value })}
               />
             </Field>
-            <Field label="Jinja" caption={templatesArgs.length ? `Auto: ${argsValue(templatesArgs)} · ${argsWhy(templatesArgs)}` : undefined}>
+            <Field label="Jinja" caption={templatesArgs.length ? `Auto: ${argsValue(templatesArgs, host)} · ${argsWhy(templatesArgs)}` : undefined}>
               {/* The width is the wrapper's, so the select and its chevron are one box. */}
               <span className="block max-w-[10rem]">
                 <Select

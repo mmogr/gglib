@@ -1,5 +1,6 @@
 /**
- * This Mac: the tunnel in front of its own endpoint, and the code that lets
+ * This machine, named in the service's words (`useThisMachine`: This Mac,
+ * This PC): the tunnel in front of its own endpoint, and the code that lets
  * one more device in.
  *
  * Share with my devices brings the tunnel up, and on a machine no device has
@@ -24,6 +25,7 @@ import { Button } from '../../components/ui/Button';
 import { refreshRemoteStatus } from '../../services/remoteEvents';
 import { clearOffer, sharingSentence, showOffer, useRemoteState } from '../../services/remoteRegistry';
 import { useEndpointFacts } from '../../services/proxyRegistry';
+import { useThisMachine } from '../../services/hostRegistry';
 import { getTransport } from '../../services/transport';
 import type { RemoteStatus } from '../../services/transport/types/remote';
 import { formatError } from '../../utils/errors';
@@ -35,6 +37,7 @@ export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({
   const { offer } = useRemoteState();
   const { key } = useEndpointFacts();
   const { confirm } = useConfirmContext();
+  const machine = useThisMachine();
   // Which action is in flight, not merely that one is: one boolean once
   // relabelled Stop while an Invite was out.
   const [busy, setBusy] = useState<'enable' | 'invite' | 'disable' | null>(null);
@@ -59,7 +62,7 @@ export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({
   const share = async () => {
     if (key !== 'required') {
       const ok = await confirm({
-        title: 'Clients on this Mac will need an API key from now on.',
+        title: `Clients on ${machine.phrase} will need an API key from now on.`,
         confirmLabel: 'Turn on',
       });
       if (!ok) return;
@@ -112,7 +115,7 @@ export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({
   };
 
   return (
-    <Group label="This Mac">
+    <Group label={machine.title}>
       <div className="flex flex-col gap-sm px-md">
         {status.enabled ? (
           <div className="flex flex-wrap items-center gap-sm">
@@ -133,7 +136,7 @@ export const ShareBlock: FC<{ status: RemoteStatus; actions: PageActions }> = ({
           </div>
         ) : (
           <>
-            <p className="m-0 text-sm text-text-secondary">Let your laptop and phone use this Mac&apos;s models.</p>
+            <p className="m-0 text-sm text-text-secondary">{`Let your laptop and phone use ${machine.phrase}'s models.`}</p>
             {/* The switch on with nothing bound: still arming, or it could
                 not. Share stays live: pressed now it waits for the first, and
                 arms the tunnel again after the second. */}
