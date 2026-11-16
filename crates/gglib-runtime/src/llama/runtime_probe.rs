@@ -36,6 +36,7 @@ use std::sync::Mutex;
 use std::time::SystemTime;
 
 use gglib_core::domain::RuntimeCapabilities;
+use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
 use gglib_core::utils::process::cmd;
 use tracing::{debug, warn};
 
@@ -109,7 +110,7 @@ fn probe_uncached(binary: &Path) -> RuntimeCapabilities {
         return RuntimeCapabilities::unknown("binary not found");
     }
 
-    let output = match cmd(binary).arg("--version").output() {
+    let output = match run_bounded(cmd(binary).arg("--version"), PROBE_WAIT) {
         Ok(output) => output,
         Err(e) => return RuntimeCapabilities::unknown(format!("probe failed: {e}")),
     };

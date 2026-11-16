@@ -1,19 +1,17 @@
 //! Binary validation and status checking for llama-server.
 
 use anyhow::{Context, Result, bail};
+use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
 use gglib_core::utils::process::cmd;
 use std::path::Path;
 use std::time::Duration;
 
-/// How long an engine has to answer `--version`.
-const VERSION_WAIT: Duration = Duration::from_secs(10);
-
 /// Validate that the llama-server binary is functional
 pub fn validate_llama_binary(path: &Path) -> Result<()> {
-    validate_binary(path, "llama-server", VERSION_WAIT)
+    validate_binary(path, "llama-server", PROBE_WAIT)
 }
 
-fn validate_binary(path: &Path, binary_name: &str, _wait: Duration) -> Result<()> {
+fn validate_binary(path: &Path, binary_name: &str, wait: Duration) -> Result<()> {
     if !path.exists() {
         bail!(
             "{} not found at: {}\n\nRun 'gglib config llama install' to install it.",
@@ -36,10 +34,14 @@ fn validate_binary(path: &Path, binary_name: &str, _wait: Duration) -> Result<()
         }
     }
 
-    let output = cmd(path)
-        .arg("--version")
-        .output()
-        .with_context(|| format!("Failed to execute {binary_name}"))?;
+    let output = match run_bounded(cmd(path).arg("--version"), wait) {
+        Err(e) if e.kind() == std::io::ErrorKind::TimedOut => bail!(
+            "{binary_name} did not answer `--version` within {} s: {}",
+            wait.as_secs(),
+            path.display()
+        ),
+        answer => answer.with_context(|| format!("Failed to execute {binary_name}"))?,
+    };
 
     if !output.status.success() {
         bail!(

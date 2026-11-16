@@ -1,6 +1,7 @@
 //! What is installed for image generation, as data.
 
 use gglib_core::paths::{sd_config_path, sd_cpp_dir, sd_server_path};
+use gglib_core::utils::process::bounded::{PROBE_WAIT, run_bounded};
 use gglib_core::utils::process::cmd;
 use serde::Serialize;
 use std::path::Path;
@@ -116,7 +117,7 @@ pub(crate) fn sd_status_at(
 
 /// The first line `binary --version` prints, when it runs and prints one.
 fn version_line(binary: &Path) -> Option<String> {
-    let output = cmd(binary).arg("--version").output().ok()?;
+    let output = run_bounded(cmd(binary).arg("--version"), PROBE_WAIT).ok()?;
     if !output.status.success() {
         return None;
     }
