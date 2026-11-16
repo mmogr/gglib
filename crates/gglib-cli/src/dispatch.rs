@@ -13,46 +13,63 @@ use crate::target::Target;
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
-use crate::commands::Commands;
+use crate::commands::{Commands, DaemonCommand};
 use crate::config_commands::ConfigCommand;
 use crate::handlers;
+use crate::remote_flag::RemoteFlag;
 
 /// Whether `command` must leave nothing behind but what it is for, so it
 /// runs before logging is set up, which makes gglib's data folder and opens
 /// a log file there.
 ///
-/// These are the commands the Windows installer and uninstaller run,
-/// `config path-entry add|remove`: they touch the user's `PATH` and gglib's
-/// record of it, and nothing else, so an uninstall does not make again a
-/// data folder the user deleted. `main` runs such a command through
-/// [`dispatch_without_library`] and returns.
+/// These are the commands the Windows installer and uninstaller run, so an
+/// uninstall does not make again a data folder the user deleted:
+///
+/// - `config path-entry add|remove`, which touch the user's `PATH` and
+///   gglib's record of it, and nothing else;
+/// - `daemon stop` without `--remote`, run before the installed `gglib.exe`
+///   is replaced or removed. With no daemon answering it touches nothing on
+///   disk. With one, it reads the daemon's token and lock from the data
+///   folder its own environment names, and writes nothing; that folder
+///   exists unless the daemon was started with another `GGLIB_DATA_DIR`,
+///   and then resolving the default one makes it.
+///
+/// `main` runs such a command through [`dispatch_without_library`] and
+/// returns.
 #[must_use]
 pub fn leaves_nothing_behind(command: Option<&Commands>) -> bool {
     matches!(
         command,
-        Some(Commands::Config {
-            command: ConfigCommand::PathEntry { .. },
-        })
+        Some(
+            Commands::Config {
+                command: ConfigCommand::PathEntry { .. },
+            } | Commands::Daemon {
+                command: DaemonCommand::Stop {
+                    remote: RemoteFlag { remote: false },
+                    ..
+                },
+            }
+        )
     )
 }
 
 /// Run a command that reads nothing from the library, before it is opened.
 ///
-/// These are help (no command), `completions`, `config paths` and the
-/// hidden `config path-entry`. Each other command is handed back for
-/// [`dispatch`].
+/// These are help (no command), `completions`, `config paths`, the hidden
+/// `config path-entry`, and `daemon stop` without `--remote`. Each other
+/// command is handed back for [`dispatch`].
 ///
 /// Opening the library creates it on a fresh data folder, upgrades an older
 /// one and refuses a newer one, and none of these reads it, so they answer
 /// with no library and with one this build refuses. `config paths` is what
 /// `docs/compatibility.md` tells the owner of such a library to run, and
-/// `config path-entry` is run by the Windows installer, which must leave
-/// nothing behind (see [`leaves_nothing_behind`]).
+/// `config path-entry` and `daemon stop` are run by the Windows installer,
+/// which must leave nothing behind (see [`leaves_nothing_behind`]).
 ///
 /// # Errors
 ///
 /// Whatever the command's handler returns.
-pub fn dispatch_without_library(command: Option<Commands>) -> Result<Option<Commands>> {
+pub async fn dispatch_without_library(command: Option<Commands>) -> Result<Option<Commands>> {
     match command {
         None => {
             use clap::CommandFactory as _;
@@ -65,6 +82,13 @@ pub fn dispatch_without_library(command: Option<Commands>) -> Result<Option<Comm
         Some(Commands::Config {
             command: ConfigCommand::PathEntry { command },
         }) => handlers::config::path_entry::execute(command)?,
+        Some(Commands::Daemon {
+            command:
+                DaemonCommand::Stop {
+                    yes,
+                    remote: RemoteFlag { remote: false },
+                },
+        }) => handlers::daemon::stop(Target::Local, yes).await?,
         Some(other) => return Ok(Some(other)),
     }
     Ok(None)
