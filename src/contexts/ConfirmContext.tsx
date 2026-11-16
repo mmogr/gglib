@@ -22,7 +22,9 @@ export const ConfirmProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   // If the provider ever tears down (e.g. app unmount), answer any open
   // question `false` so callers don't leak unresolved promises.
-  useEffect(() => dismissConfirm, []);
+  useEffect(() => {
+    return dismissConfirm;
+  }, []);
 
   // A move through history while the question is open answers it `false`:
   // the screen it was asked on is going, and so is its answer's meaning.

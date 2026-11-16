@@ -1,0 +1,60 @@
+name: Browser tests on Edge
+
+# Once a week, tests/ts/browser/ in Microsoft Edge on Windows. The desktop
+# app's webview on Windows is WebView2, which is Edge's engine at Edge's
+# version, and Edge moves on its own schedule, not with package-lock.json: CI's
+# `test-browser` holds the frontend to the Chromium and WebKit the locked
+# Playwright pins, and this run is where a new Edge shows up first. A failure
+# here is a frontend change to make, or a test to correct, in a pull request.
+#
+# `playwright install --force msedge` replaces the runner's own Edge with the
+# newest stable and prints its version.
+
+on:
+  schedule:
+    # 04:41 on Tuesday in Brisbane (18:41 UTC on Monday). Cron here is always
+    # UTC.
+    - cron: '41 18 * * 1'
+  workflow_dispatch:
+  # A change to this workflow or the browser config runs it on its pull
+  # request too, so it is seen to work before it is first scheduled.
+  pull_request:
+    paths:
+      - '.github/workflows/browser-edge.yml'
+      - 'vitest.browser.config.ts'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-edge
+  cancel-in-progress: true
+
+jobs:
+  edge:
+    name: Browser tests (Edge)
+    runs-on: windows-2022
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Microsoft Edge
+        run: npx playwright install --force msedge
+
+      - name: Run the browser-engine tests in Edge
+        env:
+          GGLIB_BROWSER: msedge
+        run: npm run test:browser

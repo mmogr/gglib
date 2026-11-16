@@ -196,7 +196,9 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
     clearTimeout(pending.current?.timer);
     pending.current = null;
   };
-  useEffect(() => cancelKeyPick, []);
+  useEffect(() => {
+    return cancelKeyPick;
+  }, []);
   useEffect(cancelKeyPick, [hf.models, shown?.kind]);
   const pickByKey = (model: HfModelSummary, replace: boolean) => {
     const run = pending.current;

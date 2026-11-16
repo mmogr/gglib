@@ -11,6 +11,9 @@ What's left here:
 - `ts/` — the TypeScript/Vitest test suite for the web UI, run via
   `npm run test:run` (see `.github/workflows/ci.yml`'s `test-frontend` job).
   Its own fixtures are in [`ts/fixtures/`](ts/fixtures).
+  [`ts/browser/`](ts/browser) is apart from it: tests that run in Chromium
+  and WebKit rather than jsdom, via `npm run test:browser` (the
+  `test-browser` job).
 
 Rust fixtures are not here and do not need to be. Two crates keep fixtures under
 `tests/fixtures/`. `crates/gglib-axum/tests/fixtures/ui/` is data, a stand-in

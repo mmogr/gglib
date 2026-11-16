@@ -478,6 +478,41 @@ jobs:
             ts-test-results.json
           retention-days: 30
 
+  # tests/ts/browser/ in Chromium and WebKit, through Playwright: what jsdom
+  # cannot answer, such as a DOM call's return value in a real engine. The
+  # engines are the ones the locked Playwright version pins, so a run reads
+  # the same engines until package-lock.json moves Playwright. Edge, the
+  # desktop app's webview on Windows, runs weekly in browser-edge.yml.
+  #
+  # The browsers are downloaded each run, not cached: restoring them takes
+  # about as long as the download, and WebKit's system libraries are
+  # installed by apt either way.
+  test-browser:
+    name: Test (Browser engines)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Run the browser-engine tests
+        run: npm run test:browser
+
   clippy:
     name: Clippy
     runs-on: ubuntu-24.04
@@ -1183,7 +1218,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     if: always()
-    needs: [scope, boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, test-cross-os, fmt, cli-cross-os, ios-check, ffi-apple, phone-llama]
+    needs: [scope, boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, test-browser, clippy, clippy-cross-os, test-cross-os, fmt, cli-cross-os, ios-check, ffi-apple, phone-llama]
     steps:
       - name: Check every job did what its scope says
         env:

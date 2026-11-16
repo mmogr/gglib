@@ -95,6 +95,7 @@ INERT = [
     "index.html",
     "tray.html",
     "vite.config.ts",
+    "vitest.browser.config.ts",
     # npm's manifests. tauri.conf.json names no version, so gglib-app takes
     # its version from Cargo.toml, not package.json.
     "package*.json",
@@ -414,6 +415,8 @@ PATHS = [
     ("src/App.tsx", False),
     ("src-tauri.md", False),
     ("tests/ts/app.test.ts", False),
+    ("tests/ts/browser/PickASize.test.tsx", False),
+    ("vitest.browser.config.ts", False),
     ("tests/rust.rs", True),
     ("package-lock.json", False),
     ("tsconfig.app.json", False),

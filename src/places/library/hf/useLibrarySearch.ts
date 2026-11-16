@@ -70,7 +70,9 @@ export function useLibrarySearch(onOpen: (model: HfModelSummary) => void): Libra
     opening.current += 1;
   }, []);
   // Leaving the library drops an answer still to come: it would navigate.
-  useEffect(() => cancelOpen, [cancelOpen]);
+  useEffect(() => {
+    return cancelOpen;
+  }, [cancelOpen]);
   const edit = useCallback((next: string) => {
     opening.current += 1;
     setQuery(next);
