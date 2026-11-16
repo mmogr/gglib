@@ -267,8 +267,7 @@ describe('time limits on requests to the daemon', () => {
   });
 
   it('a mutation is limited when its caller sets a limit', async () => {
-    // The caller's option, in its loosest form: the option is new.
-    const sent = watch(post('/api/chat', {}, { timeoutMs: 5_000 } as never));
+    const sent = watch(post('/api/chat', {}, { timeoutMs: 5_000 }));
 
     await vi.advanceTimersByTimeAsync(4_999);
     expect(sent.state).toBe('pending');

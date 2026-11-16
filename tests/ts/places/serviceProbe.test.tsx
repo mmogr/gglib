@@ -126,7 +126,7 @@ describe("the window's gate in a browser", () => {
 
     const [url, init] = calls('/health')[0];
     expect(url).toBe('/health');
-    expect(init).toEqual({ cache: 'no-store' });
+    expect(init).toEqual({ cache: 'no-store', signal: expect.any(AbortSignal) });
   });
 
   it('takes another program answering on the port for no daemon, as Rust does', async () => {

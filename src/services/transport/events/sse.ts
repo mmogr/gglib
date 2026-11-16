@@ -140,7 +140,7 @@ export class SSEConnectionManager<T = unknown> {
 
         // The daemon's base URL and the session's token are resolved here, on
         // each connection, so one made after a renewal presents the new token.
-        const response = await apiFetch(this.path, { signal: abort.signal });
+        const response = await apiFetch(this.path, { signal: abort.signal, stream: true });
         this.opened.announce();
 
         for await (const msg of readSse(response)) {
