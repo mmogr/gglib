@@ -2,7 +2,8 @@
 //! what Settings is told about each, what an install would download and what
 //! to say about it, what runs on each server, and the refusals to install or
 //! remove from under a running model or in a source build's place. The tests
-//! that reach an engine's folder reach this binary's own data root.
+//! that reach an engine's folder reach this binary's own data root, which
+//! they all share, so each holds [`Engines`] while it does.
 
 use std::sync::Arc;
 
@@ -17,6 +18,7 @@ use gglib_runtime::sd::PINNED_SD_RELEASE;
 use super::*;
 use crate::setup::SetupDeps;
 use crate::test_support::{MockSystemProbePort, test_core};
+use crate::test_support_engines::Engines;
 
 /// A runtime serving the models given, each `(name, runtime)`.
 #[derive(Debug)]
@@ -546,11 +548,8 @@ async fn removal_is_not_refused_for_a_chat_model() {
 /// nothing: the `sd-server` installed under this binary's data root stays.
 #[tokio::test]
 async fn uninstall_refuses_while_an_image_model_runs_and_removes_nothing() {
-    let root = gglib_core::paths::isolate_data_root();
-    let binary = gglib_core::paths::sd_server_path().unwrap();
-    assert!(binary.starts_with(root), "{}", binary.display());
-    std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
-    std::fs::write(&binary, b"#!/bin/sh\n").unwrap();
+    let engines = Engines::hold().await;
+    let binary = engines.stand_in(RuntimeKind::StableDiffusion);
     let setup = SetupOps::new(SetupDeps {
         core: test_core().await,
         system_probe: Arc::new(MockSystemProbePort::default()),
@@ -576,6 +575,8 @@ async fn uninstall_refuses_while_an_image_model_runs_and_removes_nothing() {
 /// that one.
 #[tokio::test]
 async fn each_engine_s_status_names_the_model_running_on_it() {
+    // Each status runs its engine's binary, which another test may write.
+    let _engines = Engines::hold().await;
     let setup = SetupOps::new(SetupDeps {
         core: test_core().await,
         system_probe: Arc::new(MockSystemProbePort::default()),
@@ -640,11 +641,8 @@ async fn an_install_is_refused_while_a_model_runs_on_its_engine() {
 /// does under an image model, and removes nothing.
 #[tokio::test]
 async fn llama_uninstall_refuses_while_a_chat_model_runs() {
-    let root = gglib_core::paths::isolate_data_root();
-    let binary = gglib_core::paths::llama_server_path().unwrap();
-    assert!(binary.starts_with(root), "{}", binary.display());
-    std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
-    std::fs::write(&binary, b"#!/bin/sh\n").unwrap();
+    let engines = Engines::hold().await;
+    let binary = engines.stand_in(RuntimeKind::Llama);
     let setup = SetupOps::new(SetupDeps {
         core: test_core().await,
         system_probe: Arc::new(MockSystemProbePort::default()),
@@ -670,11 +668,8 @@ async fn llama_uninstall_refuses_while_a_chat_model_runs() {
 /// and downloading over it is not the daemon's to choose.
 #[tokio::test]
 async fn an_install_over_a_source_build_of_a_release_is_left_to_the_terminal() {
-    let root = gglib_core::paths::isolate_data_root();
-    let binary = gglib_core::paths::sd_server_path().unwrap();
-    assert!(binary.starts_with(root), "{}", binary.display());
-    std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
-    std::fs::write(&binary, b"#!/bin/sh\n").unwrap();
+    let engines = Engines::hold().await;
+    engines.stand_in(RuntimeKind::StableDiffusion);
     std::fs::write(
         gglib_core::paths::sd_config_path().unwrap(),
         format!(
@@ -693,6 +688,66 @@ async fn an_install_over_a_source_build_of_a_release_is_left_to_the_terminal() {
         matches!(&refused, GuiError::Conflict(m) if m == "stable-diffusion.cpp was built from source here, so it is updated from a terminal, which builds it again: run 'gglib config sd install'."),
         "{refused:?}"
     );
+}
+
+/// The engines are held by one test at a time: tests that each hold them,
+/// released together, never hold them at once.
+#[test]
+fn the_engines_are_held_by_one_test_at_a_time() {
+    use std::sync::Barrier;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    const TESTS: usize = 4;
+    let start = Arc::new(Barrier::new(TESTS));
+    let holding = Arc::new(AtomicUsize::new(0));
+    let most = Arc::new(AtomicUsize::new(0));
+    let tests: Vec<_> = (0..TESTS)
+        .map(|_| {
+            let (start, holding, most) =
+                (Arc::clone(&start), Arc::clone(&holding), Arc::clone(&most));
+            std::thread::spawn(move || {
+                start.wait();
+                let _engines = Engines::hold_blocking();
+                most.fetch_max(holding.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                holding.fetch_sub(1, Ordering::SeqCst);
+            })
+        })
+        .collect();
+    for test in tests {
+        test.join().expect("the test holds and lets go");
+    }
+
+    assert_eq!(most.load(Ordering::SeqCst), 1, "tests held them at once");
+}
+
+/// A test that writes the stand-in `sd-server` and a status that runs it,
+/// each over and over beside the other for up to two seconds, as two tests
+/// of this binary run: no write fails. On Windows one did, when the status
+/// had the file open to run it (#2045).
+#[test]
+fn a_stand_in_is_never_written_while_a_status_runs_it() {
+    const ROUNDS: usize = 300;
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    let writer = std::thread::spawn(move || {
+        for _ in 0..ROUNDS {
+            if std::time::Instant::now() > until {
+                break;
+            }
+            Engines::hold_blocking().stand_in(RuntimeKind::StableDiffusion);
+        }
+    });
+    for _ in 0..ROUNDS {
+        if std::time::Instant::now() > until {
+            break;
+        }
+        let _engines = Engines::hold_blocking();
+        // What a status asks: its `--version`. The stand-in is no program,
+        // so it never answers; that it was run is all that matters here.
+        let _ = gglib_runtime::engine::validate_engine(RuntimeKind::StableDiffusion);
+    }
+
+    writer.join().expect("every write of the stand-in succeeds");
 }
 
 /// The state an engine status is on the wire as.
