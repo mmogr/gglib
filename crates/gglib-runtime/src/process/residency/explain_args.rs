@@ -21,6 +21,11 @@ use crate::llama::args::{
 };
 use crate::sd::SdServerConfig;
 
+/// The port a plan gives: `0`, which both engines read as any free port
+/// the system has. A load takes the next free one above the base instead,
+/// which is known only when it loads.
+const ANY_FREE_PORT: &str = "0";
+
 /// The decision an argument belongs to, whose it was, and why.
 struct Why {
     decision: &'static str,
@@ -48,12 +53,16 @@ fn arg(flag: &str, value: Option<&OsString>, why: Why) -> LaunchArg {
 
 /// llama-server's arguments for `request`, as the spawn would give them
 /// with the port still to be taken, each with the decision behind it.
+///
+/// The port is spelled `0`, which llama-server reads as any free port: a
+/// line it would refuse (`auto`) is no command line, and the port a load
+/// takes is known only when it loads.
 pub(super) fn llama_args(
     config: &gglib_core::ports::ServerConfig,
     resolved: &LlamaResolutions,
     request: &LaunchRequest,
 ) -> Vec<LaunchArg> {
-    crate::command::launch_tokens(config, "auto")
+    crate::command::launch_tokens(config, ANY_FREE_PORT)
         .iter()
         .map(|token| {
             arg(
@@ -86,7 +95,7 @@ fn llama_why(flag: &str, resolved: &LlamaResolutions, request: &LaunchRequest) -
         "--port" => why(
             "port",
             Gglib,
-            "the next free port above the base when it loads; the endpoint's port does not move",
+            "any free port; a load takes the next free one above the base, and the endpoint's port does not move",
         ),
         "--metrics" => why("metrics", Gglib, "the dashboard reads them"),
         "--parallel" => why(
@@ -183,10 +192,11 @@ fn llama_why(flag: &str, resolved: &LlamaResolutions, request: &LaunchRequest) -
     }
 }
 
-/// `sd-server`'s arguments for `config`, with the port still to be taken,
-/// each with the decision behind it. Every sd-server flag takes a value.
+/// `sd-server`'s arguments for `config`, with the port still to be taken
+/// (spelled `0`, as llama-server's is), each with the decision behind it.
+/// Every sd-server flag takes a value.
 pub(super) fn sd_args(config: &SdServerConfig) -> Vec<LaunchArg> {
-    let tokens = crate::sd::sd_server_args(config, "auto");
+    let tokens = crate::sd::sd_server_args(config, ANY_FREE_PORT);
     tokens
         .chunks(2)
         .map(|pair| {
@@ -214,7 +224,7 @@ fn sd_why(flag: &str) -> Why {
         "--listen-port" => why(
             "port",
             Gglib,
-            "the next free port above the base when it loads",
+            "any free port; a load takes the next free one above the base",
         ),
         "--steps" | "--cfg-scale" | "--sampling-method" | "--sigmas" | "--linear-scale"
         | "--flash-attn" | "--conv-direct" => why(

@@ -9,12 +9,15 @@ import type { Unload } from "./Unload";
  */
 export type LaunchPlan = { 
 /**
- * The server that would run: `llama-server` or `sd-server`.
+ * The server that would run, by its path: gglib's own `llama-server`
+ * or `sd-server`, the binary the launch runs, which is on nobody's
+ * PATH. Where gglib would run it from when it is not installed.
  */
 program: string, 
 /**
  * Its arguments, in the order they would be given, the port spelled
- * `auto` because it is taken when the launch happens.
+ * `0`, which the server reads as any free port: the port a load takes
+ * is known only when it loads.
  */
 args: Array<LaunchArg>, 
 /**

@@ -211,7 +211,12 @@ impl ModelOps {
             .plan(&spec, None, default_ctx, &overrides)
             .map_err(|e| GuiError::Internal(format!("could not plan the launch: {e}")))?;
 
-        let command = Some(plan.command_line(gglib_core::host::HostOs::current().shell()));
+        // An engine that is not installed has no line to paste: the plan
+        // says why in its place.
+        let command = plan
+            .not_installed
+            .is_none()
+            .then(|| plan.command_line(gglib_core::host::HostOs::current().shell()));
         Ok(LaunchExplanationDto {
             plan,
             command,

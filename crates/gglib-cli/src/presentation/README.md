@@ -114,7 +114,7 @@ each argument beside whose choice it was and why, and the context section,
 from the `LaunchPlan` the explain call answers with.
 
 **Key Functions:**
-- `launch_text()` - The command line, the argument rows and the context section as text
+- `launch_text()` - The command line (or, in its place, why there is none: the engine is not installed, or the service is older than the line), the argument rows and the context section as text
 - `argument_lines()` - One string per argument
 - `context_text()` - The context chain and the fit's inputs
 

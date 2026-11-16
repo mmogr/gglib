@@ -64,23 +64,35 @@ pub(crate) fn cache_reuse_disabled_via_env() -> bool {
 /// Returns an error if neither the bootstrap path nor the fallback resolver
 /// can locate a valid llama-server binary.
 fn select_llama_path(bootstrap_path: Option<&Path>) -> Result<PathBuf, LlamaServerError> {
-    if let Some(path) = bootstrap_path {
-        if path.as_os_str().is_empty() {
+    match bootstrap_path {
+        Some(path) if path.as_os_str().is_empty() => {
             warn!("Bootstrap provided empty llama-server path, falling back to resolver");
-        } else if path.exists() {
-            debug!("Using llama-server from bootstrap: {}", path.display());
-            return Ok(path.to_path_buf());
-        } else {
-            warn!(
-                "Bootstrap path does not exist: {}, falling back to resolver",
-                path.display()
-            );
         }
+        Some(path) if path.exists() => {
+            debug!("Using llama-server from bootstrap: {}", path.display());
+        }
+        Some(path) => warn!(
+            "Bootstrap path does not exist: {}, falling back to resolver",
+            path.display()
+        ),
+        None => warn!("No bootstrap path, falling back to internal resolver"),
     }
+    llama_binary(bootstrap_path)
+}
 
-    // Fallback to internal resolution
-    warn!("Bootstrap path invalid/empty, falling back to internal resolver");
-    resolve_llama_server()
+/// The llama-server a launch given `bootstrap_path` runs: that one when it
+/// is there, else the resolver's ([`resolve_llama_server`]). The one rule,
+/// for the spawn ([`select_llama_path`], which logs the choice) and for a
+/// plan, which names the engine the launch would run.
+///
+/// # Errors
+///
+/// As [`resolve_llama_server`], when the bootstrap path is not there.
+pub(crate) fn llama_binary(bootstrap_path: Option<&Path>) -> Result<PathBuf, LlamaServerError> {
+    match bootstrap_path {
+        Some(path) if !path.as_os_str().is_empty() && path.exists() => Ok(path.to_path_buf()),
+        _ => resolve_llama_server(),
+    }
 }
 
 /// Build and spawn a llama-server process.
@@ -198,7 +210,7 @@ pub(crate) struct Token {
 }
 
 /// The arguments `llama-server` is started with, in order, from a
-/// [`ServerConfig`]; `port` as the spawn knows it, or `auto` in a plan made
+/// [`ServerConfig`]; `port` as the spawn knows it, or `0` in a plan made
 /// before one is taken.
 ///
 /// The one list the spawn and `gglib model explain` both read, so the

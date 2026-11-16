@@ -86,7 +86,12 @@ $ gglib model inspect Qwen3-4B-Instruct-2507
 The launch gglib would make for the model, without making it: the command
 it would run, written for the shell of the machine that runs it (a POSIX
 shell on Linux and macOS, PowerShell on Windows, a value quoted where that
-shell would read it otherwise), each argument beside whose choice it was (the model author's,
+shell would read it otherwise), which starts the same server when pasted
+there. It names the engine by its path in gglib's data folder, which is on
+no PATH, and the port as `0`, which the engine reads as any free port (a
+load takes the next free one above the base); when the engine is not
+installed, the line says so and how to install it instead. Then each
+argument beside whose choice it was (the model author's,
 gglib's, or yours) and why, then the context size the model would be served
 at and how it was fitted, under the sentence the app shows below the
 model's name ("Fits this machine with 128K context, of 256K trained.")
@@ -95,8 +100,8 @@ context needs of the share of the memory budget gglib spends. When a loaded mode
 more line says which and why: it would not fit beside it, the second slot is
 taken, or one image model is loaded at a time.
 Then every resolved sampling parameter, beside the layer that supplied it.
-All of it comes from the same code a launch runs, so it cannot describe a
-launch or a hierarchy different from the one that happens, and
+All of it comes from the same code a launch runs, so, but for the port, it
+cannot describe a launch or a hierarchy different from the one that happens, and
 `GET /api/models/{id}/explain` answers with the same thing.
 
 <!-- snippet: model-explain -->
@@ -104,11 +109,11 @@ launch or a hierarchy different from the one that happens, and
 $ gglib model explain Qwen3-4B-Instruct-2507
 
   Launch for Qwen3-4B-Instruct-2507 (id 2)
-  llama-server -m '/Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf' --host 127.0.0.1 --port auto --metrics --parallel 1 -c 131072 --jinja --reasoning-format deepseek --cache-ram 100813 --cache-type-k q8_0 --cache-type-v q8_0
+  '/Users/mmogr/Library/Application Support/gglib/.llama/bin/llama-server' -m '/Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf' --host 127.0.0.1 --port 0 --metrics --parallel 1 -c 131072 --jinja --reasoning-format deepseek --cache-ram 100813 --cache-type-k q8_0 --cache-type-v q8_0
 
   -m                  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf ← model author: the weights, as published
   --host              127.0.0.1    ← gglib: loopback only; the endpoint is the address you share
-  --port              auto         ← gglib: the next free port above the base when it loads; the endpoint's port does not move
+  --port              0            ← gglib: any free port; a load takes the next free one above the base, and the endpoint's port does not move
   --metrics                        ← gglib: the dashboard reads them
   --parallel          1            ← gglib: one request at a time per model, so each gets the whole context; the queue holds the rest
   -c                  131072       ← gglib: the largest rung that fits beside the weights on this machine

@@ -218,9 +218,11 @@ async fn an_unknown_profile_is_answered_with_the_configured_ones_on_both_surface
 }
 
 /// The launch half comes from the runtime's plan of a bare start, through
-/// the one-shot runtime: the command names the model's own file and takes
-/// its port when it loads, every argument has a reason, and the context
-/// section follows.
+/// the one-shot runtime: the command names the model's own file and any
+/// free port, every argument has a reason, and the context section follows.
+/// Nothing is installed under this binary's data root, so the program is
+/// the engine where gglib keeps it and the text says it is not there in the
+/// line's place.
 #[tokio::test]
 async fn the_launch_is_the_runtimes_plan_through_the_one_shot_runtime() {
     let dir = tempfile::tempdir().unwrap();
@@ -236,11 +238,31 @@ async fn the_launch_is_the_runtimes_plan_through_the_one_shot_runtime() {
         explanation.command.as_ref(),
     );
 
-    let line = format!(
-        "llama-server -m {} --host 127.0.0.1 --port auto --metrics --parallel 1",
-        model.file_path.display()
+    let engine = gglib_core::paths::llama_server_path().unwrap();
+    assert_eq!(explanation.plan.program, engine.to_string_lossy());
+    assert_eq!(explanation.command, None);
+    assert!(
+        text.contains(&format!(
+            "\n  llama-server not found at: {}\n",
+            engine.display()
+        )),
+        "{text}"
     );
-    assert!(text.contains(&line), "{text}");
+    let file = model.file_path.display().to_string();
+    let first: Vec<(&str, Option<&str>)> = explanation.plan.args[..5]
+        .iter()
+        .map(|a| (a.flag.as_str(), a.value.as_deref()))
+        .collect();
+    assert_eq!(
+        first,
+        [
+            ("-m", Some(file.as_str())),
+            ("--host", Some("127.0.0.1")),
+            ("--port", Some("0")),
+            ("--metrics", None),
+            ("--parallel", Some("1")),
+        ]
+    );
     assert!(
         explanation
             .plan

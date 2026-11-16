@@ -3,7 +3,11 @@ import type { Shell } from "./Shell";
 
 /**
  * A launch's command line, written for one shell: what a person on the
- * machine that would run it pastes into that shell to make the same launch.
+ * machine that would run it pastes into that shell to start the same
+ * server with the same arguments.
+ *
+ * On any free port, where a load takes the next free one above gglib's
+ * base.
  *
  * The daemon writes it for its own machine's shell
  * ([`HostOs::shell`](crate::host::HostOs::shell)) and serves it beside the

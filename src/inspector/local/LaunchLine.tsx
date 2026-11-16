@@ -40,7 +40,7 @@ export const LaunchLine: FC<LaunchLineProps> = ({ plan, command, onChange }) => 
   return (
     <div ref={ref} className="flex flex-col gap-xs" onKeyDown={(e) => e.key === 'Escape' && setOpen(null)}>
       <p aria-label="Launch line" className="m-0 font-mono text-xs leading-relaxed text-text-secondary">
-        <span>{command.program}</span>
+        <span className="break-all">{command.program}</span>
         {plan.args.map((arg, i) => (
           <Fragment key={i}>
             {' '}

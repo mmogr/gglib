@@ -33,8 +33,10 @@ pub(crate) const NO_LINE_FROM_AN_OLDER_SERVICE: &str = "(the running service is 
      and does not give its launch line: `gglib daemon stop` and re-run to respawn it from this binary)";
 
 /// The launch and the context as text: the command line as `command`
-/// writes it (or, from a service older than the line, [`NO_LINE_FROM_AN_OLDER_SERVICE`]),
-/// a row per argument, and the context section.
+/// writes it (or, for an engine that is not installed, the plan's sentence
+/// saying so, each of its lines indented as the line is; or, from a service
+/// older than the line, [`NO_LINE_FROM_AN_OLDER_SERVICE`]), a row per
+/// argument, and the context section.
 #[must_use]
 pub(crate) fn launch_text(
     name: &str,
@@ -42,8 +44,24 @@ pub(crate) fn launch_text(
     plan: &LaunchPlan,
     command: Option<&CommandLine>,
 ) -> String {
-    let line = command.map_or(NO_LINE_FROM_AN_OLDER_SERVICE, |c| c.line.as_str());
-    let mut out = format!("\n  Launch for {name} (id {id})\n  {line}\n\n");
+    // The line as it is, whatever it holds: indenting inside it would change
+    // what is pasted.
+    let line = match (command, plan.not_installed.as_deref()) {
+        (Some(command), _) => format!("  {}", command.line),
+        (None, Some(why)) => why
+            .lines()
+            .map(|l| {
+                if l.is_empty() {
+                    String::new()
+                } else {
+                    format!("  {l}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        (None, None) => format!("  {NO_LINE_FROM_AN_OLDER_SERVICE}"),
+    };
+    let mut out = format!("\n  Launch for {name} (id {id})\n{line}\n\n");
     for line in argument_lines(plan) {
         let _ = writeln!(out, "  {line}");
     }

@@ -256,10 +256,14 @@ impl RunningRuntime {
 
 /// A runtime with nothing running that plans a launch as the daemon's does,
 /// with its engines at `binaries`, and starts nothing: for a test of what
-/// `explain` answers.
+/// `explain` answers. With `not_installed` set, each plan says its engine
+/// is not installed in those words: whether an engine is there is the
+/// runtime's to say, and this binary's tests share one data root, where
+/// some write a stand-in llama-server.
 #[derive(Debug)]
 pub(crate) struct PlansOnly {
     pub(crate) binaries: gglib_runtime::process::RuntimeBinaries,
+    pub(crate) not_installed: Option<String>,
 }
 
 impl Default for PlansOnly {
@@ -272,6 +276,7 @@ impl Default for PlansOnly {
                 llama: this.clone(),
                 sd: this,
             },
+            not_installed: None,
         }
     }
 }
@@ -307,6 +312,12 @@ impl ModelRuntimePort for PlansOnly {
             overrides,
             gglib_runtime::process::residency::explain::Loaded::NOTHING,
         )
+        .map(|mut plan| {
+            if let Some(said) = &self.not_installed {
+                plan.not_installed = Some(said.clone());
+            }
+            plan
+        })
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {

@@ -945,22 +945,18 @@ async fn explain_carries_the_runtimes_plan_of_a_bare_start() {
 }
 
 /// With the engine not installed there is no line to give: the service
-/// sends none, and the plan says why, in the words a load would fail with.
+/// sends none, and the plan's sentence says why. (The runtime's tests check
+/// the sentence and when a plan says it.)
 #[tokio::test]
 async fn explain_gives_no_line_for_an_engine_not_installed_and_says_why() {
-    // Nothing is installed under this binary's own data root, so the
-    // llama-server a launch falls back to is not there either.
-    gglib_core::paths::isolate_data_root();
+    let said = "llama-server not found at: /data/.llama/bin/llama-server";
     let core = test_core().await;
     let dir = tempdir().unwrap();
-    let missing = dir.path().join("llama-server");
     let ops = ModelOps::new(ModelDeps {
         core: Arc::clone(&core),
         runtime: Arc::new(PlansOnly {
-            binaries: gglib_runtime::process::RuntimeBinaries {
-                llama: missing.clone(),
-                sd: dir.path().join("sd-server"),
-            },
+            not_installed: Some(said.to_owned()),
+            ..PlansOnly::default()
         }),
         gguf_parser: Arc::new(NoopGgufParser),
         emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
@@ -970,9 +966,7 @@ async fn explain_gives_no_line_for_an_engine_not_installed_and_says_why() {
     let dto = ops.explain(id, None).await.expect("explain");
 
     assert_eq!(dto.command, None);
-    assert_eq!(dto.plan.program, missing.to_string_lossy());
-    let said = dto.plan.not_installed.expect("the plan says why");
-    assert!(said.contains("gglib config llama install"), "{said}");
+    assert_eq!(dto.plan.not_installed.as_deref(), Some(said));
 }
 
 /// The id a client sends is named over the whole catalogue: a listing a

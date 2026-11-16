@@ -11,6 +11,8 @@
 //! second implementation: `fit_or_undivided` is the shared seam, and this
 //! module supplies the same two budgets to it.
 
+use std::path::Path;
+
 use gglib_core::cache_config::{CacheRamSetting, KvCacheType};
 use gglib_core::domain::{
     FitInputs, KvShape, LaunchPlan, RuntimeKind, SecondarySlotDecision, SlotFootprint, Unload,
@@ -18,10 +20,12 @@ use gglib_core::domain::{
 };
 use gglib_core::ports::{LaunchOverrides, ModelLaunchSpec, ModelRuntimeError};
 use gglib_core::server_config::ServerConfigOptions;
+use gglib_core::utils::process::bounded::Failure;
 
 use super::context::fit_or_undivided;
 use super::launch::{LaunchRequest, LlamaResolutions, plan_llama, plan_sd};
 use super::{explain_args, prepare, vram};
+use crate::engine::NotWorking;
 use crate::process::admission::Resident;
 use crate::process::{RuntimeBinaries, SpawnConfig};
 use crate::system::FitMemory;
@@ -118,14 +122,16 @@ impl Loaded<'static> {
 /// The same resolutions a launch runs, in the same order (`prepare`, then
 /// the runtime's planner), over `template` and this request's overrides
 /// and the `others` loaded now, which the RAM cache is sized after. The
-/// arguments are the spawn's own token list with the port spelled `auto`,
-/// each with the decision behind it (`explain_args`); the fit is what the
-/// context was sized by. Planned as a launch into the primary slot: the
-/// queue chooses the slot when the launch happens, and a second slot's
-/// cache differs.
+/// program is the engine of `binaries` the launch would run, by its path
+/// (`engine`). The arguments are the spawn's own token list with the port
+/// spelled `0`, which the engine reads as any free port, each with the
+/// decision behind it (`explain_args`); the fit is what the context was
+/// sized by. Planned as a launch into the primary slot: the queue chooses
+/// the slot when the launch happens, and a second slot's cache differs.
 ///
-/// Nothing is checked on disk: a file that is missing is the inspector's
-/// to name, and a plan of a model whose weights are gone is still the plan.
+/// Only the engine is looked for on disk, so the plan can say it is not
+/// installed: any other file that is missing is the inspector's to name,
+/// and a plan of a model whose weights are gone is still the plan.
 ///
 /// # Errors
 ///
@@ -149,21 +155,16 @@ pub fn plan_launch(
         others,
         already_resident,
     } = loaded;
-    let _ = binaries;
     let request = prepare(spec, template, cache_ram, num_ctx, default_ctx, overrides);
     let planned = match request.spec.runtime() {
         RuntimeKind::Llama => plan_llama(others, &request),
         RuntimeKind::StableDiffusion => plan_sd(&request)?,
     };
-    let (program, args) = match (&planned.config, &planned.llama) {
-        (SpawnConfig::Llama(config), Some(resolved)) => (
-            RuntimeKind::Llama.server_name(),
-            explain_args::llama_args(config, resolved, &request),
-        ),
-        (SpawnConfig::Sd(config), _) => (
-            RuntimeKind::StableDiffusion.server_name(),
-            explain_args::sd_args(config),
-        ),
+    let args = match (&planned.config, &planned.llama) {
+        (SpawnConfig::Llama(config), Some(resolved)) => {
+            explain_args::llama_args(config, resolved, &request)
+        }
+        (SpawnConfig::Sd(config), _) => explain_args::sd_args(config),
         (SpawnConfig::Llama(_), None) => {
             return Err(ModelRuntimeError::Internal(
                 "a llama-server plan carried no resolutions".to_owned(),
@@ -178,15 +179,42 @@ pub fn plan_launch(
         others,
         already_resident,
     );
+    let (program, not_installed) = engine(
+        request.spec.runtime(),
+        binaries.for_runtime(request.spec.runtime()),
+    );
     Ok(LaunchPlan {
-        program: program.to_owned(),
+        program,
         args,
-        not_installed: None,
+        not_installed,
         narration: planned.narration,
         unloads,
         // The same value the narration carries: one fit, read twice.
         fit: request.fit,
     })
+}
+
+/// The engine a launch of `runtime` runs, by its path, from `binary`, the
+/// one its process core holds: for llama-server the spawn's own choice
+/// ([`llama_binary`](crate::command::llama_binary)), for `sd-server`
+/// `binary` itself. When none is there, `binary` (where gglib installs it)
+/// and the sentence a load that tried would fail with
+/// ([`NotWorking::when_started`]): it is not found, and the command that
+/// installs it.
+fn engine(runtime: RuntimeKind, binary: &Path) -> (String, Option<String>) {
+    let found = match runtime {
+        RuntimeKind::Llama => crate::command::llama_binary(Some(binary)).ok(),
+        RuntimeKind::StableDiffusion => binary.is_file().then(|| binary.to_path_buf()),
+    };
+    found.map_or_else(
+        || {
+            (
+                binary.to_string_lossy().into_owned(),
+                Some(NotWorking::when_started(runtime, binary, Failure::NotFound).to_string()),
+            )
+        },
+        |path| (path.to_string_lossy().into_owned(), None),
+    )
 }
 
 /// The second-slot decision this launch would meet: the same arithmetic

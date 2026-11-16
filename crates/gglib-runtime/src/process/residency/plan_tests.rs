@@ -40,7 +40,7 @@ fn value_of<'a>(plan: &'a LaunchPlan, flag: &str) -> Option<&'a str> {
 fn plan(set: &ResidentSet, spec: &ModelLaunchSpec) -> LaunchPlan {
     set.plan(
         spec,
-        &RuntimeBinaries::llama_only("llama-server"),
+        &RuntimeBinaries::stand_in(),
         None,
         None,
         &LaunchOverrides::default(),
@@ -232,7 +232,7 @@ fn a_plan_names_the_engine_the_manager_launches_from() {
 fn a_runtime_with_its_own_cache_setting_plans_with_it() {
     let manager = Arc::new(ProcessManager::new(
         9000,
-        RuntimeBinaries::llama_only("llama-server"),
+        RuntimeBinaries::stand_in(),
         Arc::new(StubCatalog),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,

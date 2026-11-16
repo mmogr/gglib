@@ -46,7 +46,7 @@ fn the_command_line_is_the_program_and_each_token_in_order() {
     let plan = plan(vec![
         arg("-m", Some("/models/qwen.gguf")),
         arg("--metrics", None),
-        arg("--port", Some("auto")),
+        arg("--port", Some("0")),
     ]);
     for shell in [Shell::Posix, Shell::PowerShell] {
         let command = plan.command_line(shell);
@@ -54,11 +54,11 @@ fn the_command_line_is_the_program_and_each_token_in_order() {
         assert_eq!(command.program, "llama-server");
         assert_eq!(
             command.args,
-            ["-m /models/qwen.gguf", "--metrics", "--port auto"]
+            ["-m /models/qwen.gguf", "--metrics", "--port 0"]
         );
         assert_eq!(
             command.line,
-            "llama-server -m /models/qwen.gguf --metrics --port auto"
+            "llama-server -m /models/qwen.gguf --metrics --port 0"
         );
     }
 }
