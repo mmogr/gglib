@@ -5,14 +5,20 @@
 //! Only the download is offered here: a source build streams a different
 //! event type and is the command line's, which these refusals name. Nothing
 //! is installed or removed while a model runs on that engine.
+//!
+//! An install whose files are in place but whose engine cannot run (its
+//! Verify found it so: on Windows, for want of Microsoft's runtime) is
+//! installed, and completes: the engine's status says why it does not work
+//! and offers the repair, so the pages say it once, from there.
 
 use serde::Serialize;
 
 use gglib_core::domain::{EngineState, RuntimeKind};
 use gglib_core::paths::{LLAMA_INSTALL_COMMAND, SD_INSTALL_COMMAND};
 use gglib_core::ports::ModelRuntimePort;
+use gglib_core::utils::process::bounded::Failure;
 use gglib_runtime::engine::{
-    Fix, FixOffer, InstallPlan, PinStanding, PinState, RepairReport, current_fix,
+    Fix, FixOffer, InstallPlan, NotWorking, PinStanding, PinState, RepairReport, current_fix,
     install_visual_cpp_runtime, pin_state, plan_install, plan_with, standing_line,
 };
 use gglib_runtime::llama::{LlamaProgressEvent, LlamaStatus, llama_status};
@@ -114,6 +120,11 @@ impl SetupOps {
 
     /// Install `kind`'s pinned download, streaming progress on `tx`, unless
     /// a model runs on it or the install would be a source build.
+    ///
+    /// An install that put the engine there ends with `completed`, even when
+    /// its Verify found the engine cannot run: the engine's status, read
+    /// next, says why and offers the repair. The command line's install
+    /// still ends with the check's error, and offers the repair there.
     pub async fn install(
         &self,
         runtime: &dyn ModelRuntimePort,
@@ -122,12 +133,26 @@ impl SetupOps {
     ) -> Result<(), GuiError> {
         refuse_while_serving(runtime, kind, "installing").await?;
         refuse_a_source_build(kind)?;
+        let pipeline = tx.clone();
         let installed = match kind {
-            RuntimeKind::Llama => gglib_runtime::llama::download_prebuilt_binaries(tx).await,
-            RuntimeKind::StableDiffusion => gglib_runtime::sd::install_sd_prebuilt(tx).await,
+            RuntimeKind::Llama => gglib_runtime::llama::download_prebuilt_binaries(pipeline).await,
+            RuntimeKind::StableDiffusion => gglib_runtime::sd::install_sd_prebuilt(pipeline).await,
         };
         match install_ended(kind, installed) {
             InstallEnded::Completed => Ok(()),
+            InstallEnded::NotWorking(e) => {
+                // The release the install recorded before its Verify.
+                let state = tokio::task::spawn_blocking(move || pin_state(kind))
+                    .await
+                    .ok()
+                    .and_then(Result::ok);
+                let Some(version) = state.and_then(|s| s.installed_release.or(s.target_release))
+                else {
+                    return Err(failed(kind, &e));
+                };
+                let _ = tx.send(LlamaProgressEvent::Completed { version }).await;
+                Ok(())
+            }
             InstallEnded::Failed(e) => Err(e),
         }
     }
@@ -152,19 +177,34 @@ impl SetupOps {
 pub(crate) enum InstallEnded {
     /// It completed, and the pipeline said so on its stream.
     Completed,
+    /// Its files are in place, and its Verify found the engine there but
+    /// unable to run, for the reason the engine's status gives.
+    NotWorking(anyhow::Error),
     /// It did not install.
     Failed(GuiError),
 }
 
-/// How the install of `kind` that returned `installed` ended.
+/// How the install of `kind` that returned `installed` ended: an error
+/// carrying the engine check's [`NotWorking`] for a binary that is there
+/// is the engine's state, not the install's failure. One that found no
+/// binary is the install's: it did not put the engine where it runs from.
 pub(crate) fn install_ended(kind: RuntimeKind, installed: anyhow::Result<()>) -> InstallEnded {
     match installed {
         Ok(()) => InstallEnded::Completed,
-        Err(e) => InstallEnded::Failed(GuiError::Internal(format!(
-            "Failed to install {}: {e}",
-            kind.label()
-        ))),
+        Err(e)
+            if e.chain()
+                .filter_map(|cause| cause.downcast_ref::<NotWorking>())
+                .any(|not_working| not_working.failure != Failure::NotFound) =>
+        {
+            InstallEnded::NotWorking(e)
+        }
+        Err(e) => InstallEnded::Failed(failed(kind, &e)),
     }
+}
+
+/// An install of `kind` that ended with `e`, as the route reports it.
+fn failed(kind: RuntimeKind, e: &anyhow::Error) -> GuiError {
+    GuiError::Internal(format!("Failed to install {}: {e}", kind.label()))
 }
 
 /// A conflict unless `fix`, `kind`'s fix now, is the runtime's install, the

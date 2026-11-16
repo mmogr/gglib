@@ -254,7 +254,7 @@ fn an_installed_engine_that_cannot_run_is_not_a_failed_install() {
         );
 
         assert!(
-            !matches!(ended, InstallEnded::Failed(_)),
+            matches!(ended, InstallEnded::NotWorking(_)),
             "{kind:?}: {ended:?}"
         );
     }
