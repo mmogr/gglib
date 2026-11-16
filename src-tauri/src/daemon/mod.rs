@@ -1,11 +1,13 @@
 #![doc = include_str!("README.md")]
 
 mod launch;
+mod service;
 mod snapshot;
 mod token;
 mod watch;
 
 use launch::spawn_external_daemon;
+pub(crate) use service::{Launch, Service, Started};
 pub(crate) use snapshot::DaemonSnapshot;
 pub(crate) use token::daemon_token;
 pub(crate) use watch::{Refresh, spawn as watch};
