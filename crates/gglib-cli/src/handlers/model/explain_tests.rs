@@ -229,7 +229,12 @@ async fn the_launch_is_the_runtimes_plan_through_the_one_shot_runtime() {
     let explanation = explain(&one_shot_model_ops(&ctx), model.id, None)
         .await
         .expect("explained");
-    let text = launch_display::launch_text(&model.name, model.id, &explanation.plan);
+    let text = launch_display::launch_text(
+        &model.name,
+        model.id,
+        &explanation.plan,
+        explanation.command.as_ref(),
+    );
 
     let line = format!(
         "llama-server -m {} --host 127.0.0.1 --port auto --metrics --parallel 1",

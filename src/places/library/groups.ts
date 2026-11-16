@@ -3,7 +3,7 @@
  * pinned without a screen.
  *
  * A model is in one group: Loaded when a server for it is in the server
- * registry, On this Mac otherwise. A search is words, every one of which a
+ * registry, On this <machine> otherwise. A search is words, every one of which a
  * row must match (AND, as the tag filter was): a word matches the name, the
  * quant, a tag, the architecture, "vision" / "sees" / "images" on a model
  * that reads images, "draws" or the family on one that draws, and a size
@@ -131,7 +131,7 @@ export function sortModels(models: readonly GgufModel[], sort: LibrarySort): Ggu
 
 /**
  * This machine's models in their groups, each matching `query`, each group
- * in `sort`'s order: Loaded holds the models `loadedIds` names, On this Mac
+ * in `sort`'s order: Loaded holds the models `loadedIds` names, On this <machine>
  * the rest, so a model is in one.
  */
 export function libraryGroups(

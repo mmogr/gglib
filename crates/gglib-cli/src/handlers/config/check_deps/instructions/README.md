@@ -15,7 +15,7 @@ This module provides user-friendly, copy-paste installation commands for missing
 │                  instructions Module                         │
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
-│  check_deps → HostOs::this() → platform module              │
+│  check_deps → HostOs::current() → platform module            │
 │               (gglib-core)    (this)                         │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
@@ -25,7 +25,7 @@ This module provides user-friendly, copy-paste installation commands for missing
 1. Parent `check_deps` module identifies what this gglib needs and lacks
    (the report's required, missing rows; an installed copy's build tools are
    never among them)
-2. `HostOs::this()` names the OS, and `platform` the Linux distribution
+2. `HostOs::current()` (`gglib_core::host`) names the OS, and `platform` the Linux distribution
 3. Appropriate platform-specific module formats instructions
 4. Instructions printed to terminal for user to copy/paste
 

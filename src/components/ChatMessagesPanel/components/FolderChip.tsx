@@ -5,6 +5,7 @@ import { Icon } from '../../ui/Icon';
 import { IconButton } from '../../ui/IconButton';
 import { Input } from '../../ui/Input';
 import { cn } from '../../../utils/cn';
+import { fileName, useHost } from '../../../services/hostRegistry';
 import type { ChatFolder } from '../../../hooks/useChatFolder';
 
 /** Where a chat's folder is: this machine on desktop; on web, whose browser may be another device's, the machine gglib runs on. */
@@ -23,12 +24,6 @@ export function folderOffer({ native, sentTo }: Pick<ChatFolder, 'native' | 'sen
 export function folderTitle(path: string, { sentTo, unread }: Pick<ChatFolder, 'sentTo' | 'unread'>): string {
   if (unread) return `This model calls no tools, so ${path} is not read. × forgets it.`;
   return `This chat's file tools read ${path}, read-only. Click to choose another.${sentOf(sentTo)}`;
-}
-
-/** The last name in `path`, which is what the chip shows; the whole path where it has none. */
-export function folderName(path: string): string {
-  const trimmed = path.replace(/[\\/]+$/, '');
-  return trimmed.split(/[\\/]/).pop() || path;
 }
 
 /** Choose another folder: the native dialog on desktop; on web, the field the path is typed in (`typing`). */
@@ -54,6 +49,7 @@ interface FolderChipProps {
 export const FolderChip: FC<FolderChipProps> = ({ folder, typing, setTyping }) => {
   const [draft, setDraft] = useState(folder.path ?? '');
   const { path, error } = folder;
+  const host = useHost();
   // The field opens on the folder as it stands, whichever control opened it.
   const [wasTyping, setWasTyping] = useState(typing);
   if (typing !== wasTyping) {
@@ -108,7 +104,7 @@ export const FolderChip: FC<FolderChipProps> = ({ folder, typing, setTyping }) =
         title={error ? `${path ?? ''}${path ? ': ' : ''}${error}` : folderTitle(path ?? '', folder)}
         onClick={() => changeFolder(folder, setTyping)}
       >
-        <span className="truncate">{path === null ? 'Folder' : folderName(path)}</span>
+        <span className="truncate">{path === null ? 'Folder' : fileName(path, host)}</span>
         {error && <span className="sr-only">: {error}</span>}
       </Button>
       <IconButton type="button" label="Clear the folder" size="sm" variant="ghost" className="text-current" onClick={folder.clear}>

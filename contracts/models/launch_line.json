@@ -81,7 +81,42 @@
       },
       "fit": null
     },
-    "line": "llama-server -m /models/qwen3-4b.gguf --host 127.0.0.1 --port auto --metrics --parallel 1 -c 32768 --jinja --cache-type-k q8_0 --cache-type-v q8_0 --reasoning-format deepseek"
+    "commands": [
+      {
+        "shell": "posix",
+        "program": "llama-server",
+        "args": [
+          "-m /models/qwen3-4b.gguf",
+          "--host 127.0.0.1",
+          "--port auto",
+          "--metrics",
+          "--parallel 1",
+          "-c 32768",
+          "--jinja",
+          "--cache-type-k q8_0",
+          "--cache-type-v q8_0",
+          "--reasoning-format deepseek"
+        ],
+        "line": "llama-server -m /models/qwen3-4b.gguf --host 127.0.0.1 --port auto --metrics --parallel 1 -c 32768 --jinja --cache-type-k q8_0 --cache-type-v q8_0 --reasoning-format deepseek"
+      },
+      {
+        "shell": "powershell",
+        "program": "llama-server",
+        "args": [
+          "-m /models/qwen3-4b.gguf",
+          "--host 127.0.0.1",
+          "--port auto",
+          "--metrics",
+          "--parallel 1",
+          "-c 32768",
+          "--jinja",
+          "--cache-type-k q8_0",
+          "--cache-type-v q8_0",
+          "--reasoning-format deepseek"
+        ],
+        "line": "llama-server -m /models/qwen3-4b.gguf --host 127.0.0.1 --port auto --metrics --parallel 1 -c 32768 --jinja --cache-type-k q8_0 --cache-type-v q8_0 --reasoning-format deepseek"
+      }
+    ]
   },
   {
     "plan": {
@@ -153,7 +188,38 @@
       },
       "fit": null
     },
-    "line": "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf' --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv k=v,a+b%c:d@e"
+    "commands": [
+      {
+        "shell": "posix",
+        "program": "llama-server",
+        "args": [
+          "-m '/Users/m/Library/Application Support/gglib/a b.gguf'",
+          "--mmproj '/it'\\''s/mmproj.gguf'",
+          "--alias 'say \"hi\"'",
+          "--sep 'a\tb'",
+          "--empty ''",
+          "--alias '$HOME'",
+          "-ot 'blk\\.\\d+\\.ffn_.*=CPU'",
+          "--override-kv k=v,a+b%c:d@e"
+        ],
+        "line": "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it'\\''s/mmproj.gguf' --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv k=v,a+b%c:d@e"
+      },
+      {
+        "shell": "powershell",
+        "program": "llama-server",
+        "args": [
+          "-m '/Users/m/Library/Application Support/gglib/a b.gguf'",
+          "--mmproj '/it''s/mmproj.gguf'",
+          "--alias 'say \"hi\"'",
+          "--sep 'a\tb'",
+          "--empty ''",
+          "--alias '$HOME'",
+          "-ot 'blk\\.\\d+\\.ffn_.*=CPU'",
+          "--override-kv 'k=v,a+b%c:d@e'"
+        ],
+        "line": "llama-server -m '/Users/m/Library/Application Support/gglib/a b.gguf' --mmproj '/it''s/mmproj.gguf' --alias 'say \"hi\"' --sep 'a\tb' --empty '' --alias '$HOME' -ot 'blk\\.\\d+\\.ffn_.*=CPU' --override-kv 'k=v,a+b%c:d@e'"
+      }
+    ]
   },
   {
     "plan": {
@@ -204,6 +270,89 @@
       },
       "fit": null
     },
-    "line": "sd-server --diffusion-model /m/flux1-schnell-q8_0.gguf --vae /m/ae.safetensors --listen-ip 127.0.0.1 --listen-port auto --steps 4"
+    "commands": [
+      {
+        "shell": "posix",
+        "program": "sd-server",
+        "args": [
+          "--diffusion-model /m/flux1-schnell-q8_0.gguf",
+          "--vae /m/ae.safetensors",
+          "--listen-ip 127.0.0.1",
+          "--listen-port auto",
+          "--steps 4"
+        ],
+        "line": "sd-server --diffusion-model /m/flux1-schnell-q8_0.gguf --vae /m/ae.safetensors --listen-ip 127.0.0.1 --listen-port auto --steps 4"
+      },
+      {
+        "shell": "powershell",
+        "program": "sd-server",
+        "args": [
+          "--diffusion-model /m/flux1-schnell-q8_0.gguf",
+          "--vae /m/ae.safetensors",
+          "--listen-ip 127.0.0.1",
+          "--listen-port auto",
+          "--steps 4"
+        ],
+        "line": "sd-server --diffusion-model /m/flux1-schnell-q8_0.gguf --vae /m/ae.safetensors --listen-ip 127.0.0.1 --listen-port auto --steps 4"
+      }
+    ]
+  },
+  {
+    "plan": {
+      "program": "llama-server",
+      "args": [
+        {
+          "flag": "-m",
+          "value": "C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf",
+          "decision": "model",
+          "source": "model_author",
+          "reason": "why"
+        },
+        {
+          "flag": "--mmproj",
+          "value": "C:\\Users\\m\\My Models\\mmproj-F16.gguf",
+          "decision": "images",
+          "source": "you",
+          "reason": "why"
+        },
+        {
+          "flag": "--port",
+          "value": "auto",
+          "decision": "port",
+          "source": "gglib",
+          "reason": "why"
+        }
+      ],
+      "narration": {
+        "model_name": "m",
+        "quantization": null,
+        "weights_bytes": 0,
+        "decisions": [],
+        "fit": null
+      },
+      "fit": null
+    },
+    "commands": [
+      {
+        "shell": "posix",
+        "program": "llama-server",
+        "args": [
+          "-m 'C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf'",
+          "--mmproj 'C:\\Users\\m\\My Models\\mmproj-F16.gguf'",
+          "--port auto"
+        ],
+        "line": "llama-server -m 'C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf' --mmproj 'C:\\Users\\m\\My Models\\mmproj-F16.gguf' --port auto"
+      },
+      {
+        "shell": "powershell",
+        "program": "llama-server",
+        "args": [
+          "-m C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf",
+          "--mmproj 'C:\\Users\\m\\My Models\\mmproj-F16.gguf'",
+          "--port auto"
+        ],
+        "line": "llama-server -m C:\\Users\\m\\AppData\\Local\\gglib\\models\\qwen3-4b.Q8_0.gguf --mmproj 'C:\\Users\\m\\My Models\\mmproj-F16.gguf' --port auto"
+      }
+    ]
   }
 ]

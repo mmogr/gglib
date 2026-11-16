@@ -1,10 +1,13 @@
 //! Wire type for the build-identity surface.
 //!
-//! Every field comes from `gglib-build-info`, the one place that knows what
-//! commit this binary was built from. The dashboard reads it so a bug report
-//! from the GUI names a build that can actually be checked out — the same
-//! thing `gglib --version` gives someone on the terminal.
+//! Every build field comes from `gglib-build-info`, the one place that knows
+//! what commit this binary was built from; `host` from `gglib_core::host`.
+//! The dashboard reads it so a bug report from the GUI names a build that
+//! can actually be checked out — the same thing `gglib --version` gives
+//! someone on the terminal — and every window reads `host` to name the
+//! machine the service runs on.
 
+use gglib_core::host::Host;
 use serde::Serialize;
 
 /// What build the daemon answering this request is.
@@ -28,6 +31,10 @@ pub(crate) struct VersionDto {
     /// What a user should be shown: `"0.15.4 (a1b2c3d4e5f6)"`, or just the
     /// version when no commit is available.
     pub display: String,
+    /// The machine this daemon runs on: its OS, what it is called and how
+    /// its paths are written. A page names the machine in these words, so
+    /// a browser tab on another machine says what this one is.
+    pub host: Host,
 }
 
 impl VersionDto {
@@ -38,6 +45,7 @@ impl VersionDto {
             sha: gglib_build_info::GIT_SHA.to_owned(),
             fingerprint: gglib_build_info::FINGERPRINT.to_owned(),
             display: gglib_build_info::LONG_VERSION.to_owned(),
+            host: Host::current(),
         }
     }
 }

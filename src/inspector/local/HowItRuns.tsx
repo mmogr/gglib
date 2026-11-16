@@ -1,7 +1,9 @@
 /**
- * How it runs: the launch gglib would make, as the launch line and then
- * one row per decision (`runRows`), each saying the plan's narration for
- * that decision where it has one (the words How it ran says), else its
+ * How it runs: the launch gglib would make, as the launch line (the
+ * daemon's, written for its machine's shell: `LaunchExplanation.command`,
+ * which ⧉ copies whole; from a service older than the line, `NO_LINE` in
+ * its place) and then one row per decision (`runRows`), each saying the
+ * plan's narration for that decision where it has one (the words How it ran says), else its
  * arguments, with whose choice it was and why on hover. On a loaded model it is How it ran: the decisions its launch
  * recorded (`LaunchFacts.narration`), as launched, where a change applies
  * at the next load. Change turns a row into its control (`Change`); a row
@@ -16,11 +18,11 @@ import { useState, type FC } from 'react';
 import { CopyValue } from '../../components/CopyValue';
 import { Select } from '../../components/ui/Select';
 import type { GgufModel, InferenceProfile, LaunchExplanation, ModelDetail } from '../../types';
+import { useHost } from '../../services/hostRegistry';
 import type { LaunchNarration } from '../../types/generated/LaunchNarration';
 import { caveats, describePublished } from '../../utils/samplingProvenance';
 import type { SheetField } from '../loadOptions';
 import { CHANGEABLE, Change, reset, type Update } from './Change';
-import { commandLine } from './commandLine';
 import { LaunchLine } from './LaunchLine';
 import { Row } from './Row';
 import {
@@ -57,6 +59,14 @@ interface HowItRunsProps {
   onChangeToken?: (field: SheetField) => void;
 }
 
+/**
+ * In the launch line's place, from a running service older than the line:
+ * the desktop app adopts a service already running, which can be an older
+ * build. Stopping it from About and starting gglib runs this build's.
+ */
+const NO_LINE =
+  'The running service is an older build and does not give its launch line. Stop gglib in Settings › About, then start it, to run this build.';
+
 const Caption: FC<{ title: string; aside: string }> = ({ title, aside }) => (
   <div className="flex items-baseline justify-between">
     <h3 className="m-0 text-xs font-semibold text-text">{title}</h3>
@@ -69,6 +79,8 @@ export const HowItRuns: FC<HowItRunsProps> = (props) => {
   const [changing, setChanging] = useState<string | null>(null);
   const sampling = explanation?.sampling ?? null;
   const plan = explanation?.plan ?? null;
+  const command = explanation?.command ?? null;
+  const host = useHost();
   const loaded = narration !== undefined;
 
   const control = (kind: string) =>
@@ -133,7 +145,7 @@ export const HowItRuns: FC<HowItRunsProps> = (props) => {
   const rows = runRows(plan, model.imageFamily !== undefined, storedMtp != null ? ['mtp'] : []);
   const value = (row: RunRow) => {
     const said = narrated(plan.narration, row.key);
-    const own = row.args.length ? argsValue(row.args) : null;
+    const own = row.args.length ? argsValue(row.args, host) : null;
     if (row.key === 'ctx') return [said ?? own, plan.fit?.note].filter(Boolean).join(' · ');
     if (row.key === 'sampling') return samplingValue(sampling);
     if (row.key === 'reasoning') {
@@ -159,12 +171,16 @@ export const HowItRuns: FC<HowItRunsProps> = (props) => {
   return (
     <section aria-label="How it runs" className="flex flex-col gap-xs">
       <Caption title="How it runs" aside={chosenBy(plan.args)} />
-      <div className="flex items-start gap-xs">
-        <div className="min-w-0 flex-1">
-          <LaunchLine plan={plan} onChange={onChangeToken} />
+      {command ? (
+        <div className="flex items-start gap-xs">
+          <div className="min-w-0 flex-1">
+            <LaunchLine plan={plan} command={command} onChange={onChangeToken} />
+          </div>
+          <CopyValue value={command.line} label="Copy as command" />
         </div>
-        <CopyValue value={commandLine(plan)} label="Copy as command" />
-      </div>
+      ) : (
+        <p className="m-0 text-xs text-text-secondary">{NO_LINE}</p>
+      )}
       <dl className="m-0">
         {rows.map((row) => (
           <Row

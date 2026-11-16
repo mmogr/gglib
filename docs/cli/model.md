@@ -84,7 +84,9 @@ $ gglib model inspect Qwen3-4B-Instruct-2507
 ## `explain`
 
 The launch gglib would make for the model, without making it: the command
-it would run, each argument beside whose choice it was (the model author's,
+it would run, written for the shell of the machine that runs it (a POSIX
+shell on Linux and macOS, PowerShell on Windows, a value quoted where that
+shell would read it otherwise), each argument beside whose choice it was (the model author's,
 gglib's, or yours) and why, then the context size the model would be served
 at and how it was fitted, under the sentence the app shows below the
 model's name ("Fits this machine with 128K context, of 256K trained.")
@@ -102,7 +104,7 @@ launch or a hierarchy different from the one that happens, and
 $ gglib model explain Qwen3-4B-Instruct-2507
 
   Launch for Qwen3-4B-Instruct-2507 (id 2)
-  llama-server -m /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf --host 127.0.0.1 --port auto --metrics --parallel 1 -c 131072 --jinja --reasoning-format deepseek --cache-ram 100813 --cache-type-k q8_0 --cache-type-v q8_0
+  llama-server -m '/Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf' --host 127.0.0.1 --port auto --metrics --parallel 1 -c 131072 --jinja --reasoning-format deepseek --cache-ram 100813 --cache-type-k q8_0 --cache-type-v q8_0
 
   -m                  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf ← model author: the weights, as published
   --host              127.0.0.1    ← gglib: loopback only; the endpoint is the address you share

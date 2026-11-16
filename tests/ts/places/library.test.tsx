@@ -79,6 +79,7 @@ import { cleanupServerEvents, initServerEvents } from '../../../src/services/ser
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import { applyProxyStatus, ingestProxyEvent, resetProxyState } from '../../../src/services/proxyRegistry';
 import { resetEngineInstall } from '../../../src/places/library/engineInstall';
+import { applyHost } from '../../../src/services/hostRegistry';
 import { INSTALL_PHASE_LABELS } from '../../../src/types/setup';
 import { getSetupStatus } from '../../../src/services/transport/api/setup';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../src/services/remoteRegistry';
@@ -175,6 +176,24 @@ describe('the library place', () => {
     expect(groupNames()).toEqual(['Downloading', 'Loaded', 'On this Mac', 'On desk']);
     expect(rowsOf('Loaded')).toEqual(['Gemma-3-4B-It']);
     expect(rowsOf('On this Mac')).toEqual(['Qwen3-4B', 'Qwen3-30B-A3B']);
+  });
+
+  it("names the machine in the service's words: On this PC for a service on Windows, On this computer on Linux", async () => {
+    library.models = [guiModel({ id: 1, name: 'Qwen3-4B' })];
+    try {
+      applyHost({ os: 'windows', machine: 'PC', separators: '\\/' });
+      renderLibrary();
+      expect(await screen.findByRole('listbox', { name: 'On this PC' })).toBeInTheDocument();
+      expect(groupNames()).toEqual(['On this PC']);
+      cleanup();
+      cleanupModelEvents();
+
+      applyHost({ os: 'linux', machine: 'computer', separators: '/' });
+      renderLibrary();
+      expect(await screen.findByRole('listbox', { name: 'On this computer' })).toBeInTheDocument();
+    } finally {
+      applyHost({ os: 'macos', machine: 'Mac', separators: '/' });
+    }
   });
 
   it("says a loaded model's state as the endpoint's live stream gives it, and Loaded while it says nothing", async () => {

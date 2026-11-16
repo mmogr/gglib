@@ -104,12 +104,16 @@ async fn a_load_that_would_unload_a_loaded_model_says_which_and_why() {
     ));
     let (port, asked) = daemon("200 OK", serde_json::to_string(&answer).unwrap());
 
-    let plan = explained(&ctx, &model, port, Some(TOKEN), None)
+    let explanation = explained(&ctx, &model, port, Some(TOKEN), None)
         .await
-        .unwrap()
-        .plan;
+        .unwrap();
 
-    let text = launch_display::launch_text(&model.name, model.id, &plan);
+    let text = launch_display::launch_text(
+        &model.name,
+        model.id,
+        &explanation.plan,
+        explanation.command.as_ref(),
+    );
     assert!(
         text.contains("\n  Unloads Qwen3-30B-A3B first: it would not fit beside it.\n"),
         "{text}"
@@ -128,18 +132,52 @@ async fn a_load_that_unloads_nothing_has_no_unload_line() {
     let answer = serde_json::to_string(&local(&ctx, &model).await).unwrap();
     let (port, asked) = daemon("200 OK", answer);
 
-    let plan = explained(&ctx, &model, port, Some(TOKEN), Some("a+b&c"))
+    let explanation = explained(&ctx, &model, port, Some(TOKEN), Some("a+b&c"))
         .await
-        .unwrap()
-        .plan;
+        .unwrap();
 
-    let text = launch_display::launch_text(&model.name, model.id, &plan);
+    let text = launch_display::launch_text(
+        &model.name,
+        model.id,
+        &explanation.plan,
+        explanation.command.as_ref(),
+    );
     assert!(!text.contains("Unload"), "{text}");
     let route = format!(
         "GET /api/models/{}/explain?profile=a%2Bb%26c HTTP/1.1",
         model.id
     );
     assert_eq!(asked_past_health(&asked), [route]);
+}
+
+/// A service older than the launch line answers without `command`: the
+/// answer still decodes, and the command says the running service does not
+/// give the line, with the remedy the build-mismatch note names, rather than
+/// failing or quoting a line of its own.
+#[tokio::test]
+async fn an_older_service_without_the_line_is_said_so() {
+    let dir = tempfile::tempdir().unwrap();
+    let (ctx, model) = library(dir.path()).await;
+    let mut answer = serde_json::to_value(local(&ctx, &model).await).unwrap();
+    assert!(
+        answer.as_object_mut().unwrap().remove("command").is_some(),
+        "this build sends the line"
+    );
+    let (port, _) = daemon("200 OK", answer.to_string());
+
+    let explanation = explained(&ctx, &model, port, Some(TOKEN), None)
+        .await
+        .expect("an older service's answer decodes");
+    assert_eq!(explanation.command, None);
+    let text = launch_display::launch_text(
+        &model.name,
+        model.id,
+        &explanation.plan,
+        explanation.command.as_ref(),
+    );
+    let said = format!("\n  {}\n", launch_display::NO_LINE_FROM_AN_OLDER_SERVICE);
+    assert!(text.contains(&said), "{text}");
+    assert!(text.contains("`gglib daemon stop`"), "{text}");
 }
 
 /// A profile the daemon has not configured is its 400, and the command's

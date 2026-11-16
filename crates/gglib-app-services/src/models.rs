@@ -211,7 +211,12 @@ impl ModelOps {
             .plan(&spec, None, default_ctx, &overrides)
             .map_err(|e| GuiError::Internal(format!("could not plan the launch: {e}")))?;
 
-        Ok(LaunchExplanationDto { plan, sampling })
+        let command = Some(plan.command_line(gglib_core::host::HostOs::current().shell()));
+        Ok(LaunchExplanationDto {
+            plan,
+            command,
+            sampling,
+        })
     }
 
     /// Import the GGUF file `request` names: the one add, for `POST

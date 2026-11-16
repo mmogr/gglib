@@ -31,6 +31,7 @@ import { useToastContext } from '../../../contexts/ToastContext';
 import { useToolSupportCache } from '../../../hooks/useToolSupportCache';
 import { queueDownload } from '../../../services/downloadsEvents';
 import { useModelLibrary } from '../../../services/modelRegistry';
+import { useThisMachine } from '../../../services/hostRegistry';
 import { getRecommendedModel } from '../../../services/transport/api/setup';
 import type { HfModelKind, HfModelSummary } from '../../../types';
 import type { RecommendationDto } from '../../../types/setup';
@@ -133,10 +134,11 @@ const Suggestion: FC<{ answer: RecommendationDto | null; queueFull: boolean; onD
 }) => {
   const { models } = useModelLibrary();
   const queue = useQueue();
+  const machine = useThisMachine();
   if (answer === null) return <Note>Nothing gglib would suggest fits. Search for a smaller model below.</Note>;
   return (
-    <section aria-label="Suggested for this Mac">
-      <Note>Suggested for this Mac</Note>
+    <section aria-label={`Suggested for ${machine.phrase}`}>
+      <Note>{`Suggested for ${machine.phrase}`}</Note>
       <ActionRow
         name={answer.repo}
         line={formatRecommendation(answer)}
