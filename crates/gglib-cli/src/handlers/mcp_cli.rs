@@ -11,6 +11,7 @@ use gglib_app_services::types::{McpServerInfo, McpServerStatusDto, McpToolInfo};
 use gglib_core::daemon_port;
 use gglib_core::domain::McpState;
 use gglib_core::domain::mcp::{McpLifecycle, NewMcpServer};
+use gglib_core::utils::process::stop::stop_requested;
 use gglib_mcp::McpService;
 
 use crate::bootstrap::CliContext;
@@ -357,7 +358,16 @@ async fn test(ctx: &CliContext, identifier: &str) -> Result<()> {
     let server = resolve_server(ctx, identifier).await?;
     println!("Testing connection to '{}'...", server.name);
 
-    let tools = ctx.mcp.test_server(server.id).await?;
+    // A Ctrl-C while the server starts stops it, and what it started, before
+    // this command ends: it leads a process group of its own on macOS and
+    // Linux, so the terminal's Ctrl-C does not reach it (#2012).
+    let tools = tokio::select! {
+        tools = ctx.mcp.test_server(server.id) => tools?,
+        _ = stop_requested() => {
+            ctx.mcp.shutdown().await;
+            return Err(anyhow!("stopped before '{}' answered", server.name));
+        }
+    };
     println!(
         "✓ Connection successful — {} tool(s) discovered",
         tools.len()

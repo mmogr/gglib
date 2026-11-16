@@ -98,3 +98,37 @@ fn a_line_that_is_no_instruction_is_refused_before_anything_is_written() {
     let dir = tempfile::tempdir().unwrap();
     install(dir.path(), "server", "exec sleep 60");
 }
+
+/// A wrapper runs the program as its child, passes its arguments on and
+/// exits with its status; the program's `pid` file names the program, not
+/// the wrapper.
+#[test]
+fn a_wrapper_runs_the_program_as_its_child_and_the_program_says_its_pid() {
+    let dir = tempfile::tempdir().unwrap();
+    let pid = dir.path().join("server.pid");
+    let program = install(
+        dir.path(),
+        "server",
+        &format!("pid {}\nprint out {{args}}\nexit 4", pid.display()),
+    );
+    let wrapper = gglib_test_proc::wrap(dir.path(), "server-shim", &program);
+
+    let mut started = Command::new(&wrapper)
+        .args(["a", "b"])
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let wrapper_pid = started.id();
+    let status = started.wait().unwrap();
+    let mut out = String::new();
+    std::io::Read::read_to_string(&mut started.stdout.take().unwrap(), &mut out).unwrap();
+
+    assert_eq!(status.code(), Some(4));
+    assert_eq!(out.trim(), "out a b");
+    let pid: u32 = std::fs::read_to_string(&pid)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    assert_ne!(pid, wrapper_pid, "the program is the wrapper's child");
+}
