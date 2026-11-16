@@ -5,6 +5,10 @@ use clap::Subcommand;
 mod secret_arg;
 mod setting_key;
 
+#[cfg(test)]
+#[path = "installer_hooks_tests.rs"]
+mod installer_hooks_tests;
+
 pub(crate) use secret_arg::SecretArg;
 #[cfg(test)]
 pub(crate) use setting_key::Bound;
