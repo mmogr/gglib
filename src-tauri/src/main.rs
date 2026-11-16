@@ -32,6 +32,8 @@ fn main() {
     info!("Tauri application starting");
 
     let builder = tauri::Builder::default()
+        // First, as the plugin requires: a second launch exits here.
+        .plugin(second_launch::plugin())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,

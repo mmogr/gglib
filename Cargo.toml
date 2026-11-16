@@ -135,6 +135,8 @@ tauri = "2.8.5"
 tauri-build = { version = "2.4.1", features = [] }
 tauri-plugin-dialog = "2.6"
 tauri-plugin-autostart = "2"
+# Exact: 2.5.5 is the release built against the Tauri 2.12 in Cargo.lock.
+tauri-plugin-single-instance = "=2.5.5"
 dotenvy = "0.15"
 open = "5"
 

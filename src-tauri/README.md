@@ -142,6 +142,7 @@ For more details on the architecture and how all interfaces work together, see:
   - `src/proxy_actions.rs`: Turning the endpoint on and off, and its URL, for the tray and the menu
   - `src/autostart.rs`: Always-on proxy startup and OS login-item registration
   - `src/dock.rs`: macOS Dock icon visibility (activation policy)
+  - `src/second_launch.rs`: one copy of the app at a time: a second launch shows the first window and passes on its arguments
   - `src/commands/`: Tauri command handlers (organized by domain)
   - `tauri.conf.json`: Tauri configuration
   - `tauri.linux.conf.json`: on Linux, names the deb and rpm `gglib-gui` (the CLI's package is `gglib`), retires the old `gg-lib-gui` package, and keeps the menu entry named gglib through `linux/gglib.desktop`
@@ -220,6 +221,7 @@ the three ways it comes by one and what quitting is allowed to take with it.
 | **proxy_actions.rs** | Turning the endpoint on and off outside a request | Used by the tray and the macOS menu alike (Turn On / Off, Copy Endpoint URL); calls the daemon's `/api/proxy/*` directly and asks for a fresh poll — it deliberately does **not** publish what it expects to be true |
 | **autostart.rs** | Launch visibility & login item | `start_at_login` login item, `should_start_hidden()` (pure launch decision, fails visible). Proxy autostart is the daemon's job |
 | **dock.rs** | macOS Dock icon visibility | `hide()` / `show()` via activation policy; no-ops off macOS so callers need no `cfg` |
+| **second_launch.rs** | One copy of the app at a time | `second_launch()` (pure: the main window is always shown, and the arguments less the program and gglib's own flags are passed on with the working directory), `plugin()` (`tauri-plugin-single-instance`, registered first; its callback spawns `show_main`, then `second-launch` to the main window) |
 | **commands/** | 5 OS integration commands in 2 modules | `util.rs` (API discovery, shell, menu), `app_logs.rs` (frontend log ingestion) |
 
 ### Communication Flow
