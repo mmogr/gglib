@@ -83,6 +83,30 @@ comment).
 > test cannot raise the console events; a run on the Windows VM is their
 > proof. The engines' kill is tested on every OS.
 
+> **Amendment, 2026-11-16 ([#1985](https://github.com/mmogr/gglib/issues/1985)).**
+> On Windows the engines end with the process that started them, however
+> it ends: `taskkill /F`, a crash, a console window closed during a
+> teardown (which still ends the service at once), a logoff. The owner call
+> is `gglib_core::utils::process::tied::tie_to_this_process`, made after
+> each llama-server, `sd-server` and MCP server is started. On Windows it
+> puts the child in a job object the process makes on first use with
+> `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and never closes; the handle cannot
+> be inherited, so when the process ends Windows closes the last handle and
+> ends every process in the job. The calls, `CreateJobObjectW`,
+> `SetInformationJobObject` and `AssignProcessToJobObject`, are in
+> `host.rs` beside the others. A child already in a job (Windows' SSH
+> server and some terminals run their programs in one) is nested, which
+> Windows allows since Windows 8; if the assignment fails anyway, the child
+> runs on untied, a warning is logged, and nothing else changes. On macOS
+> and Linux the call ties nothing and says so (`Tied::NotTied`): the
+> engines keep their process groups, the teardown and the orphan sweep at
+> the next start, by the owner's decision. A child is tied just after it
+> starts, so what it starts in that moment is not; the engines start
+> nothing, and an MCP server's shim is the one case.
+> `crates/gglib-core/tests/tied_child.rs` kills a stand-in service outright
+> and requires its two tied children gone within 2 s where the call says
+> `Tied::ByJob`.
+
 ## Consequences
 
 - `crates/gglib-core/tests/detached_spawn.rs` holds the A5 fault on every
@@ -127,6 +151,8 @@ comment).
   [#1983](https://github.com/mmogr/gglib/issues/1983)).
 - Time limits on the programs gglib waits for
   ([#1984](https://github.com/mmogr/gglib/issues/1984)).
-- Tying the engines to the service on Windows, so they end with it
-  ([#1985](https://github.com/mmogr/gglib/issues/1985)).
+- A service started where its starter's job ends it: Windows' SSH server
+  ends every process of a session when the session closes, the service
+  included, and its engines with it. Outliving the starter would need the
+  starter's job to allow breakaway.
 - Reporting a missing Visual C++ runtime, and repairing it (stack 3 of #1959).
