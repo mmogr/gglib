@@ -63,7 +63,7 @@ required-features = ["test-utils"]
 [dev-dependencies]
 gglib-test-proc = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["io-util", "macros", "rt", "time"] }
 
 [lints]
 workspace = true

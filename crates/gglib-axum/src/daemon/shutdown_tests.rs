@@ -234,3 +234,110 @@ async fn teardown_waits_for_the_runs_ends_but_never_past_its_bound() {
         began.elapsed()
     );
 }
+
+/// Teardown stops every MCP server, with what each started (#2012). A
+/// server leads a process group of its own on macOS and Linux, so nothing
+/// sent to the daemon reaches it: the teardown is what stops it. The
+/// stand-in is started through a shim, as `npx.cmd` is, and the process
+/// behind the shim must be gone once the teardown is done.
+#[tokio::test]
+async fn teardown_stops_every_mcp_server_and_what_it_started() {
+    use gglib_core::NewMcpServer;
+
+    // Its answers to the client's two requests, `initialize` and
+    // `tools/list`, written before they are asked.
+    const INITIALIZED: &str = r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","serverInfo":{"name":"stand-in"},"capabilities":{"tools":{}}}}"#;
+    const NO_TOOLS: &str = r#"{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}"#;
+    let dir = tempfile::tempdir().unwrap();
+    let pid_file = dir.path().join("server.pid");
+    let server = gglib_test_proc::install(
+        dir.path(),
+        "server",
+        &format!(
+            "pid {}\nprint {INITIALIZED}\nprint {NO_TOOLS}\nsleep 30",
+            pid_file.display()
+        ),
+    );
+    let shim = gglib_test_proc::wrap(dir.path(), "server-shim", &server);
+    let state: AppState = std::sync::Arc::new(
+        crate::bootstrap::bootstrap(crate::ServerConfig {
+            base_port: Some(19_400),
+            llama_server_path: "/nonexistent/llama-server".into(),
+            sd_server_path: "/nonexistent/sd-server".into(),
+            max_concurrent_agent_loops: 1,
+            db_path: Some(dir.path().join("gglib.db")),
+            device_keys_path: Some(dir.path().join("remote_devices")),
+        })
+        .await
+        .expect("bootstrap an isolated context"),
+    );
+    let added = state
+        .mcp
+        .add_server(NewMcpServer::new_stdio(
+            "stand-in",
+            shim.to_string_lossy(),
+            Vec::new(),
+            None,
+        ))
+        .await
+        .expect("add the stand-in");
+    state
+        .mcp
+        .start_server(added.id)
+        .await
+        .expect("start the stand-in through its shim");
+    let behind = Behind(
+        std::fs::read_to_string(&pid_file)
+            .expect("the stand-in wrote its pid before it answered")
+            .trim()
+            .parse()
+            .expect("a pid"),
+    );
+    assert!(behind.running(), "the server behind the shim runs");
+
+    teardown(&state).await;
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while behind.running() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the server behind the shim was still running 5s after the teardown"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// The server behind a shim, by its pid; killed when the test ends however
+/// it ends, so none outlives it.
+struct Behind(u32);
+
+impl Behind {
+    /// A view of the system holding the process, while it runs.
+    fn process(&self) -> Option<sysinfo::System> {
+        let pid = sysinfo::Pid::from_u32(self.0);
+        let mut system = sysinfo::System::new();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::Some(&[pid]),
+            true,
+            sysinfo::ProcessRefreshKind::nothing(),
+        );
+        system
+            .process(pid)
+            .is_some_and(|p| p.status() != sysinfo::ProcessStatus::Zombie)
+            .then_some(system)
+    }
+
+    fn running(&self) -> bool {
+        self.process().is_some()
+    }
+}
+
+impl Drop for Behind {
+    fn drop(&mut self) {
+        if let Some(system) = self.process()
+            && let Some(process) = system.process(sysinfo::Pid::from_u32(self.0))
+        {
+            process.kill();
+        }
+    }
+}

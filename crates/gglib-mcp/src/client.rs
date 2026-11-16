@@ -629,3 +629,7 @@ impl Drop for McpClient {
 #[cfg(test)]
 #[path = "client_tests.rs"]
 mod client_tests;
+
+#[cfg(test)]
+#[path = "client_stop_tests.rs"]
+mod client_stop_tests;

@@ -96,6 +96,10 @@ tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 # The connection a fake server answers on, with the request already read.
 gglib-test-http = { workspace = true }
+# A stand-in MCP server behind a shim, and whether the process behind it
+# still runs after the teardown (daemon/shutdown_tests.rs).
+gglib-test-proc = { workspace = true }
+sysinfo = { workspace = true }
 
 [lints]
 workspace = true

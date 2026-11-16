@@ -179,6 +179,10 @@ impl<'a> ExecutableSearcher<'a> {
 }
 
 #[cfg(test)]
+#[path = "node_managers_tests.rs"]
+mod node_managers_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::resolver::env::MockEnv;

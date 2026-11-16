@@ -28,7 +28,8 @@ The library installs the program; the binary is the program.
               ▼
   ┌──────────────────────────────────────────────────────────────┐
   │ dir/sd-server[.exe]: reads dir/sd-server.proc, line by line   │
-  │ argv <path> · print <text> · eprint <text> · sleep <s> · exit │
+  │ argv <path> · pid <path> · print <text> · eprint <text>       │
+  │ sleep <s> · exit <code>                                       │
   └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -38,7 +39,7 @@ The library installs the program; the binary is the program.
 ┌───────────────────────────────────────────────────────────────────┐
 │                          gglib-test-proc                           │
 ├───────────────────────────────────────────────────────────────────┤
-│  lib.rs    install · instructions_path · parse · Instruction        │
+│  lib.rs    install · wrap · instructions_path · parse · Instruction │
 │  main.rs   the program: follows the instruction file beside it      │
 └───────────────────────────────────────────────────────────────────┘
 ```
@@ -67,4 +68,10 @@ let sd = gglib_test_proc::install(
 ```
 
 In `print` and `eprint`, `{args}` stands for the program's arguments, joined
-by spaces.
+by spaces. `pid <path>` writes the program's own process id to `path`.
+
+`wrap(dir, name, program)` writes a script that starts `program` and waits
+for it, as a shim such as `npx.cmd` does: `name.cmd` on Windows, run by
+`cmd.exe`, and an executable `sh` script elsewhere. A test of what stopping
+a shim leaves behind starts the wrapper and finds the program by its `pid`
+file.
