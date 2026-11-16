@@ -103,7 +103,8 @@ export function useLoad(
     setError(null);
     setBusy('load');
     try {
-      if (pin) await startEndpointPinned({ model_id: model.id, options: toStartServerRequest(config) });
+      // The pin is the choice itself: an endpoint on otherwise is switched.
+      if (pin) await startEndpointPinned({ model_id: model.id, options: toStartServerRequest(config), proxy: { replace: true } });
       await getTransport().serveModel(config);
       return null;
     } catch (err) {

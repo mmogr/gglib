@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 mod env;
 mod fs;
+mod node_managers;
 mod platform;
 mod resolve;
 mod search;

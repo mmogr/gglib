@@ -270,4 +270,12 @@ pub struct ServeOptions {
     /// `/v1/gglib/proxy/status` (JSON) and `/v1/gglib/proxy/status/stream` (SSE).
     #[arg(short, long)]
     pub port: Option<u16>,
+    /// Switch the endpoint without asking when it is on otherwise.
+    ///
+    /// With the endpoint on serving every model, another model, or another
+    /// port, address or sampling, `serve` asks before switching it, because
+    /// a switch cuts off the clients connected now. `-y` answers yes. Without
+    /// it, a run that is not in a terminal changes nothing.
+    #[arg(short = 'y', long)]
+    pub yes: bool,
 }

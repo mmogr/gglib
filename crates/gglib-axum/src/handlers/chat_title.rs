@@ -25,7 +25,10 @@ use crate::state::AppState;
 
 /// The thinking budget a title is asked for with: none. `max_tokens` counts
 /// thinking too, so a model that thinks first would spend the title's cap
-/// before the title's first word.
+/// before the title's first word. The pipeline's stage 4b tells the template
+/// too (`chat_template_kwargs.enable_thinking: false`), as it does for any
+/// turn with this budget: with the budget alone, Qwen3 reasons in plain text
+/// and the title is the start of its reasoning.
 const NO_THINKING: i32 = 0;
 
 /// Request body for a chat's title.

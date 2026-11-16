@@ -175,3 +175,7 @@ mod models_dir_tests;
 #[cfg(test)]
 #[path = "settings_drawing_tests.rs"]
 mod drawing_tests;
+
+#[cfg(test)]
+#[path = "settings_autostart_tests.rs"]
+mod autostart_tests;

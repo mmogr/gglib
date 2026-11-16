@@ -533,6 +533,13 @@ preserved. Three rules take a key out of the forwarded body, all of them in
   left in the body is not rejected downstream — it is rendered into the prompt.
   Every refusal, deleted or not, is reported in `client_fields_rejected`.
 
+One key is added rather than taken out. A request whose budget resolves to
+`0` is also sent `chat_template_kwargs.enable_thinking: false`, merged into
+the client's own kwargs, so the template stops asking for the thinking the
+sampler cuts off (stage 4b, `request_pipeline::thinking_off`; ADR 0007's
+2026-11-16 amendment). gglib's own Thinking-off turns arrive here as a
+client's `reasoning_budget_tokens: 0`, so any client's does the same.
+
 ### Inference Profiles
 
 A client selects a named sampling profile by suffixing the model it asks for —

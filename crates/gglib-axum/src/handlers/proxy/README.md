@@ -14,17 +14,18 @@ they are testable without any routing around them. The status names a pin by
 its model's catalogue id (`pinned_model_id`) beside its name (`pinned_model`,
 for showing): two models can share a name, and a rename keeps the id.
 
-What stays in `mod` is the routing and two idempotency decisions:
+What stays in `mod` is the routing and two decisions:
 
-- **Start** treats an already-running proxy as success, because every caller
-  wants an endpoint rather than exclusivity. But `ProxyOps::map_start_error`
-  maps *both* `AlreadyRunning` and `BindFailed` to `Conflict`, and only the
-  first leaves something listening — so the handler checks which happened
-  instead of assuming. Reading a bind failure as success answered `200` with
-  `running: false` and discarded the message naming the port that was taken.
-- **Start-pinned** refuses when a proxy is already running under a different
-  pin. Succeeding there would hand back an endpoint without the
-  refuse-foreign-models guarantee the caller explicitly asked for.
-- **Stop** treats an already-stopped proxy as success, symmetrically.
+- **Start** and **start-pinned** go through `ProxyOps::start_as`. An endpoint
+  already on as the body asks is success (`outcome: unchanged`), because
+  every caller wants an endpoint rather than exclusivity. One on otherwise,
+  a different pin, port, address, sampling or cache among them, is left
+  alone and refused with `409` and type `endpoint_differs`, whose `metadata`
+  says what runs (`now`) and what switching does (`action`), so `gglib
+  proxy` and `gglib serve` can ask before they switch. A body with `replace`
+  switches it in one operation (`outcome: replaced`); a switch whose start is
+  refused puts back what ran and says so. A bind failure on an endpoint
+  that was off is still refused with the message that names the port.
+- **Stop** treats an already-stopped proxy as success.
 
 <!-- module-docs:end -->

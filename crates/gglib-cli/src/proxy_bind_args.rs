@@ -25,4 +25,13 @@ pub struct ProxyBindArgs {
     /// standalone proxy.
     #[arg(long = "default-context-size", value_name = "N")]
     pub default_context: Option<String>,
+    /// Switch the endpoint without asking when it is on otherwise.
+    ///
+    /// With the endpoint on serving one model, or with another port,
+    /// address, sampling or cache than these flags ask, `proxy` asks before
+    /// switching it, because a switch cuts off the clients connected now.
+    /// `-y` answers yes. Without it, a run that is not in a terminal changes
+    /// nothing.
+    #[arg(short = 'y', long)]
+    pub yes: bool,
 }

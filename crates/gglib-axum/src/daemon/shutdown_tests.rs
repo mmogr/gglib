@@ -38,7 +38,11 @@ async fn the_api_path_tolerates_a_second_cancel() {
 fn the_watchdog_outlasts_a_render_stop() {
     assert_eq!(RENDER_STOP_WAIT, Duration::from_secs(20));
     assert_eq!(SHUTDOWN_WATCHDOG, Duration::from_secs(30));
-    assert!(SHUTDOWN_WATCHDOG >= RENDER_STOP_WAIT + RUNS_DRAIN + TRIP_LOG_DRAIN);
+    assert!(SHUTDOWN_WATCHDOG >= RENDER_STOP_WAIT + RUNS_DRAIN + MCP_STOP + TRIP_LOG_DRAIN);
+    assert!(
+        MCP_STOP > gglib_mcp::SERVER_EXIT_GRACE,
+        "the servers' grace fits inside the teardown's bound on stopping them"
+    );
 }
 
 /// The daemon's teardown writes what the loop guard recorded — through the
@@ -233,4 +237,131 @@ async fn teardown_waits_for_the_runs_ends_but_never_past_its_bound() {
         "it waited: {:?}",
         began.elapsed()
     );
+}
+
+/// Teardown stops every MCP server, with what each started (#2012). A
+/// server leads a process group of its own on macOS and Linux, so nothing
+/// sent to the daemon reaches it: the teardown is what stops it. Each
+/// stand-in is started through a shim, as `npx.cmd` is, and ignores its
+/// input closing, so each is ended at its grace; the process behind every
+/// shim must be gone once the teardown is done. The servers are stopped
+/// together, so the teardown takes one grace, not one each.
+#[tokio::test]
+async fn teardown_stops_every_mcp_server_and_what_it_started() {
+    const SERVERS: u32 = 3;
+    let dir = tempfile::tempdir().unwrap();
+    let state: AppState = std::sync::Arc::new(
+        crate::bootstrap::bootstrap(crate::ServerConfig {
+            base_port: Some(19_400),
+            llama_server_path: "/nonexistent/llama-server".into(),
+            sd_server_path: "/nonexistent/sd-server".into(),
+            max_concurrent_agent_loops: 1,
+            db_path: Some(dir.path().join("gglib.db")),
+            device_keys_path: Some(dir.path().join("remote_devices")),
+        })
+        .await
+        .expect("bootstrap an isolated context"),
+    );
+    let mut behind = Vec::new();
+    for n in 0..SERVERS {
+        behind.push(started_stand_in(&state, dir.path(), n).await);
+    }
+
+    let began = std::time::Instant::now();
+    teardown(&state).await;
+    let took = began.elapsed();
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while behind.iter().any(Behind::running) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "a server behind a shim was still running 5s after the teardown"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(
+        took < 2 * gglib_mcp::SERVER_EXIT_GRACE,
+        "the teardown took {took:?} over {SERVERS} servers: they were not stopped together"
+    );
+}
+
+/// Add stand-in `n` to the daemon's MCP servers and start it through a shim:
+/// it writes its pid, answers `initialize` and `tools/list` before they are
+/// asked, and sleeps.
+async fn started_stand_in(state: &AppState, dir: &std::path::Path, n: u32) -> Behind {
+    use gglib_core::NewMcpServer;
+
+    const INITIALIZED: &str = r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","serverInfo":{"name":"stand-in"},"capabilities":{"tools":{}}}}"#;
+    const NO_TOOLS: &str = r#"{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}"#;
+    let dir = dir.join(format!("server-{n}"));
+    std::fs::create_dir(&dir).unwrap();
+    let pid_file = dir.join("server.pid");
+    let server = gglib_test_proc::install(
+        &dir,
+        "server",
+        &format!(
+            "pid {}\nprint {INITIALIZED}\nprint {NO_TOOLS}\nsleep 30",
+            pid_file.display()
+        ),
+    );
+    let shim = gglib_test_proc::wrap(&dir, "server-shim", &server);
+    let added = state
+        .mcp
+        .add_server(NewMcpServer::new_stdio(
+            format!("stand-in-{n}"),
+            shim.to_string_lossy(),
+            Vec::new(),
+            None,
+        ))
+        .await
+        .expect("add the stand-in");
+    state
+        .mcp
+        .start_server(added.id)
+        .await
+        .expect("start the stand-in through its shim");
+    let behind = Behind(
+        std::fs::read_to_string(&pid_file)
+            .expect("the stand-in wrote its pid before it answered")
+            .trim()
+            .parse()
+            .expect("a pid"),
+    );
+    assert!(behind.running(), "the server behind the shim runs");
+    behind
+}
+
+/// The server behind a shim, by its pid; killed when the test ends however
+/// it ends, so none outlives it.
+struct Behind(u32);
+
+impl Behind {
+    /// A view of the system holding the process, while it runs.
+    fn process(&self) -> Option<sysinfo::System> {
+        let pid = sysinfo::Pid::from_u32(self.0);
+        let mut system = sysinfo::System::new();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::Some(&[pid]),
+            true,
+            sysinfo::ProcessRefreshKind::nothing(),
+        );
+        system
+            .process(pid)
+            .is_some_and(|p| p.status() != sysinfo::ProcessStatus::Zombie)
+            .then_some(system)
+    }
+
+    fn running(&self) -> bool {
+        self.process().is_some()
+    }
+}
+
+impl Drop for Behind {
+    fn drop(&mut self) {
+        if let Some(system) = self.process()
+            && let Some(process) = system.process(sysinfo::Pid::from_u32(self.0))
+        {
+            process.kill();
+        }
+    }
 }

@@ -22,6 +22,16 @@ pub enum Instruction {
     /// `path`. The file appears whole: it is written beside `path` and then
     /// renamed onto it, so a test polling for it never reads half of it.
     Argv(PathBuf),
+    /// `pid <path>`: write the program's own process id to `path`, whole,
+    /// as `argv` writes, so a test can find the program wherever it was
+    /// started from (behind a wrapper, say).
+    Pid(PathBuf),
+    /// `touch <path>`: write an empty file at `path`, as a sign the program
+    /// got this far (say, to a clean exit).
+    Touch(PathBuf),
+    /// `read`: read stdin until it ends, as a server waits for its client
+    /// to close its input.
+    Read,
     /// `print <text>`: write `text` and a newline to stdout.
     Print(String),
     /// `eprint <text>`: write `text` and a newline to stderr.
@@ -50,6 +60,9 @@ fn parse_line(line: &str) -> Option<Instruction> {
     let (verb, rest) = line.split_once(' ').unwrap_or((line, ""));
     Some(match verb {
         "argv" if !rest.is_empty() => Instruction::Argv(PathBuf::from(rest)),
+        "pid" if !rest.is_empty() => Instruction::Pid(PathBuf::from(rest)),
+        "touch" if !rest.is_empty() => Instruction::Touch(PathBuf::from(rest)),
+        "read" if rest.is_empty() => Instruction::Read,
         "print" => Instruction::Print(rest.to_owned()),
         "eprint" => Instruction::Eprint(rest.to_owned()),
         "sleep" => Instruction::Sleep(rest.parse().ok()?),
@@ -107,6 +120,48 @@ pub fn install(dir: &Path, name: &str, instructions: &str) -> PathBuf {
     std::fs::write(&file, instructions)
         .unwrap_or_else(|e| panic!("gglib-test-proc: writing {}: {e}", file.display()));
     program
+}
+
+/// Writes a wrapper script in `dir` that runs `program` as a shim does, and
+/// returns its path.
+///
+/// The script starts `program` with its own arguments, waits for it and
+/// exits with its status, as `npx.cmd` does: `<name>.cmd` on Windows, which
+/// Rust starts through `cmd.exe`, and an executable `sh` script `<name>`
+/// elsewhere. Neither hands its process over to the program, so the program
+/// runs as the wrapper's child.
+///
+/// # Panics
+///
+/// When the script cannot be written or made executable.
+pub fn wrap(dir: &Path, name: &str, program: &Path) -> PathBuf {
+    let program = program.display();
+    let (wrapper, script) = if cfg!(windows) {
+        (
+            dir.join(format!("{name}.cmd")),
+            format!("@\"{program}\" %*\r\n@exit /b %errorlevel%\r\n"),
+        )
+    } else {
+        (
+            dir.join(name),
+            format!("#!/bin/sh\n\"{program}\" \"$@\"\nstatus=$?\nexit $status\n"),
+        )
+    };
+    std::fs::write(&wrapper, script)
+        .unwrap_or_else(|e| panic!("gglib-test-proc: writing {}: {e}", wrapper.display()));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap_or_else(
+            |e| {
+                panic!(
+                    "gglib-test-proc: making {} executable: {e}",
+                    wrapper.display()
+                )
+            },
+        );
+    }
+    wrapper
 }
 
 /// Removes `path`, if there is one.
