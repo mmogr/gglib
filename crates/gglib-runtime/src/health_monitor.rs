@@ -59,20 +59,14 @@ impl ServerHealthChecker {
 
     /// Check if a process is alive by PID.
     ///
-    /// Delegates to [`crate::pidfile::pid_exists`], which asks the kernel with a
-    /// null signal rather than reading `/proc`: macOS is `cfg(unix)` and has no
-    /// `/proc`, so a `/proc` check would read every live `llama-server` there as
-    /// dead, and [`Self::check_combined`] would return `ProcessDied` without
-    /// attempting the HTTP check.
-    #[cfg(unix)]
+    /// Delegates to [`crate::pidfile::pid_exists`], on every OS. On Unix it
+    /// asks the kernel with a null signal rather than reading `/proc`: macOS
+    /// is `cfg(unix)` and has no `/proc`, so a `/proc` check would read every
+    /// live `llama-server` there as dead, and [`Self::check_combined`] would
+    /// return `ProcessDied` without attempting the HTTP check. On Windows it
+    /// asks the process table; before #1986 every pid read as alive there.
     fn is_process_alive(pid: u32) -> bool {
         crate::pidfile::pid_exists(pid)
-    }
-
-    /// Off Unix, assume alive and let the HTTP check detect failures.
-    #[cfg(not(unix))]
-    fn is_process_alive(_pid: u32) -> bool {
-        true
     }
 
     /// Perform combined health check: process liveness + HTTP health.

@@ -3,12 +3,8 @@
 # the job, and so does a row here whose test passes. Delete a row with the
 # change that makes its test pass; never add one for a test that passed.
 # One row per test, sorted: <package> <target> <test>
-gglib-axum gglib_axum daemon::lock::tests::read_holder_reports_the_recorded_metadata
-gglib-axum gglib_axum daemon::lock::tests::refusal_message_names_pid_and_address
-gglib-axum gglib_axum daemon::lock::tests::second_acquire_fails_while_first_is_held
 gglib-cli gglib_cli handlers::model::explain::tests::the_launch_is_the_runtimes_plan_through_the_one_shot_runtime
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_absolute_path_failure_falls_back
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_absolute_path_success
 gglib-mcp gglib_mcp resolver::resolve::tests::test_resolve_in_path
 gglib-mcp gglib_mcp resolver::search::tests::test_search_in_path_finds_executable
-gglib-runtime gglib_runtime health_monitor::health_monitor_tests::test_process_check_with_invalid_pid
