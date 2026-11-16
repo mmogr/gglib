@@ -11,6 +11,7 @@ import type {
   Diagnostics,
   EngineStatus,
   RecommendationDto,
+  RepairReport,
   RuntimeKind,
   UninstallOutcome,
 } from '../../../types/setup';
@@ -66,6 +67,16 @@ export async function getEngineStatus(kind: RuntimeKind): Promise<EngineStatus> 
 /** Remove what `kind`'s install put there. Refused (409) while a model runs on it. */
 export async function uninstallEngine(kind: RuntimeKind): Promise<UninstallOutcome> {
   return post<UninstallOutcome>(`/api/config/system/engines/${kind}/uninstall`);
+}
+
+/**
+ * Install the Visual C++ runtime `kind`'s status offers as its fix, then
+ * check `kind` again: the person pressed Repair. Windows asks for
+ * administrator rights itself, and the answer waits for them, so it has no
+ * time limit. Refused (409) when the status offers no such repair.
+ */
+export async function repairEngine(kind: RuntimeKind): Promise<RepairReport> {
+  return post<RepairReport>(`/api/config/system/engines/${kind}/repair`);
 }
 
 /**

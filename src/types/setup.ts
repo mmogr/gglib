@@ -116,6 +116,10 @@ export type { EngineStatus } from './generated/EngineStatus';
 export type { EngineInstall } from './generated/EngineInstall';
 /** What an engine's removal took. */
 export type { UninstallOutcome } from './generated/UninstallOutcome';
+/** What gglib can do about an engine that does not work, and what a repair did. */
+export type { Fix } from './generated/Fix';
+export type { FixOffer } from './generated/FixOffer';
+export type { RepairReport } from './generated/RepairReport';
 export type { PinStanding, PinState, RecommendationDto, RuntimeKind };
 
 /*

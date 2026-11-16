@@ -8,7 +8,7 @@
 use super::download::LLAMA_RELEASE;
 use crate::binary_install::{BuildRecord, InstallRecord, PrebuiltRecord, recorded_install};
 use crate::binary_install::{ReleaseSelector, resolve_selector};
-use crate::engine::{PinState, pin_state_at, update_downloads};
+use crate::engine::{Fix, PinState, pin_state_at, update_downloads, validate_engine_at};
 use gglib_core::domain::RuntimeCapabilities;
 use gglib_core::domain::RuntimeKind;
 use gglib_core::paths::{llama_config_path, llama_cpp_dir, llama_server_path};
@@ -123,6 +123,9 @@ pub struct LlamaStatus {
     pub healthy: bool,
     /// Why validation failed, including its remediation text.
     pub health_error: Option<String>,
+    /// What gglib can do about it, when it fails validation for a reason
+    /// gglib can repair.
+    pub fix: Option<Fix>,
     pub build: Option<LlamaBuildInfo>,
     /// Set when a record of the install exists but could not be read.
     pub build_error: Option<String>,
@@ -166,6 +169,7 @@ fn status_at(
         config_path: config_path.display().to_string(),
         healthy: false,
         health_error: None,
+        fix: None,
         build: None,
         build_error: None,
         prebuilt: None,
@@ -194,10 +198,11 @@ fn status_at(
         }
     }
 
-    match super::validate_llama_binary(binary_path) {
-        Ok(()) => status.healthy = true,
-        Err(e) => {
-            status.health_error = Some(e.to_string());
+    match validate_engine_at(RuntimeKind::Llama, binary_path) {
+        Ok(_) => status.healthy = true,
+        Err(not_working) => {
+            status.fix = not_working.fix();
+            status.health_error = Some(not_working.to_string());
             // A binary that fails validation cannot be trusted to answer
             // `--version` sensibly, so stop before probing it.
             return status;

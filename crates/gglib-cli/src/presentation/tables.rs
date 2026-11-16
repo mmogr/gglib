@@ -115,11 +115,6 @@ pub(crate) fn format_number(n: u64) -> String {
     }
 }
 
-/// Print a horizontal separator line.
-pub(crate) fn print_separator(width: usize) {
-    println!("{}", "-".repeat(width));
-}
-
 // =============================================================================
 // Tests
 // =============================================================================

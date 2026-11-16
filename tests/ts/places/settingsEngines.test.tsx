@@ -8,7 +8,10 @@
  * the CPU warning only where an install is offered; an install that fails
  * in the daemon's words, and one whose stream closes with no result ending
  * with a reason (SU-1); the two rows' installs apart; the row read back
- * after an install that finished while Engines was closed; Faster downloads both
+ * after an install that finished while Engines was closed; Repair beside a
+ * not-working engine's reason, which reads both rows working after the
+ * Visual C++ runtime is installed and runs the install for a reinstall;
+ * Faster downloads both
  * ways, and the command where there is no Python.
  *
  * The setup routes are a fake whose install streams the test drives. Each
@@ -20,7 +23,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import type { EngineStatus, LlamaProgressEvent, PinState, RuntimeKind, SetupStatus } from '../../../src/types/setup';
+import type {
+  EngineStatus,
+  FixOffer,
+  LlamaProgressEvent,
+  PinState,
+  RepairReport,
+  RuntimeKind,
+  SetupStatus,
+} from '../../../src/types/setup';
 import type { RenderedApp } from './harness';
 import { appSettings } from '../fixtures/settings';
 import { engineState } from './setupFixtures';
@@ -43,6 +54,10 @@ const fake = vi.hoisted(() => ({
   refuseSetupStatus: null as string | null,
   /** While set, a set up or a turn off waits for it. */
   hold: null as Promise<void> | null,
+  /** The engines a repair was asked for, in order. */
+  repaired: [] as string[],
+  /** What the daemon's repair does and answers. */
+  repair: null as ((kind: RuntimeKind) => Promise<RepairReport>) | null,
 }));
 
 vi.mock('../../../src/services/transport/api/setup', () => ({
@@ -55,6 +70,11 @@ vi.mock('../../../src/services/transport/api/setup', () => ({
   streamEngineInstall: vi.fn((kind: string, onEvent, onError, onClose) => {
     fake.streams[kind].push({ onEvent, onError, onClose });
     return () => {};
+  }),
+  repairEngine: vi.fn(async (kind: RuntimeKind) => {
+    fake.repaired.push(kind);
+    if (!fake.repair) throw new Error('no repair was expected');
+    return fake.repair(kind);
   }),
   uninstallEngine: vi.fn(async (kind: string) => {
     if (fake.refuseUninstall) throw new Error(fake.refuseUninstall);
@@ -111,6 +131,15 @@ const ENGINES = {
 } as const;
 
 const KINDS = Object.keys(ENGINES) as RuntimeKind[];
+
+/** The fix a Windows engine without the Visual C++ runtime carries, as the daemon words it. */
+const RUNTIME_FIX: FixOffer = {
+  fix: 'install_visual_cpp_runtime',
+  offer: 'gglib can install the Microsoft Visual C++ Redistributable (x64) from Microsoft. Windows will ask for permission; if no question appears, look for a flashing shield on the taskbar.',
+  action: 'Repair',
+  waiting: "Waiting for Windows' permission to install the Microsoft Visual C++ Redistributable (x64); if no question appears, look for a flashing shield on the taskbar.",
+};
+const RUNTIME_SAYS = 'Installed the Microsoft Visual C++ Redistributable (x64).';
 const CPU_WARNING = 'No GPU runtime gglib can use was found, so the CPU build will be slow.';
 
 /**
@@ -139,6 +168,7 @@ function status(
     installed,
     broken: null,
     state: engineState(installed, overrides.broken ?? null),
+    fix: null,
     binaryPath: `/data/.${e.word}/bin/${e.server}`,
     install: installed ? { built: false, release, platform: e.download, date: '2026-10-01T00:00:00Z' } : null,
     recordError: null,
@@ -185,6 +215,8 @@ beforeEach(async () => {
   fake.refuseUninstall = null;
   fake.refuseSetupStatus = null;
   fake.hold = null;
+  fake.repaired = [];
+  fake.repair = null;
   // A fresh load of the whole app, which a busy machine can take a while over.
   ({ renderApp } = await import('./harness'));
 }, 30_000);
@@ -401,6 +433,84 @@ describe('the engine rows', () => {
     const word = await r.findByText('Installed, not working');
     expect(word.closest('[data-kind]')).toHaveAttribute('data-kind', 'failed');
     expect(r.getByText('llama-server exited: missing libggml')).toBeInTheDocument();
+    expect(r.queryByRole('button', { name: 'Repair' })).not.toBeInTheDocument();
+  });
+
+  it("offers Repair beside the reason and the daemon's words, and reads both rows working after it", async () => {
+    const reason = (server: string) => `${server} cannot start: a library it needs is missing.`;
+    fake.statuses = {
+      llama: [status('llama', 'atPin', { broken: reason('llama-server'), fix: RUNTIME_FIX })],
+      stable_diffusion: [status('stable_diffusion', 'atPin', { broken: reason('sd-server'), fix: RUNTIME_FIX })],
+    };
+    fake.repair = async (kind) => {
+      fake.statuses = { llama: [status('llama', 'atPin')], stable_diffusion: [status('stable_diffusion', 'atPin')] };
+      return { outcome: 'installed', works: true, says: `${RUNTIME_SAYS} ${kind === 'llama' ? 'llama' : 'sd'}-server works now.` };
+    };
+    renderApp('/settings/engines');
+    const llama = await row('llama.cpp');
+    const sd = await row('stable-diffusion.cpp');
+
+    expect(await llama.findByText(reason('llama-server'))).toBeInTheDocument();
+    expect(llama.getByText(RUNTIME_FIX.offer)).toBeInTheDocument();
+    expect(sd.getByText(RUNTIME_FIX.offer)).toBeInTheDocument();
+    await userEvent.click(llama.getByRole('button', { name: 'Repair' }));
+
+    expect(fake.repaired).toEqual(['llama']);
+    expect(await llama.findByText(`${RUNTIME_SAYS} llama-server works now.`)).toBeInTheDocument();
+    await waitFor(() => expect(llama.queryByText('Installed, not working')).not.toBeInTheDocument());
+    expect(llama.getByText('Installed')).toBeInTheDocument();
+    await waitFor(() => expect(sd.queryByText('Installed, not working')).not.toBeInTheDocument());
+    expect(llama.queryByRole('button', { name: 'Repair' })).not.toBeInTheDocument();
+    expect(sd.queryByRole('button', { name: 'Repair' })).not.toBeInTheDocument();
+  });
+
+  it("says where Windows' question may be while the repair waits for it", async () => {
+    fake.statuses.llama = [
+      status('llama', 'atPin', { broken: 'llama-server cannot start: a library it needs is missing.', fix: RUNTIME_FIX }),
+    ];
+    fake.repair = () => new Promise<RepairReport>(() => {});
+    renderApp('/settings/engines');
+    const r = await row('llama.cpp');
+
+    await userEvent.click(await r.findByRole('button', { name: 'Repair' }));
+
+    expect(await r.findByText(RUNTIME_FIX.waiting ?? '')).toBeInTheDocument();
+    expect(r.queryByText(RUNTIME_FIX.offer)).not.toBeInTheDocument();
+    expect(r.getByRole('button', { name: 'Repair' })).toBeDisabled();
+  });
+
+  it('repairs an engine whose fix is a reinstall with its install', async () => {
+    fake.statuses.llama = [
+      status('llama', 'atPin', {
+        broken: 'llama-server failed when asked `--version`: it exited with status 1',
+        fix: { fix: 'reinstall', offer: 'gglib can download llama.cpp again and reinstall it.', action: 'Repair', waiting: null },
+      }),
+    ];
+    renderApp('/settings/engines');
+    const r = await row('llama.cpp');
+
+    expect(await r.findByText('gglib can download llama.cpp again and reinstall it.')).toBeInTheDocument();
+    await userEvent.click(r.getByRole('button', { name: 'Repair' }));
+
+    await waitFor(() => expect(fake.streams.llama).toHaveLength(1));
+    expect(fake.repaired).toEqual([]);
+  });
+
+  it("says how Windows repairs a damaged runtime, with no button that would install it again", async () => {
+    const damaged =
+      'The Microsoft Visual C++ Redistributable (x64) is installed but damaged: its files are missing. Repair it in Windows: Settings › Apps › Installed apps › Microsoft Visual C++ 2015-2022 Redistributable (x64) › Modify › Repair, then check again.';
+    fake.statuses.llama = [
+      status('llama', 'atPin', {
+        broken: 'llama-server cannot start: a library it needs is missing.',
+        fix: { fix: 'repair_visual_cpp_runtime', offer: damaged, action: null, waiting: null },
+      }),
+    ];
+    renderApp('/settings/engines');
+    const r = await row('llama.cpp');
+
+    expect(await r.findByText(damaged)).toBeInTheDocument();
+    expect(r.queryByRole('button', { name: 'Repair' })).not.toBeInTheDocument();
+    expect(fake.repaired).toEqual([]);
   });
 
   it("names a source build's record in its own words in Details", async () => {

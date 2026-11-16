@@ -25,6 +25,7 @@ use gglib_runtime::llama::build_tool_install_lines;
 use super::llama_events::{
     built_and_installed, built_in_passing, downloaded_and_installed, downloaded_in_passing,
 };
+use super::repair::{self, Asker};
 use super::{llama_install, sd};
 use crate::daemon_client;
 use crate::utils::input;
@@ -40,10 +41,19 @@ enum Telling {
 /// `gglib config <engine> install`, which `update` is too: install the
 /// pinned release when what is there is missing or older, and with `force`
 /// whatever is there. `build` asks for a source build; `force` also stands
-/// for the user's yes to one.
+/// for the user's yes to one, and never for one to the Visual C++ runtime.
+///
+/// An engine that does not work for want of that runtime, whether it was
+/// there already or the install's check found it so, is offered the
+/// runtime, asked in a terminal only.
 pub(super) async fn install(kind: RuntimeKind, force: bool, build: bool) -> Result<()> {
     let state = pin_state(kind)?;
     if !force && !state.standing.wants_install() {
+        if let Err(e) = engine::validate_engine(kind)
+            && repair::needs_runtime(&e).is_some()
+        {
+            return repair::after_install(kind, Err(e), Asker::Install(kind)).await;
+        }
         for line in nothing_to_do_lines(&state, build) {
             println!("{line}");
         }
@@ -56,7 +66,8 @@ pub(super) async fn install(kind: RuntimeKind, force: bool, build: bool) -> Resu
     for line in plan_lines(kind, &plan) {
         println!("{line}");
     }
-    run(kind, &plan, force, Telling::Command).await
+    let installed = run(kind, &plan, force, Telling::Command).await;
+    repair::after_install(kind, installed, Asker::Install(kind)).await
 }
 
 /// Make sure `kind` is there before a command needs it: offer the install
@@ -109,8 +120,10 @@ pub(crate) async fn ensure_installed(kind: RuntimeKind, yes: bool) -> Result<()>
         println!("Keeping {} {}.", kind.label(), installed_release(&state));
         return Ok(());
     }
-    // The yes was given above, so a source build does not ask again.
+    // The yes was given above, so a source build does not ask again. An
+    // install whose check finds the Visual C++ runtime missing offers it.
     let installed = run(kind, &plan, true, Telling::InPassing).await;
+    let installed = repair::after_install(kind, installed, Asker::Passing { kind, yes }).await;
     match installed {
         Err(e) if state.standing == PinStanding::Older && still_runs(kind) => {
             println!(

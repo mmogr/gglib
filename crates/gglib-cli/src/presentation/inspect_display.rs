@@ -7,8 +7,10 @@
 use gglib_core::domain::{DefaultsOrigin, MODEL_SAMPLING_KEYS, ModelDetailDto};
 
 use crate::presentation::capability_flags::capability_lines;
+use crate::presentation::format_relative_time;
 use crate::presentation::sampling_values::stated_parameters;
-use crate::presentation::{format_relative_time, print_separator};
+use crate::presentation::table_layout::rule;
+use crate::presentation::terminal::stdout_width;
 
 const SEP_WIDTH: usize = 60;
 
@@ -16,12 +18,14 @@ const SEP_WIDTH: usize = 60;
 ///
 /// The `show_metadata` flag gates the raw GGUF key-value section.  Pass
 /// `true` only when the user supplies `--metadata` — the dictionary can be
-/// several hundred lines for large models.
+/// several hundred lines for large models. The rules are no wider than the
+/// terminal.
 pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
+    let width = stdout_width();
     // ── Overview ──────────────────────────────────────────────────────────────
-    print_separator(SEP_WIDTH);
+    println!("{}", rule('-', SEP_WIDTH, width));
     println!("  Model: {}", dto.name);
-    print_separator(SEP_WIDTH);
+    println!("{}", rule('-', SEP_WIDTH, width));
     println!("  ID             : {}", dto.id);
     print_opt("  File          ", dto.file_path.as_deref());
     println!("{}", projector_line(dto));
@@ -49,7 +53,7 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
     if dto.expert_count.is_some() {
         println!();
         println!("  MoE Topology");
-        print_separator(SEP_WIDTH);
+        println!("{}", rule('-', SEP_WIDTH, width));
         if let Some(n) = dto.expert_count {
             println!("  Total Experts  : {n}");
         }
@@ -65,7 +69,7 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
     if dto.hf_repo_id.is_some() {
         println!();
         println!("  HuggingFace");
-        print_separator(SEP_WIDTH);
+        println!("{}", rule('-', SEP_WIDTH, width));
         if let Some(repo) = &dto.hf_repo_id {
             println!("  Repo           : {repo}");
         }
@@ -87,32 +91,32 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
     if !dto.tags.is_empty() {
         println!();
         println!("  Tags");
-        print_separator(SEP_WIDTH);
+        println!("{}", rule('-', SEP_WIDTH, width));
         println!("  {}", dto.tags.join(", "));
     }
 
     // ── Capabilities ──────────────────────────────────────────────────────────
     println!();
     println!("  Capabilities");
-    print_separator(SEP_WIDTH);
+    println!("{}", rule('-', SEP_WIDTH, width));
     for line in capability_lines(dto.capabilities) {
         println!("{line}");
     }
 
     // ── Inference Defaults ────────────────────────────────────────────────────
-    for line in inference_default_lines(dto) {
+    for line in inference_default_lines(dto, width) {
         println!("{line}");
     }
 
     // ── Published Sampling Defaults ───────────────────────────────────────────
-    for line in published_sampling_lines(&dto.metadata) {
+    for line in published_sampling_lines(&dto.metadata, width) {
         println!("{line}");
     }
 
     // ── Timestamps ────────────────────────────────────────────────────────────
     println!();
     println!("  Timestamps");
-    print_separator(SEP_WIDTH);
+    println!("{}", rule('-', SEP_WIDTH, width));
     println!(
         "  Added          : {} ({})",
         dto.added_at,
@@ -123,7 +127,7 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
     if show_metadata && !dto.metadata.is_empty() {
         println!();
         println!("  Raw GGUF Metadata  ({} keys)", dto.metadata.len());
-        print_separator(SEP_WIDTH);
+        println!("{}", rule('-', SEP_WIDTH, width));
         let mut pairs: Vec<_> = dto.metadata.iter().collect();
         pairs.sort_by_key(|(k, _)| k.as_str());
         for (key, value) in pairs {
@@ -131,7 +135,7 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
         }
     }
 
-    print_separator(SEP_WIDTH);
+    println!("{}", rule('-', SEP_WIDTH, width));
 }
 
 // ── Inference defaults ────────────────────────────────────────────────────────
@@ -139,7 +143,7 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
 /// Render the sampling defaults stored on this model, if it stores any: a
 /// heading that says where they came from, and one row per field that is
 /// set. Every field, from [`stated_parameters`].
-fn inference_default_lines(dto: &ModelDetailDto) -> Vec<String> {
+fn inference_default_lines(dto: &ModelDetailDto, width: Option<usize>) -> Vec<String> {
     let stated = dto.inference_defaults.as_ref().map(stated_parameters);
     let Some(stated) = stated.filter(|stated| !stated.is_empty()) else {
         return Vec::new();
@@ -164,7 +168,7 @@ fn inference_default_lines(dto: &ModelDetailDto) -> Vec<String> {
     let mut lines = vec![
         String::new(),
         format!("  Inference Defaults{origin_suffix}"),
-        "-".repeat(SEP_WIDTH),
+        rule('-', SEP_WIDTH, width),
     ];
     // As wide as the longest field name, `reasoning_budget_tokens`.
     lines.extend(
@@ -202,7 +206,10 @@ const SAMPLING_PREFIX: &str = "general.sampling.";
 /// pointer at the end says so rather than answering it twice.
 ///
 /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
-fn published_sampling_lines(metadata: &std::collections::HashMap<String, String>) -> Vec<String> {
+fn published_sampling_lines(
+    metadata: &std::collections::HashMap<String, String>,
+    width: Option<usize>,
+) -> Vec<String> {
     let mut published: Vec<(&String, &String)> = metadata
         .iter()
         .filter(|(k, _)| k.starts_with(SAMPLING_PREFIX))
@@ -212,7 +219,7 @@ fn published_sampling_lines(metadata: &std::collections::HashMap<String, String>
     }
     published.sort_by_key(|(k, _)| k.as_str());
 
-    let width = published
+    let key_width = published
         .iter()
         .map(|(k, _)| k.chars().count())
         .max()
@@ -221,7 +228,7 @@ fn published_sampling_lines(metadata: &std::collections::HashMap<String, String>
     let mut lines = vec![
         String::new(),
         "  Published Sampling Defaults  (this model's own GGUF)".to_owned(),
-        "-".repeat(SEP_WIDTH),
+        rule('-', SEP_WIDTH, width),
     ];
     lines.extend(published.iter().map(|(key, value)| {
         // Naming the gglib parameter a key maps onto is the whole reason the
@@ -229,8 +236,8 @@ fn published_sampling_lines(metadata: &std::collections::HashMap<String, String>
         // `repeat_penalty` are the same knob under two spellings, and nothing
         // else on screen connects them.
         gglib_field_for(key).map_or_else(
-            || format!("  {key:<width$} = {value}   (not modelled by gglib)"),
-            |field| format!("  {key:<width$} = {value}   ({field})"),
+            || format!("  {key:<key_width$} = {value}   (not modelled by gglib)"),
+            |field| format!("  {key:<key_width$} = {value}   ({field})"),
         )
     }));
     lines.push(String::new());

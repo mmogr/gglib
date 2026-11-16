@@ -8,6 +8,8 @@ use gglib_core::Settings;
 use gglib_core::secret::{SHOWN_AS, SettingSecret, held, held_line};
 
 use crate::config_commands::KEYS;
+use crate::presentation::table_layout::rule;
+use crate::presentation::terminal::stdout_width;
 
 /// The secret a row's key names, when it names one. Such a row says whether
 /// the secret is held and which command prints it, never what it is
@@ -256,13 +258,15 @@ pub(super) fn settings_to_sections(flat_rows: &[(String, String)]) -> Vec<Displa
 ///
 /// Each section is preceded by a blank line so the output breathes.
 pub(super) fn print_sections(sections: &[DisplaySection]) {
+    // The rule is indented two, and no wider than the terminal.
+    let room = stdout_width().map(|width| width.saturating_sub(2));
     for section in sections {
         let max_key_len = section.rows.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
         let sep_width = (max_key_len + 4).max(40);
 
         println!();
         println!("  {}", section.title);
-        println!("  {}", "─".repeat(sep_width));
+        println!("  {}", rule('─', sep_width, room));
 
         for (key, val) in &section.rows {
             if val.is_empty() {

@@ -59,6 +59,7 @@ export function engine(kind: RuntimeKind, installed = false, overrides: Partial<
     installed,
     broken: null,
     state: engineState(installed, overrides.broken ?? null),
+    fix: null,
     binaryPath: `/data/${kind}`,
     install: installed ? { built: false, release: RELEASE[kind], platform: 'Metal', date: '2026-10-26T00:00:00Z' } : null,
     recordError: null,

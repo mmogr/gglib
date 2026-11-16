@@ -278,6 +278,12 @@ fn config_routes() -> Router<AppState> {
             "/system/engines/{kind}/uninstall",
             post(handlers::config::engines::uninstall),
         )
+        // The repair its status offers that changes the machine: the
+        // Visual C++ runtime an engine needs on Windows.
+        .route(
+            "/system/engines/{kind}/repair",
+            post(handlers::config::engines::repair),
+        )
         .route(
             "/system/setup-python",
             post(handlers::config::setup::setup_python),

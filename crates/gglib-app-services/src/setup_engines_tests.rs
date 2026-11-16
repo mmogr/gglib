@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use gglib_core::ports::{
     Admission, LaunchOverrides, ModelRuntimeError, ProcessHandle, RunningTarget,
 };
-use gglib_runtime::engine::{PinStanding, PinState};
+use gglib_runtime::engine::{Fix, FixOffer, PinStanding, PinState};
 use gglib_runtime::llama::{LlamaBuildInfo, LlamaPrebuiltInfo, LlamaRuntimeInfo, LlamaStatus};
 use gglib_runtime::sd::PINNED_SD_RELEASE;
 
@@ -62,6 +62,7 @@ fn nothing_installed() -> SdStatus {
     SdStatus {
         installed: false,
         health_error: None,
+        fix: None,
         binary_path: "/data/.sd/bin/sd-server".to_owned(),
         config_path: "/data/.sd/sd-config.json".to_owned(),
         pinned_release: PINNED_SD_RELEASE.to_owned(),
@@ -191,6 +192,119 @@ fn an_sd_install_that_does_not_work_says_why() {
 
     assert_eq!(status.broken.as_deref(), Some(reason));
     assert_eq!(json_state(&status), "not_working");
+    assert_eq!(status.fix, None, "a named library has no repair");
+}
+
+/// An engine that lacks the Visual C++ runtime carries the runtime as its
+/// fix, with the words Settings and setup show beside Repair, on the wire.
+#[test]
+fn an_engine_without_the_visual_cpp_runtime_offers_it() {
+    let status = sd_engine_status(
+        SdStatus {
+            installed: true,
+            health_error: Some("sd-server cannot start: a library it needs is missing.".to_owned()),
+            fix: Some(Fix::InstallVisualCppRuntime),
+            ..nothing_installed()
+        },
+        Ok(("Windows x64 (Vulkan)".to_owned(), None)),
+    );
+
+    assert_eq!(
+        status.fix,
+        Some(FixOffer::new(
+            Fix::InstallVisualCppRuntime,
+            RuntimeKind::StableDiffusion
+        ))
+    );
+    let json = serde_json::to_value(&status).unwrap();
+    assert_eq!(json["fix"]["fix"], "install_visual_cpp_runtime");
+    assert_eq!(
+        json["fix"]["offer"],
+        "gglib can install the Microsoft Visual C++ Redistributable (x64) from Microsoft. \
+         Windows will ask for permission; if no question appears, look for a flashing shield \
+         on the taskbar."
+    );
+    assert_eq!(json["fix"]["action"], "Repair");
+    assert_eq!(
+        json["fix"]["waiting"],
+        "Waiting for Windows' permission to install the Microsoft Visual C++ Redistributable \
+         (x64); if no question appears, look for a flashing shield on the taskbar."
+    );
+}
+
+/// The repair route makes the runtime's install and nothing else: a
+/// working engine, a reinstall, a damaged runtime and no fix are refused,
+/// the damaged runtime with how Windows repairs it.
+#[test]
+fn the_repair_route_makes_only_the_runtime_s_install() {
+    let kind = RuntimeKind::Llama;
+    assert!(refuse_another_repair(kind, Some(Fix::InstallVisualCppRuntime)).is_ok());
+    for fix in [
+        None,
+        Some(Fix::Reinstall),
+        Some(Fix::RepairVisualCppRuntime),
+    ] {
+        let refused = refuse_another_repair(kind, fix).unwrap_err();
+        assert!(
+            matches!(refused, GuiError::Conflict(_)),
+            "{fix:?}: {refused:?}"
+        );
+    }
+    let GuiError::Conflict(damaged) =
+        refuse_another_repair(kind, Some(Fix::RepairVisualCppRuntime)).unwrap_err()
+    else {
+        unreachable!()
+    };
+    assert!(damaged.contains("Modify › Repair"), "{damaged}");
+}
+
+/// A reinstall is offered where the daemon's install is a download, and not
+/// over a source build, which the terminal rebuilds.
+#[test]
+fn a_reinstall_is_offered_only_where_it_downloads() {
+    let broken = |built: bool| LlamaStatus {
+        installed: true,
+        binary_path: "/data/.llama/bin/llama-server".to_owned(),
+        config_path: "/data/.llama/llama-config.json".to_owned(),
+        healthy: false,
+        health_error: Some("llama-server is not a program this system can run".to_owned()),
+        fix: Some(Fix::Reinstall),
+        build: None,
+        build_error: None,
+        prebuilt: None,
+        runtime: None,
+        pin: PinState {
+            built: Some(built),
+            rebuilds: built,
+            ..pin(PinStanding::AtPin, Some("b11429"))
+        },
+    };
+    let download = || Ok(("Windows x64 (Vulkan)".to_owned(), None));
+
+    let downloaded = llama_engine_status(broken(false), download());
+    let built = llama_engine_status(broken(true), download());
+
+    assert_eq!(
+        downloaded.fix.map(|offer| (offer.fix, offer.offer)),
+        Some((
+            Fix::Reinstall,
+            "gglib can download llama.cpp again and reinstall it.".to_owned()
+        ))
+    );
+    assert_eq!(built.fix, None);
+}
+
+/// A working engine has nothing to repair.
+#[test]
+fn a_working_engine_has_no_fix() {
+    let status = sd_engine_status(
+        SdStatus {
+            installed: true,
+            ..nothing_installed()
+        },
+        Ok(("macOS universal (Metal)".to_owned(), None)),
+    );
+    assert_eq!(status.fix, None);
 }
 
 /// llama.cpp's download record, its validation and what the binary reports
@@ -204,6 +318,7 @@ fn a_llama_install_is_read_from_its_record_its_validation_and_its_binary() {
             config_path: "/data/.llama/llama-config.json".to_owned(),
             healthy: false,
             health_error: Some("llama-server will not start".to_owned()),
+            fix: None,
             build: None,
             build_error: None,
             prebuilt: Some(LlamaPrebuiltInfo {
@@ -284,6 +399,7 @@ fn a_llama_source_build_is_the_install_and_the_binary_names_its_build() {
             config_path: "/data/.llama/llama-config.json".to_owned(),
             healthy: true,
             health_error: None,
+            fix: None,
             build: Some(LlamaBuildInfo {
                 version: "b11429".to_owned(),
                 commit_sha: "d812350".to_owned(),
