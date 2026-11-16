@@ -9,10 +9,11 @@ use serde::{Deserialize, Serialize};
 
 /// Application settings for the settings UI.
 ///
-/// `Default` is "nothing configured" — every field is optional, so it stands
-/// for a fresh install with no saved values, which is what callers resolving
-/// their own fallbacks need to test against.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// `Default` is "nothing configured": a fresh install with no saved values,
+/// which is what callers resolving their own fallbacks need to test against.
+/// Nearly every field is the stored value, `null` when none is stored; the
+/// endpoint's switch at launch is the value the service acts on.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -64,8 +65,14 @@ pub struct AppSettings {
     pub tool_call_repair: Option<bool>,
     /// Whether `/mcp` offers MCP clients the drawing tool. Absent means off.
     pub mcp_drawing: Option<bool>,
-    // Always-on proxy, desktop app only (see `gglib_core::Settings`)
+    /// Whether the service turns the endpoint on when it starts: what it
+    /// does (`gglib_core::Settings::effective_proxy_autostart`), so the page
+    /// does not supply the default itself. Never `null` from this build;
+    /// an older service sends `null` for a switch it treats as off, and still
+    /// parses. Writing `null` clears the stored choice, which reads back as
+    /// on.
     pub proxy_autostart: Option<bool>,
+    // Desktop app only (see `gglib_core::Settings`)
     pub close_to_tray: Option<bool>,
     pub start_at_login: Option<bool>,
 }
@@ -85,8 +92,15 @@ pub struct InstalledTemplates {
     pub settings: AppSettings,
 }
 
+impl Default for AppSettings {
+    fn default() -> Self {
+        gglib_core::Settings::default().into()
+    }
+}
+
 impl From<gglib_core::Settings> for AppSettings {
     fn from(settings: gglib_core::Settings) -> Self {
+        let proxy_autostart = Some(settings.effective_proxy_autostart());
         Self {
             default_context_size: settings.default_context_size,
             proxy_port: settings.proxy_port,
@@ -111,7 +125,7 @@ impl From<gglib_core::Settings> for AppSettings {
             loop_guard: settings.loop_guard,
             tool_call_repair: settings.tool_call_repair,
             mcp_drawing: settings.mcp_drawing,
-            proxy_autostart: settings.proxy_autostart,
+            proxy_autostart,
             close_to_tray: settings.close_to_tray,
             start_at_login: settings.start_at_login,
         }

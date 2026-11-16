@@ -216,3 +216,34 @@ async fn without_a_daemon_running_says_what_is_there_instead() {
     assert_eq!(nothing.err(), Some(Absent::NotRunning));
     assert_eq!(another.err(), Some(Absent::ForeignServer));
 }
+
+/// A daemon this command launches to start the endpoint its own way is told
+/// to leave the endpoint off; one launched for anything else is not. One
+/// already running is used as it is, so its endpoint is one that was on
+/// before the command ran, and the question stays for it.
+#[test]
+fn a_daemon_launched_for_an_endpoint_leaves_it_to_the_command() {
+    use super::{Endpoint, daemon_run_args};
+    use clap::Parser as _;
+
+    assert_eq!(
+        daemon_run_args(Endpoint::LeftToThisCommand),
+        ["daemon", "run", "--without-endpoint"]
+    );
+    assert_eq!(daemon_run_args(Endpoint::AsSettingsSay), ["daemon", "run"]);
+
+    let parsed = crate::parser::Cli::parse_from(["gglib", "daemon", "run", "--without-endpoint"]);
+    assert!(
+        matches!(
+            parsed.command,
+            Some(crate::commands::Commands::Daemon {
+                command: crate::commands::DaemonCommand::Run {
+                    without_endpoint: true,
+                    ..
+                },
+                ..
+            })
+        ),
+        "the launched daemon reads what it was told"
+    );
+}

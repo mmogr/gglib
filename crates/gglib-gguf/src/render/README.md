@@ -24,7 +24,10 @@ trimmed and left-stripped blocks, chainable undefined values, a
 
 A request's `reasoning_budget_tokens` of 0 renders with thinking off. That
 rule is gglib's, not llama-server's (which ends thinking at its sampler),
-and it lives in [`ChatKwargs::from_request`].
+and it lives in [`ChatKwargs::from_request`]. Which budget is 0 is read by
+`gglib_core::request_pipeline::budget_turns_thinking_off`, whose stage sends
+llama-server `enable_thinking: false` for the same requests, so both engines
+render them with thinking off.
 
 Deliberately left out, because each rests on llama's own analysis of which
 inputs a template reads: a system message merged into the next turn for a

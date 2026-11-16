@@ -1,67 +1,21 @@
 //! Tests for [`super`]: what a load and an unload send the daemon, in what
 //! order, and that what they print is the daemon's answer.
 
-use std::io::Write as _;
-use std::net::TcpListener;
-
 use gglib_app_services::types::StartServerRequest;
 
 use super::{load_on, unload_on};
-use crate::daemon_client::{DaemonHandle, STAND_IN_PORT, StartServerBody, paths};
-use gglib_test_http::blocking;
+use crate::daemon_client::stand_in::against;
+use crate::daemon_client::{StartServerBody, paths};
+use crate::handlers::inference::switch::Consent;
 
-/// One request the stand-in daemon took: its request line and its body.
-struct Taken {
-    line: String,
-    body: serde_json::Value,
-}
-
-/// A stand-in daemon that answers `replies` in order, each `(status, body)`,
-/// closing every connection, and `f` run against it. Answers what `f`
-/// answered beside the requests the stand-in took, which may be fewer than
-/// the replies scripted: once `f` is over, each reply still waiting is
-/// woken with an empty connection and the stand-in stops, so a request
-/// that never came is a short count and not a hang.
-async fn against<T, F, Fut>(replies: Vec<(u16, String)>, f: F) -> (T, Vec<Taken>)
-where
-    F: FnOnce(DaemonHandle) -> Fut,
-    Fut: Future<Output = T>,
-{
-    let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
-    let addr = listener.local_addr().expect("its address");
-    let port = addr.port();
-    let scripted = replies.len();
-    let daemon = std::thread::spawn(move || {
-        let mut taken = Vec::new();
-        for (status, reply) in replies {
-            // An empty connection is the wake-up, not a request.
-            let Ok((request, mut stream)) = blocking::accept(&listener) else {
-                break;
-            };
-            let reason = if status == 200 { "OK" } else { "Refused" };
-            let _ = write!(
-                stream,
-                "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\n\
-                 content-length: {}\r\nconnection: close\r\n\r\n{reply}",
-                reply.len()
-            );
-            taken.push(Taken {
-                line: request.line().to_owned(),
-                body: serde_json::from_str(&request.body_text()).unwrap_or_default(),
-            });
-        }
-        taken
-    });
-    let handle = DaemonHandle {
-        client: gglib_proxy::loopback::client(),
-        api_key: None,
-    };
-    let answered = STAND_IN_PORT.scope(port, f(handle)).await;
-    for _ in 0..scripted {
-        // Wakes a reply still waiting; refused once the stand-in has stopped.
-        drop(std::net::TcpStream::connect(addr));
+/// A consent that answers `answer`, with nobody to ask unless `terminal`.
+fn consent(answer: bool, terminal: bool) -> Consent {
+    Consent {
+        yes: false,
+        terminal,
+        command: "gglib model load 3 --pin".to_owned(),
+        ask: Box::new(move |_| Ok(answer)),
     }
-    (answered, daemon.join().expect("the stand-in ran"))
 }
 
 fn body(id: i64, context: Option<u64>) -> StartServerBody {
@@ -81,7 +35,13 @@ fn body(id: i64, context: Option<u64>) -> StartServerBody {
 async fn a_load_asks_the_daemon_to_start_the_model_and_prints_its_sentence() {
     let reply = serde_json::json!({ "port": 9301, "message": "loaded at 9301 (stand-in)" });
     let (lines, taken) = against(vec![(200, reply.to_string())], |handle| async move {
-        load_on(&handle, &body(3, Some(4096)), false).await
+        load_on(
+            &handle,
+            &body(3, Some(4096)),
+            false,
+            &mut consent(false, false),
+        )
+        .await
     })
     .await;
 
@@ -112,7 +72,15 @@ async fn a_pinned_load_pins_the_endpoint_before_it_loads_the_model() {
     let started = serde_json::json!({ "port": 9301, "message": "loaded at 9301 (stand-in)" });
     let (lines, taken) = against(
         vec![(200, pinned.to_string()), (200, started.to_string())],
-        |handle| async move { load_on(&handle, &body(3, Some(4096)), true).await },
+        |handle| async move {
+            load_on(
+                &handle,
+                &body(3, Some(4096)),
+                true,
+                &mut consent(false, false),
+            )
+            .await
+        },
     )
     .await;
 
@@ -134,6 +102,71 @@ async fn a_pinned_load_pins_the_endpoint_before_it_loads_the_model() {
     assert_eq!(taken[0].body["model_id"], 3);
     assert_eq!(taken[0].body["options"]["contextLength"], 4096);
     assert!(taken[0].body["proxy"].is_object(), "{}", taken[0].body);
+    assert_eq!(taken[0].body["proxy"]["replace"], false);
+}
+
+/// The daemon's refusal of a pinned start with every model being served.
+fn differs() -> (u16, String) {
+    (
+        409,
+        serde_json::json!({
+            "error": "The endpoint is on at port 8080, serving every model. ...",
+            "type": paths::ENDPOINT_DIFFERS_TYPE,
+            "metadata": {
+                "now": "on at port 8080, serving every model",
+                "action": "serve only qwen3",
+            },
+        })
+        .to_string(),
+    )
+}
+
+/// With the endpoint on otherwise, `--pin` asks as `serve` does: a yes
+/// pins it with `replace` and then loads the model; a no loads nothing.
+#[tokio::test]
+async fn a_pin_over_an_endpoint_on_otherwise_asks_first() {
+    let pinned = serde_json::json!({
+        "running": true, "state": "pinned", "port": 8080,
+        "base_url": "http://127.0.0.1:8080/v1", "key": "none_needed",
+        "pinned_model": "qwen3", "pinned_to": "Pinned to qwen3", "pinned_model_id": 3,
+        "outcome": "replaced",
+    });
+    let loaded = serde_json::json!({ "port": 9301, "message": "loaded at 9301 (stand-in)" });
+    let (lines, taken) =
+        against(
+            vec![
+                differs(),
+                (200, pinned.to_string()),
+                (200, loaded.to_string()),
+            ],
+            |handle| async move {
+                load_on(&handle, &body(3, None), true, &mut consent(true, true)).await
+            },
+        )
+        .await;
+    assert_eq!(
+        lines.unwrap(),
+        [
+            "  Endpoint on port 8080, pinned to qwen3",
+            "  loaded at 9301 (stand-in)",
+        ]
+    );
+    assert_eq!(taken.len(), 3);
+    assert_eq!(taken[1].body["proxy"]["replace"], true);
+
+    let (lines, taken) =
+        against(
+            vec![differs(), (200, loaded.to_string())],
+            |handle| async move {
+                load_on(&handle, &body(3, None), true, &mut consent(false, true)).await
+            },
+        )
+        .await;
+    assert_eq!(
+        format!("{:#}", lines.expect_err("a no loads nothing, and fails")),
+        "Nothing changed: the endpoint is still on at port 8080, serving every model."
+    );
+    assert_eq!(taken.len(), 1, "a no loads nothing");
 }
 
 /// A refusal is the daemon's sentence, and the model is not asked for after
@@ -144,11 +177,14 @@ async fn a_refused_pin_is_the_daemons_sentence_and_loads_nothing() {
         "error": "the proxy is already running unpinned \u{2014} stop it first (`gglib proxy stop`)"
     });
     let would_start = serde_json::json!({ "port": 9301, "message": "loaded at 9301 (stand-in)" });
-    let (lines, taken) = against(
-        vec![(409, refusal.to_string()), (200, would_start.to_string())],
-        |handle| async move { load_on(&handle, &body(3, None), true).await },
-    )
-    .await;
+    let (lines, taken) =
+        against(
+            vec![(409, refusal.to_string()), (200, would_start.to_string())],
+            |handle| async move {
+                load_on(&handle, &body(3, None), true, &mut consent(false, false)).await
+            },
+        )
+        .await;
 
     let err = format!("{:#}", lines.expect_err("the daemon refused"));
     assert!(err.contains("already running unpinned"), "{err}");
@@ -166,7 +202,7 @@ async fn a_model_that_did_not_load_is_said_in_the_daemons_sentence_alone() {
     let refusal =
         serde_json::json!({ "error": sentence, "status": 500, "type": "model_load_failed" });
     let (lines, _) = against(vec![(500, refusal.to_string())], |handle| async move {
-        load_on(&handle, &body(3, None), false).await
+        load_on(&handle, &body(3, None), false, &mut consent(false, false)).await
     })
     .await;
 

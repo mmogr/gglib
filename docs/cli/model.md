@@ -167,8 +167,8 @@ shows it serving. A model already loaded is reused. `--context-size N` (`-c`) or
 `--context-size max` sets the context it is served at; omitted, the daemon
 fits one. `--pin` pins the endpoint to the model first, as `gglib serve`
 does, so every request for another model is refused while the pin holds;
-an endpoint already running unpinned is the daemon's refusal, and
-`gglib proxy stop` clears it. `unload` asks the daemon to stop the model's
+an endpoint already on otherwise is switched to the model only once you say
+yes, or with `-y` ([Switching](proxy.md#switching)). `unload` asks the daemon to stop the model's
 server; one that is not loaded is said so, in the daemon's words.
 
 Illustrative, not a recording: the two lines are the daemon's sentences.

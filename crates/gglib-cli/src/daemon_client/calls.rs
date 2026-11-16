@@ -18,6 +18,24 @@ use super::wire::{
 };
 use super::{DaemonHandle, auth, base_url, paths};
 
+/// What a start answered: the endpoint as asked, or how the one that is on
+/// differs.
+#[derive(Debug)]
+pub(crate) enum StartedOrDiffers {
+    Started(ProxyStatusDto),
+    Differs(gglib_app_services::EndpointChange),
+}
+
+/// The change an `endpoint_differs` refusal names, or `None` for any other
+/// body.
+fn differs(body: &str) -> Option<gglib_app_services::EndpointChange> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    if value.get("type")?.as_str()? != paths::ENDPOINT_DIFFERS_TYPE {
+        return None;
+    }
+    serde_json::from_value(value.get("metadata")?.clone()).ok()
+}
+
 /// The daemon's answer that a model did not load: its sentence, which is
 /// the whole of what is printed.
 #[derive(Debug)]
@@ -117,6 +135,52 @@ impl DaemonHandle {
             .send()
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// Start the proxy as `body` asks, or hear how the endpoint that is on
+    /// differs from it: the daemon's `endpoint_differs` refusal, read into
+    /// the change it names, so the caller can ask before it sends `replace`.
+    pub(crate) async fn start_proxy_or_differs(
+        &self,
+        body: &StartProxyBody,
+    ) -> Result<StartedOrDiffers> {
+        self.start_or_differs(paths::PROXY_START_PATH, body).await
+    }
+
+    /// [`Self::start_proxy_or_differs`] for a pinned start.
+    pub(crate) async fn start_pinned_proxy_or_differs(
+        &self,
+        body: &StartPinnedBody,
+    ) -> Result<StartedOrDiffers> {
+        self.start_or_differs(paths::PROXY_START_PINNED_PATH, body)
+            .await
+    }
+
+    async fn start_or_differs(
+        &self,
+        path: &str,
+        body: &(impl serde::Serialize + Sync),
+    ) -> Result<StartedOrDiffers> {
+        let response = self
+            .post(path)
+            .json(body)
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await?;
+        if response.status() == reqwest::StatusCode::CONFLICT {
+            let text = response.text().await.unwrap_or_default();
+            if let Some(change) = differs(&text) {
+                return Ok(StartedOrDiffers::Differs(change));
+            }
+            let message = Self::error_message(text);
+            return Err(anyhow!(
+                "daemon answered {}: {message}",
+                reqwest::StatusCode::CONFLICT
+            ));
+        }
+        Ok(StartedOrDiffers::Started(
+            Self::expect_ok(response).await?.json().await?,
+        ))
     }
 
     /// Stop the proxy (idempotent on the daemon side).

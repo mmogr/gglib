@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use gglib_core::domain::capability_tags::{AGENT, REASONING};
 use gglib_core::request_pipeline::validate::{Verdict, validate_tool_calls};
+use gglib_core::request_pipeline::{self, ModelContext, SamplingLayers};
 use serde_json::{Value, json};
 
 use super::launch::{CAT, Inputs, Launch, Server};
@@ -104,6 +105,26 @@ fn reasoning_split(body: &Value) -> Probe {
     Ok(())
 }
 
+/// Thinking stayed off: no `reasoning_content`, no think tag in `content`,
+/// and an answer in it. A model that reasons in plain text and never writes
+/// a tag is not caught; the one recorded leak (Qwen3-4B, b12110) wrote its
+/// own `</think>`.
+fn thinking_stayed_off(body: &Value) -> Probe {
+    let message = message(body);
+    let reasoning = message["reasoning_content"].as_str().unwrap_or_default();
+    let content = message["content"].as_str().unwrap_or_default();
+    if !reasoning.trim().is_empty() {
+        return Err("reasoning_content is not empty".to_owned());
+    }
+    if content.contains("<think>") || content.contains("</think>") {
+        return Err("content carries a think tag".to_owned());
+    }
+    if content.trim().is_empty() {
+        return Err("content is empty".to_owned());
+    }
+    Ok(())
+}
+
 /// The image in the tool message was read (more prompt tokens than the same
 /// request without it) and the answer names what it shows, as a whole word.
 fn image_answered(with: &Value, without: &Value) -> Probe {
@@ -143,11 +164,13 @@ fn readings(probes: &[(&str, Option<Probe>)], why_none: &str) -> Value {
     out
 }
 
-const PROBES: [&str; 4] = [
+const PROBES: [&str; 6] = [
     "tool_call_native",
     "tool_call_parsed",
     "reasoning_split",
     "image_in_tool_message_answered",
+    "thinking_off_by_budget_alone",
+    "thinking_off_as_gglib_sends_it",
 ];
 
 /// A 200 answer's JSON, kept in `bodies` as `name`.
@@ -182,6 +205,37 @@ async fn probe_tool(server: &Server, bodies: &Path) -> [Probe; 2] {
 async fn probe_reasoning(server: &Server, bodies: &Path) -> Probe {
     let question = json!([{"role": "user", "content": "What is 17 + 25? Answer with the number."}]);
     reasoning_split(&ask(server, &chat(&question, 1024, true), "reasoning", bodies).await?)
+}
+
+/// Thinking off asked twice: by `reasoning_budget_tokens: 0` alone, which
+/// llama-server enforces at its sampler while the template still asks for
+/// thinking, and as gglib's request pipeline sends it. The first says
+/// whether the budget alone still leaks at the pin; the second whether what
+/// gglib sends does.
+async fn probe_thinking_off(server: &Server, bodies: &Path) -> [Probe; 2] {
+    let budget_alone = json!({
+        "messages": [{"role": "user", "content": "What is the capital of France?"}],
+        "max_tokens": 512,
+        "temperature": 0,
+        "seed": 1,
+        "reasoning_budget_tokens": 0,
+    });
+    let mut as_sent = budget_alone.clone();
+    let trusted = SamplingLayers {
+        trust_client_sampling: true,
+        ..SamplingLayers::default()
+    };
+    let passthrough = ModelContext::passthrough();
+    if let Err(e) = request_pipeline::apply(&mut as_sent, &passthrough, &trusted, None) {
+        let why = format!("the pipeline refused the request: {e}");
+        return [Err(why.clone()), Err(why)];
+    }
+    let alone = ask(server, &budget_alone, "thinking_off_budget_alone", bodies).await;
+    let sent = ask(server, &as_sent, "thinking_off_as_sent", bodies).await;
+    [
+        alone.and_then(|answer| thinking_stayed_off(&answer)),
+        sent.and_then(|answer| thinking_stayed_off(&answer)),
+    ]
 }
 
 async fn probe_image(server: &Server, inputs: &Inputs, bodies: &Path) -> Probe {
@@ -221,7 +275,7 @@ async fn probe_image(server: &Server, inputs: &Inputs, bodies: &Path) -> Probe {
 }
 
 /// Every probe on one launch. Panics only if llama-server does not start.
-async fn run(inputs: Inputs, bodies: PathBuf) -> [Option<Probe>; 4] {
+async fn run(inputs: Inputs, bodies: PathBuf) -> [Option<Probe>; 6] {
     let launch = Launch {
         model: QWEN,
         tags: &QWEN_TAGS,
@@ -231,11 +285,16 @@ async fn run(inputs: Inputs, bodies: PathBuf) -> [Option<Probe>; 4] {
     };
     let server = Server::start(&inputs, &launch, 0).await;
     let [native, parsed] = probe_tool(&server, &bodies).await;
+    let reasoning = probe_reasoning(&server, &bodies).await;
+    let image = probe_image(&server, &inputs, &bodies).await;
+    let [alone, sent] = probe_thinking_off(&server, &bodies).await;
     [
         Some(native),
         Some(parsed),
-        Some(probe_reasoning(&server, &bodies).await),
-        Some(probe_image(&server, &inputs, &bodies).await),
+        Some(reasoning),
+        Some(image),
+        Some(alone),
+        Some(sent),
     ]
 }
 
@@ -280,7 +339,7 @@ async fn a_small_real_model_through_the_pinned_llama_server() {
         .join("tier3");
     let (results, why_none) = match tokio::spawn(run(inputs, bodies)).await {
         Ok(results) => (results, String::new()),
-        Err(error) => ([None, None, None, None], panic_line(error)),
+        Err(error) => (std::array::from_fn(|_| None), panic_line(error)),
     };
     let probes: Vec<(&str, Option<Probe>)> = PROBES.into_iter().zip(results).collect();
     let text = serde_json::to_string_pretty(&readings(&probes, &why_none)).expect("JSON") + "\n";
@@ -376,6 +435,27 @@ mod tests {
         assert_eq!(
             reasoning_split(&none),
             Err("reasoning_content is empty".to_owned())
+        );
+    }
+
+    #[test]
+    fn thinking_stayed_off_only_when_no_reasoning_reached_the_answer() {
+        let clean = answer(&json!({"content": "The capital of France is **Paris**."}));
+        assert_eq!(thinking_stayed_off(&clean), Ok(()));
+        let leaked = answer(&json!({"content": "Okay, the user is asking.\n</think>\n\nParis."}));
+        assert_eq!(
+            thinking_stayed_off(&leaked),
+            Err("content carries a think tag".to_owned())
+        );
+        let split = answer(&json!({"reasoning_content": "Okay", "content": "Paris."}));
+        assert_eq!(
+            thinking_stayed_off(&split),
+            Err("reasoning_content is not empty".to_owned())
+        );
+        let blank = answer(&json!({"reasoning_content": "", "content": " "}));
+        assert_eq!(
+            thinking_stayed_off(&blank),
+            Err("content is empty".to_owned())
         );
     }
 

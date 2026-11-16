@@ -3,8 +3,8 @@
 System tray icon, menu and popover panel.
 
 The tray is what makes gglib usable as a background service: with
-`close_to_tray` and `proxy_autostart` set, gglib's window is incidental and the
-tray is the whole interface.
+`close_to_tray` set and `proxy_autostart` left on, gglib's window is
+incidental and the tray is the whole interface.
 
 ## What the icon means
 
