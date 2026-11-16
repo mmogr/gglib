@@ -20,7 +20,7 @@ use crate::mcp_commands::McpCommand;
 use crate::presentation::table_layout::{Column, Shorten, Table};
 use crate::presentation::terminal::stdout_width;
 use crate::presentation::truncate_string;
-use crate::utils::input;
+use crate::utils::input::{self, Unasked};
 
 /// Dispatch an MCP subcommand to its handler.
 pub(crate) async fn dispatch(ctx: &CliContext, cmd: McpCommand) -> Result<()> {
@@ -215,7 +215,8 @@ async fn remove(ctx: &CliContext, identifier: &str, yes: bool) -> Result<()> {
 
     if !yes {
         println!("Server: {} (id: {})", server.name, server.id);
-        if !input::prompt_confirmation("Remove this MCP server?")? {
+        let refused = input::nobody_to_ask("the server was not removed", "--yes to remove it");
+        if !input::yes_no("Remove this MCP server?", false, Unasked::Refuse(refused))? {
             println!("Cancelled.");
             return Ok(());
         }

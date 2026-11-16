@@ -72,28 +72,28 @@ fn text(out: &Output) -> String {
     )
 }
 
-/// A `gglib` that writes down the first line typed at it, as `typed <line>`.
-const GGLIB_THAT_ASKS: &str = r#"IFS= read -r answer; printf 'typed %s\n' "$answer" >> "$CALLS""#;
+/// A `gglib` that does nothing but be called.
+const GGLIB: &str = "exit 0";
 
 /// A machine with no GPU has no `nvcc`, no `vulkaninfo` and is not a Mac.
 /// The script once chose `--cpu-only` there, which the command does not have.
-/// And with no terminal the end of input would cancel the install while the
-/// make target still reported success, so the script answers the question.
+/// And with no terminal the command asks nothing and refuses a source build,
+/// so the script answers its question ahead of time, with `--yes`.
 #[test]
 fn with_no_gpu_and_no_terminal_the_install_script_runs_an_install_the_command_accepts() {
     let _guard = one_at_a_time();
-    let machine = Machine::bare().with("gglib", GGLIB_THAT_ASKS);
+    let machine = Machine::bare().with("gglib", GGLIB);
 
     let out = run_engine("llama", &machine);
 
     assert!(out.status.success(), "{}", text(&out));
     assert_eq!(
         machine.calls(),
-        ["gglib config llama install", "typed y"],
-        "gglib is run once, and its question answered\n{}",
+        ["gglib config llama install --yes"],
+        "gglib is run once, its question answered\n{}",
         text(&out)
     );
-    gglib_cli::Cli::try_parse_from(["gglib", "config", "llama", "install"])
+    gglib_cli::Cli::try_parse_from(["gglib", "config", "llama", "install", "--yes"])
         .unwrap_or_else(|e| panic!("the command the script runs is one gglib has: {e}"));
 }
 
@@ -101,13 +101,13 @@ fn with_no_gpu_and_no_terminal_the_install_script_runs_an_install_the_command_ac
 #[test]
 fn the_install_script_installs_the_image_runtime_the_same_way() {
     let _guard = one_at_a_time();
-    let machine = Machine::bare().with("gglib", GGLIB_THAT_ASKS);
+    let machine = Machine::bare().with("gglib", GGLIB);
 
     let out = run_engine("sd", &machine);
 
     assert!(out.status.success(), "{}", text(&out));
-    assert_eq!(machine.calls(), ["gglib config sd install", "typed y"]);
-    gglib_cli::Cli::try_parse_from(["gglib", "config", "sd", "install"])
+    assert_eq!(machine.calls(), ["gglib config sd install --yes"]);
+    gglib_cli::Cli::try_parse_from(["gglib", "config", "sd", "install", "--yes"])
         .unwrap_or_else(|e| panic!("the command the script runs is one gglib has: {e}"));
 }
 
@@ -115,7 +115,7 @@ fn the_install_script_installs_the_image_runtime_the_same_way() {
 #[test]
 fn the_install_script_needs_an_engine_it_knows() {
     let _guard = one_at_a_time();
-    let machine = Machine::bare().with("gglib", GGLIB_THAT_ASKS);
+    let machine = Machine::bare().with("gglib", GGLIB);
 
     for args in [&[][..], &["whisper"]] {
         let out = run_with("install-engine.sh", args, &machine);

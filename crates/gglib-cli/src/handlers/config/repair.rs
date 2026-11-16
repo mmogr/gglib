@@ -15,8 +15,6 @@
 //! When an install ran, the command ends with what it did, never with the
 //! error from before it, whose words say to install the runtime.
 
-use std::io::IsTerminal as _;
-
 use anyhow::{Result, anyhow};
 use gglib_core::domain::RuntimeKind;
 use gglib_core::paths::{LLAMA_INSTALL_COMMAND, SD_INSTALL_COMMAND};
@@ -168,7 +166,10 @@ pub(crate) async fn offer_runtime(
         return Ok(Offered::Damaged(fix.offer(kind)));
     }
     println!("{}", fix.offer(kind));
-    let action = repair_action(asker.yes(), std::io::stdin().is_terminal());
+    let action = repair_action(
+        asker.yes(),
+        crate::utils::input::Input::stdin() == crate::utils::input::Input::Terminal,
+    );
     if !agreed(action, asker, || {
         input::prompt_confirmation_default_yes(QUESTION)
     })? {

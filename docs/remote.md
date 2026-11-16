@@ -348,7 +348,8 @@ command at all: it is `gglib daemon stop --remote`, the same command that
 stops the daemon here, pointed at the other machine. It stops that daemon
 through the tunnel — proxy, models, downloads — and then disconnects, and it
 asks you to type `shutdown` first, because nothing can start that daemon
-again from the laptop. `--yes` skips the question for scripts.
+again from the laptop. `--yes` skips the question for scripts; with no
+terminal to ask, nothing is stopped and the command says to pass it.
 
 `gglib config reveal remote-pairing.api-key` prints this laptop's
 device key on stdout, and nothing else, for a client that is not gglib (see

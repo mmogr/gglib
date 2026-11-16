@@ -12,10 +12,10 @@
 //! ([`gglib_app_services::EndpointChange`]); the question and the refusal
 //! around them are this command's, because they name its flag.
 
-use std::io::IsTerminal;
-
 use anyhow::Result;
 use gglib_app_services::{EndpointChange, shape_words};
+
+use crate::utils::input::{self, Input, Unasked};
 
 /// A yes/no question asked of a person, Enter being yes.
 pub(crate) type Ask = Box<dyn FnMut(&str) -> Result<bool> + Send>;
@@ -26,7 +26,7 @@ pub(crate) struct Consent {
     pub yes: bool,
     /// Whether there is somebody to ask: one who reads the question and
     /// types the answer.
-    pub terminal: bool,
+    pub input: Input,
     /// Ask a yes/no question, Enter being yes.
     pub ask: Ask,
     /// This command as it was typed, which the refusal names with `-y`.
@@ -35,20 +35,16 @@ pub(crate) struct Consent {
 
 impl Consent {
     /// The consent of whoever runs this command: `yes` as typed, asked on
-    /// stderr, since stdout may be a command's result. There is somebody to
-    /// ask only when both the answer's stream and the question's are a
-    /// terminal: a question written to a log file would wait on a keyboard
-    /// with nothing on the screen.
+    /// stderr, since stdout may be a command's result, so there is somebody
+    /// to ask only when stdin and stderr are both a terminal
+    /// ([`Input::stdin_asking_on_stderr`]).
     pub(crate) fn here(yes: bool) -> Self {
         Self {
             yes,
-            terminal: somebody_to_ask(
-                std::io::stdin().is_terminal(),
-                std::io::stderr().is_terminal(),
-            ),
+            input: Input::stdin_asking_on_stderr(),
             command: command_line(std::env::args().skip(1)),
             ask: Box::new(|question| {
-                crate::utils::input::confirm_from(
+                input::confirm_from(
                     &mut std::io::stdin().lock(),
                     &mut std::io::stderr(),
                     question,
@@ -58,7 +54,8 @@ impl Consent {
         }
     }
 
-    /// Whether switching the endpoint as `change` says may go ahead.
+    /// Whether switching the endpoint as `change` says may go ahead, by the
+    /// rule every question is asked by ([`input::asked`]).
     ///
     /// # Errors
     ///
@@ -68,15 +65,14 @@ impl Consent {
         if self.yes {
             return Ok(true);
         }
-        anyhow::ensure!(self.terminal, "{}", refusal(change, &self.command));
-        (self.ask)(&question(change))
+        let ask = &mut self.ask;
+        input::asked(
+            self.input,
+            &mut std::io::sink(),
+            Unasked::Refuse(refusal(change, &self.command)),
+            |_| ask(&question(change)),
+        )
     }
-}
-
-/// Whether a person can be asked: the answer is read from stdin and the
-/// question written to stderr, so both must be a terminal.
-pub(crate) const fn somebody_to_ask(stdin_is_terminal: bool, stderr_is_terminal: bool) -> bool {
-    stdin_is_terminal && stderr_is_terminal
 }
 
 /// `gglib` and `args`, as a shell takes them back: an argument with a space

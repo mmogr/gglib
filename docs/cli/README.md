@@ -104,6 +104,15 @@ only.
 | `-v` | `--verbose` | every command |
 | `-y` | `--yes` | every command that asks |
 
+### Questions
+
+A question is asked only of a terminal. With none (a script, a pipe, SSH
+without one) nothing is asked, the input is not read for an answer, and
+nothing waits: a
+command takes the answer it can state and says so, as `model add` takes
+the parameter count the file gives, or it does nothing and names, in one
+sentence, the flag that answers the question, usually `--yes`.
+
 ## How these pages were made
 
 Every output block on these pages but one was recorded by running the command, with

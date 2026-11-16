@@ -1,6 +1,5 @@
 //! Steps 1-2: what this machine is, and the engines on it.
 
-use std::io::IsTerminal;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -85,7 +84,11 @@ async fn ensure_images(yes: bool) {
             return;
         }
     };
-    match images_action(standing, yes, std::io::stdin().is_terminal()) {
+    match images_action(
+        standing,
+        yes,
+        crate::utils::input::Input::stdin() == crate::utils::input::Input::Terminal,
+    ) {
         ImagesAction::SkipNobodyToAsk => {
             images_skipped("there is no terminal to ask, and --yes was not given");
         }

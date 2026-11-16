@@ -16,8 +16,8 @@ use super::llama_detect;
 /// Dispatch a `llama` sub-command to its handler.
 pub(crate) async fn dispatch(command: LlamaCommand) -> Result<()> {
     match command {
-        LlamaCommand::Install { force, build } => {
-            engine::install(RuntimeKind::Llama, force, build).await?;
+        LlamaCommand::Install { force, build, yes } => {
+            engine::install(RuntimeKind::Llama, force, build, yes).await?;
         }
         LlamaCommand::Status => {
             gglib_runtime::llama::handle_status().await?;

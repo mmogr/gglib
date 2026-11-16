@@ -53,7 +53,7 @@ fn answering(answer: bool, yes: bool, terminal: bool) -> (Consent, Arc<Mutex<Vec
     let kept = Arc::clone(&asked);
     let consent = Consent {
         yes,
-        terminal,
+        input: Input::from_streams(terminal, terminal),
         command: "gglib serve Qwen3-4B".to_owned(),
         ask: Box::new(move |question| {
             kept.lock().unwrap().push(question.to_owned());
@@ -312,15 +312,6 @@ fn status_of(answer: &str) -> String {
     let mut status: serde_json::Value = serde_json::from_str(answer).expect("JSON");
     status.as_object_mut().expect("an object").remove("outcome");
     status.to_string()
-}
-
-/// The question is asked only of somebody who both reads it and types the
-/// answer: a question sent to a log file waits on nobody.
-#[test]
-fn somebody_is_asked_only_at_a_terminal_both_ways() {
-    assert!(somebody_to_ask(true, true));
-    assert!(!somebody_to_ask(true, false), "stderr to a file");
-    assert!(!somebody_to_ask(false, true), "stdin from a pipe");
 }
 
 /// The command the refusal names is the one typed, as a shell takes it.

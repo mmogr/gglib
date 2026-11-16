@@ -44,8 +44,9 @@ pub(crate) fn write_gguf(dir: &Path, name: &str) -> PathBuf {
     gglib_core::paths::canonical(&path).expect("its canonical path")
 }
 
-/// `gglib <args>` over the library in `root`, answered `typed` at its
-/// prompts: how it ended, and what it printed.
+/// `gglib <args>` over the library in `root`, with `typed` in the pipe on
+/// its input: how it ended, and what it printed. A pipe is not a terminal,
+/// so no question reads it: an answer is a flag.
 pub(crate) fn run(root: &Path, args: &[&str], typed: &str) -> Output {
     let mut child = cmd(env!("CARGO_BIN_EXE_gglib"))
         .args(args)
@@ -79,9 +80,10 @@ pub(crate) fn gglib(root: &Path, args: &[&str], typed: &str) -> String {
 }
 
 /// A library in `root` holding one model, id 1, named for its file. The
-/// file carries no parameter count, so `model add` asks for one.
+/// file carries no parameter count, so `model add` is given one.
 pub(crate) fn library(root: &Path) -> PathBuf {
     let weights = write_gguf(root, "qwen.Q8_0.gguf");
-    gglib(root, &["model", "add", weights.to_str().unwrap()], "7\n");
+    let file = weights.to_str().unwrap();
+    gglib(root, &["model", "add", file, "--param-count", "7"], "");
     weights
 }

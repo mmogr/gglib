@@ -11,7 +11,6 @@
 //! and scrubs the environment variables of whatever conda or venv the user has
 //! active before running anything.
 
-use std::io::IsTerminal;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -24,7 +23,7 @@ use gglib_core::domain::FastDownloadsState;
 
 use crate::config_commands::FastDownloadsCommand;
 use crate::presentation::style::{BOLD, INFO, RESET, SUCCESS, WARNING};
-use crate::utils::input::prompt_confirmation_default_yes;
+use crate::utils::input::{Input, prompt_confirmation_default_yes};
 
 /// Preseeds the interactive offer, for CI and scripted installs.
 ///
@@ -131,7 +130,7 @@ async fn prompt() -> Result<()> {
         None => {}
     }
 
-    if !std::io::stdin().is_terminal() {
+    if Input::stdin() == Input::NotTerminal {
         // No terminal is not an answer. Say what did not happen and how to do
         // it later, rather than assuming either way on the user's behalf.
         println!(

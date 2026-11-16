@@ -95,9 +95,10 @@ async fn dispatch_with(
         ModelCommand::Add {
             file_path,
             reimport,
+            param_count,
             components,
         } => {
-            add::execute(ctx, ops, &file_path, reimport, &components).await?;
+            add::execute(ctx, ops, &file_path, reimport, param_count, &components).await?;
         }
         ModelCommand::List(args) => {
             list::execute(target, ctx, ops, args).await?;

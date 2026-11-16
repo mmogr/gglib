@@ -19,7 +19,7 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::model::resolver;
-use crate::utils::input;
+use crate::utils::input::{self, Unasked};
 use gglib_core::domain::Revision;
 
 use super::board::SoloBoard;
@@ -70,7 +70,8 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, yes: bool) -> Re
         println!("  • Re-download the model at the latest revision");
         println!("  • Replace the current file and update the database row");
         println!();
-        if !input::prompt_confirmation("Proceed?")? {
+        let refused = input::nobody_to_ask("the model was not upgraded", "--yes to upgrade it");
+        if !input::yes_no("Proceed?", false, Unasked::Refuse(refused))? {
             println!("Upgrade cancelled.");
             return Ok(());
         }

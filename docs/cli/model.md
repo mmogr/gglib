@@ -29,9 +29,14 @@ The library itself. `add <file>` reads a GGUF where it lies and registers
 it; nothing is copied. `list` sorts by added, name, params, or benchmark
 speed.
 
+- `add` asks for the parameter count, offering the one the file gives;
+  `--param-count <billions>` answers it ahead of time. With no terminal to
+  ask (a script, SSH) it takes the file's count and says so, or refuses and
+  names `--param-count` when the file gives none.
 - `remove` drops a model's row and leaves its file. It refuses a model that
   is being served under the same data root, and says how to stop it;
-  `-y` / `--yes` skips the confirmation and stops nothing.
+  `-y` / `--yes` skips the confirmation and stops nothing, and with no
+  terminal to ask it is needed.
 - `update` changes a model's metadata, including the companion files of an
   image model (below), and the model's own launch defaults: `--jinja
   auto|on|off` for chat templates and `--mtp auto|on|off` for speculative

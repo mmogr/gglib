@@ -8,8 +8,6 @@
 //! build are run and drawn, in `llama_install` and `sd`. Nothing here
 //! replaces an engine while the daemon serves a model on it.
 
-use std::io::IsTerminal as _;
-
 use anyhow::{Result, bail};
 use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::RuntimeKind;
@@ -40,13 +38,14 @@ enum Telling {
 
 /// `gglib config <engine> install`, which `update` is too: install the
 /// pinned release when what is there is missing or older, and with `force`
-/// whatever is there. `build` asks for a source build; `force` also stands
-/// for the user's yes to one, and never for one to the Visual C++ runtime.
+/// whatever is there. `build` asks for a source build; `yes` is the user's
+/// yes to one, and so is `force`, which never stands for one to the Visual
+/// C++ runtime.
 ///
 /// An engine that does not work for want of that runtime, whether it was
 /// there already or the install's check found it so, is offered the
 /// runtime, asked in a terminal only.
-pub(super) async fn install(kind: RuntimeKind, force: bool, build: bool) -> Result<()> {
+pub(super) async fn install(kind: RuntimeKind, force: bool, build: bool, yes: bool) -> Result<()> {
     let state = pin_state(kind)?;
     if !force && !state.standing.wants_install() {
         if let Err(e) = engine::validate_engine(kind)
@@ -66,7 +65,7 @@ pub(super) async fn install(kind: RuntimeKind, force: bool, build: bool) -> Resu
     for line in plan_lines(kind, &plan) {
         println!("{line}");
     }
-    let installed = run(kind, &plan, force, Telling::Command).await;
+    let installed = run(kind, &plan, force || yes, Telling::Command).await;
     repair::after_install(kind, installed, Asker::Install(kind)).await
 }
 
@@ -104,7 +103,11 @@ pub(crate) async fn ensure_installed(kind: RuntimeKind, yes: bool) -> Result<()>
     for line in lines {
         println!("{line}");
     }
-    let agreed = match offer_action(state.standing, yes, std::io::stdin().is_terminal()) {
+    let agreed = match offer_action(
+        state.standing,
+        yes,
+        crate::utils::input::Input::stdin() == crate::utils::input::Input::Terminal,
+    ) {
         OfferAction::Install => true,
         OfferAction::Ask => input::prompt_confirmation_default_yes(question)?,
         OfferAction::RefuseUnasked => bail!(refused_unasked(kind)),
@@ -282,10 +285,17 @@ pub(super) async fn uninstall(kind: RuntimeKind, yes: bool) -> Result<()> {
         bail!(removal_refusal(kind, &model));
     }
     if !yes
-        && !input::prompt_confirmation(&format!(
-            "This will remove {product} and {}. Continue?",
-            kind.server_name()
-        ))?
+        && !input::yes_no(
+            &format!(
+                "This will remove {product} and {}. Continue?",
+                kind.server_name()
+            ),
+            false,
+            input::Unasked::Refuse(input::nobody_to_ask(
+                &format!("{product} was not removed"),
+                "--yes to remove it",
+            )),
+        )?
     {
         println!("Uninstall cancelled.");
         return Ok(());

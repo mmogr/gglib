@@ -10,13 +10,22 @@ use std::path::PathBuf;
 use crate::bootstrap::CliContext;
 use crate::component_args::{ComponentArgs, request_components};
 use crate::presentation::{ModelSummaryOpts, display_model_summary};
-use crate::utils::input;
+use crate::utils::input::{self, Unasked};
 
 use gglib_app_services::ModelOps;
 use gglib_app_services::types::{AddModelRequest, UpdateModelRequest};
 use gglib_core::domain::{NameSource, resolve_model_name};
 use gglib_core::services::{ImportMode, header_facts};
 use gglib_core::utils::validation;
+
+/// What an add asks a terminal when `--param-count` did not answer it.
+const QUESTION: &str = "Parameter count (in billions)";
+
+/// What an add of a file that gives no parameter count says with nobody to
+/// ask for one.
+const NO_COUNT: &str = "The file gives no parameter count and there is no terminal to ask for \
+                        one, so the model was not added: run it again with --param-count \
+                        <billions>.";
 
 /// Execute the add command.
 ///
@@ -29,6 +38,7 @@ use gglib_core::utils::validation;
 /// * `ops` - The model operations the file is added through
 /// * `file_path` - Path to the GGUF file to add
 /// * `reimport` - Re-import a file already in the library, overwriting its row
+/// * `param_count` - The parameter count in billions, so it is not asked
 /// * `components` - An image model's components, linked once it is added
 ///
 /// # Returns
@@ -41,6 +51,8 @@ use gglib_core::utils::validation;
 /// - File validation fails
 /// - GGUF metadata extraction fails
 /// - The file is already in the library and `reimport` was not passed
+/// - The parameter count is not positive, or the file gives none and
+///   there is no terminal to ask for one
 /// - Database operations fail
 /// - A component is refused, after the model is added; the error says so
 pub(crate) async fn execute(
@@ -48,6 +60,7 @@ pub(crate) async fn execute(
     ops: &ModelOps,
     file_path: &str,
     reimport: bool,
+    param_count: Option<f64>,
     components: &ComponentArgs,
 ) -> Result<()> {
     let path = PathBuf::from(file_path);
@@ -99,33 +112,12 @@ pub(crate) async fn execute(
         println!("  Draws: {} images", family.label());
     }
 
-    // Prompt for parameter count override (CLI-specific interactive UX).
-    //
-    // Skipped entirely under --reimport. `param_count_b` is not among the columns
-    // the upsert refreshes, so on this path the answer could only be collected
-    // and then thrown away — the very thing moving the duplicate check above
-    // the prompts was meant to stop.
-    let param_count_override = if reimport {
-        println!(
-            "\nSkipping the parameter-count prompt: --reimport refreshes derived \
-             metadata only and leaves the stored parameter count alone."
-        );
-        None
-    } else if let Some(params) = param_count_b {
-        let user_input =
-            input::prompt_float_with_default("Parameter count (in billions)", Some(params))?;
-        if user_input == 0.0 {
-            None
-        } else {
-            Some(user_input)
-        }
-    } else if gguf_metadata.image_family.is_some() {
-        // Nothing to ask of a model that draws and whose tensors could not
-        // be counted: nothing reads a count for it.
-        None
-    } else {
-        Some(input::prompt_float("Parameter count (in billions)")?)
-    };
+    let param_count_override = param_count_override(
+        reimport,
+        param_count,
+        param_count_b,
+        gguf_metadata.image_family.is_some(),
+    )?;
 
     // The import the app's add makes, with what only a terminal asks of it:
     // the count typed above, and the re-import.
@@ -184,6 +176,51 @@ pub(crate) async fn execute(
         println!("Model successfully added to database!");
     }
     Ok(())
+}
+
+/// The parameter count an add stores over the one the import derives:
+/// `given` by `--param-count`, or else the answer to the question, which
+/// offers `from_file`, the count the file gives.
+///
+/// Not asked under `reimport`: the count is not among the columns the upsert
+/// refreshes, so the answer could only be collected and then thrown away —
+/// the very thing moving the duplicate check above the question was meant to
+/// stop. Not asked of a model that `draws` either when the file gives no
+/// count: nothing reads a count for it. With no terminal to ask, the count
+/// the file gives is taken and said, and with none the add is refused.
+fn param_count_override(
+    reimport: bool,
+    given: Option<f64>,
+    from_file: Option<f64>,
+    draws: bool,
+) -> Result<Option<f64>> {
+    if reimport {
+        println!(
+            "\nSkipping the parameter-count prompt: --reimport refreshes derived \
+             metadata only and leaves the stored parameter count alone."
+        );
+        return Ok(None);
+    }
+    if let Some(given) = given {
+        anyhow::ensure!(
+            given > 0.0,
+            "--param-count must be a positive number of billions, not {given}"
+        );
+        return Ok(Some(given));
+    }
+    match from_file {
+        Some(params) => {
+            let taken =
+                format!("Parameter count {params:.1}B, as the file gives it (no terminal to ask).");
+            let answer = input::number(QUESTION, Unasked::Take(params, taken))?;
+            Ok((answer != 0.0).then_some(answer))
+        }
+        None if draws => Ok(None),
+        None => Ok(Some(input::number(
+            QUESTION,
+            Unasked::Refuse(NO_COUNT.to_owned()),
+        )?)),
+    }
 }
 
 #[cfg(test)]

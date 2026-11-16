@@ -889,11 +889,9 @@ class Smoke:
         model = os.path.join(self.models, MODEL)
         if not os.path.isfile(model):
             raise Failed(f"the pinned test models have no {MODEL}: {listing(self.models)}")
-        # gglib model add asks for the parameter count and waits even with no
-        # terminal on its input (mmogr/gglib#2020). An empty line takes the
-        # count it read from the file; 0.1 answers when it read none. Remove
-        # the answers once #2020 is fixed.
-        self.run("gglib model add", [self.cli(), "model", "add", model], LIMITS["model"], answers=b"\n0.1\n")
+        # With no terminal on its input `model add` asks nothing and takes the
+        # parameter count the file gives (mmogr/gglib#2020).
+        self.run("gglib model add", [self.cli(), "model", "add", model], LIMITS["model"])
         # `model add` prints no ID; the library's own list says it.
         _, said, _ = self.run("gglib model list", [self.cli(), "model", "list"], LIMITS["short"])
         self.model = listed_model_id(said, MODEL) or ""
