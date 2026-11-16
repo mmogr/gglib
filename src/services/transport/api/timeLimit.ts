@@ -30,7 +30,7 @@ import { TransportError } from '../errors';
 /** A read that is not a stream: the whole reply, headers and body. */
 const READ_LIMIT_MS = 30_000;
 
-/** The health probe, asked every 2 s: a daemon slower than this is not there. */
+/** The health probe, asked every 2 s. One with no answer in this time is asked again at once (`useDaemonReachable`). */
 export const HEALTH_LIMIT_MS = 1_500;
 
 /** A stream, until its response headers come. */
