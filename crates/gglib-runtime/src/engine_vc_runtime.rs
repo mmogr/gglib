@@ -84,6 +84,10 @@ pub(super) const RUNTIME: &str = "Microsoft Visual C++ Redistributable (x64)";
 
 /// Where Windows' question for permission may be. The service, not the
 /// window clicked in, asks for it, so Windows may leave it on the taskbar.
+/// The desktop app lends the service the right to come to the front just
+/// before a repair (`allow_service_foreground`, #2046), but that can fail,
+/// a browser tab cannot lend it, and Windows does not promise where the
+/// prompt opens; so this is always said.
 pub(super) const LOOK_FOR_IT: &str =
     "if no question appears, look for a flashing shield on the taskbar.";
 

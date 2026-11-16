@@ -12,8 +12,8 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { getEngineStatus, repairEngine, streamEngineInstall, uninstallEngine } from '../services/transport/api/setup';
 import { ENGINE_PRODUCT } from '../types/setup';
-import type { EngineStatus, LlamaProgressEvent, RuntimeKind } from '../types/setup';
-import { appLogger } from '../services/platform';
+import type { EngineStatus, LlamaProgressEvent, RepairReport, RuntimeKind } from '../types/setup';
+import { allowServiceForeground, appLogger } from '../services/platform';
 import { formatError } from '../utils/errors';
 
 /**
@@ -80,6 +80,41 @@ function endRepair(kind: RuntimeKind, patch: Partial<RepairState>) {
   repairRound += 1;
   setRepairState(kind, { ...patch, repairing: false });
 }
+
+/**
+ * Post the daemon's repair of `kind`, the one place a page asks for one.
+ * The service runs the installer, which asks Windows for permission, and
+ * Windows leaves a prompt asked for from the background on the taskbar; so
+ * first the app, whose window was just clicked, lets the service come to
+ * the front (`allowServiceForeground`). That never fails the repair and
+ * never holds it for long: the repair is posted once the grant answers or
+ * after `GRANT_WAIT_MS`, whichever is first. Where it is not granted, in a
+ * browser among them, the repair is posted as before and the daemon's
+ * words say where to look. The prompt itself comes only after the service
+ * has downloaded and checked the installer, and a click or key press in
+ * that time ends the right.
+ */
+export async function postRepair(kind: RuntimeKind): Promise<RepairReport> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      allowServiceForeground(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, GRANT_WAIT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+  return repairEngine(kind);
+}
+
+/**
+ * The longest a repair waits for the app's grant before it is posted
+ * anyway. The app's command waits for nothing itself; this bounds the
+ * bridge to it, so a grant that never answers cannot hold a repair.
+ */
+export const GRANT_WAIT_MS = 300;
 
 /**
  * The release `kind`'s last finished install put there (`null` before one),
@@ -242,7 +277,7 @@ export function useEngine(kind: RuntimeKind): EngineState {
     }
     if (fix === null || repairs[kind].repairing) return;
     setRepairState(kind, { repairing: true, said: null, error: null });
-    repairEngine(kind).then(
+    postRepair(kind).then(
       (report) => endRepair(kind, { said: report.says }),
       (err: unknown) => endRepair(kind, { error: formatError(err) }),
     );

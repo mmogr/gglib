@@ -47,6 +47,7 @@ vi.mock('../../../src/services/transport/api/setup', () => api);
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 
 import { BUILD_POLL_MS, CLOSED_WITHOUT_RESULT } from '../../../src/places/setup/useEngines';
+import { GRANT_WAIT_MS } from '../../../src/hooks/useEngine';
 import { INSTALL_PHASE_LABELS, type EngineStatus, type RuntimeKind } from '../../../src/types/setup';
 import { renderGated } from './harness';
 import { engine, setupStatus } from './setupFixtures';
@@ -333,6 +334,26 @@ describe("setup's engines", () => {
       });
       await repair();
       expect(sent.filter((s) => s === 'allow_service_foreground' || s === 'repair')).toEqual(['allow_service_foreground', 'repair']);
+    });
+
+    it('in the app, posts the repair within GRANT_WAIT_MS when the grant never answers', async () => {
+      inTheApp();
+      const at: Record<string, number> = {};
+      vi.mocked(invoke).mockImplementation((command: string) => {
+        sent.push(command);
+        at[command] = performance.now();
+        return new Promise(() => {});
+      });
+      api.repairEngine.mockImplementation(async () => {
+        sent.push('repair');
+        at.repair = performance.now();
+        answer('llama', engine('llama', true));
+        return { outcome: 'installed', works: true, says };
+      });
+      await repair();
+      expect(sent.filter((s) => s === 'allow_service_foreground' || s === 'repair')).toEqual(['allow_service_foreground', 'repair']);
+      // The limit, with room for a slow runner's timer: far short of the launch's 15 s.
+      expect(at.repair - at.allow_service_foreground).toBeLessThan(GRANT_WAIT_MS + 1500);
     });
 
     it('in a browser, posts the repair with nothing to grant', async () => {

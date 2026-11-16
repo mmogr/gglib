@@ -34,6 +34,7 @@ OS-specific utilities that cannot be cleanly abstracted through the transport la
 | `openUrl.ts` | Opens URLs in system browser (Tauri: native; Web: `window.open`) |
 | `mainWindow.ts` | `showMainWindow()`: brings the main window forward (`show_main_window`), for the tray panel's Open gglib; a no-op on web |
 | `startGglib.ts` | `startGglib()`: starts the daemon (`start_gglib`, the tray menu's Start gglib), for the service-not-running screen's Start gglib; a no-op on web |
+| `serviceForeground.ts` | `allowServiceForeground()`: lets the daemon bring a window to the front (`allow_service_foreground`) as a repair is posted, waiting `GRANT_WAIT_MS` at most, so Windows' permission prompt for the installer comes up in front, not on the taskbar; `false` on web, and never rejects |
 | `fileDialogs.ts` | Native GGUF file picker, and the native folder picker for a chat's folder and the models folder (`pickFolder(title)`, `null` on web) (Tauri only) |
 | `menuSync.ts` | Synchronises native menu bar item state with application state |
 | `menuEvents.ts` | Listens for native menu click events |

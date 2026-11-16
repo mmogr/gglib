@@ -7,6 +7,7 @@ mod snapshot;
 mod token;
 mod watch;
 
+pub(crate) use holder::service_pid;
 use launch::spawn_external_daemon;
 pub(crate) use service::{Launch, Service, Started};
 pub(crate) use snapshot::DaemonSnapshot;

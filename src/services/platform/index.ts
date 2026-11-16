@@ -9,6 +9,7 @@ export { isDesktop } from './detect';
 export { openUrl } from './openUrl';
 export { showMainWindow } from './mainWindow';
 export { startGglib } from './startGglib';
+export { allowServiceForeground } from './serviceForeground';
 export { setSelectedModel, syncMenuState, syncMenuStateSilent } from './menuSync';
 
 // Desktop menu events

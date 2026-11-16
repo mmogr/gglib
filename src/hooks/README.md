@@ -57,7 +57,7 @@ Custom React hooks for gglib GUI functionality.
 
 | Hook | Description |
 |------|-------------|
-| [`useEngine.ts`](useEngine.ts) | One engine's status, its install and its repair (each kept across remounts, one per engine, every engine's status read again when a repair ends) and its removal, for the engine cards in Settings › Engines; `useInstalledVersion` for the inspector's drawing parts |
+| [`useEngine.ts`](useEngine.ts) | One engine's status, its install and its repair (each kept across remounts, one per engine, every engine's status read again when a repair ends) and its removal, for the engine cards in Settings › Engines; `useInstalledVersion` for the inspector's drawing parts; `postRepair`, the one place a repair is posted, which first lets the service bring Windows' permission prompt to the front (`allowServiceForeground`), for Settings and setup |
 | [`useLlamaStatus.ts`](useLlamaStatus.ts) | Whether llama.cpp is installed and can be downloaded, and the update to offer (a model running on it or not; the daemon refuses an install under one), from the daemon's setup-status route |
 | [`useModelsDirectory.ts`](useModelsDirectory.ts) | Models directory configuration |
 | [`useServerLogs.ts`](useServerLogs.ts) | Server log streaming |

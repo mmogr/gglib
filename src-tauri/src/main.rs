@@ -113,6 +113,8 @@ fn main() {
             commands::util::show_main_window,
             // OS integration: the main window's Start gglib, when no daemon answers
             commands::util::start_gglib,
+            // OS integration: Windows' permission prompt for a repair, in front
+            commands::util::allow_service_foreground,
             // Frontend logging: bridge to Rust tracing
             commands::app_logs::log_from_frontend,
         ])

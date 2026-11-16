@@ -30,6 +30,12 @@
 //! and take it off (#1959). Off Windows there is no such variable, and
 //! `Registry` says so. No other crate may call it.
 //!
+//! And it lends another process the right to bring a window to the front
+//! (`AllowSetForegroundWindow`), for [`super::foreground`]: the desktop app
+//! lends it to the service when a repair is posted, so Windows' permission
+//! prompt for the installer the service runs is not left on the taskbar
+//! (#2046). Off Windows there is no such right.
+//!
 //! These calls have no safe form in the standard library, so the Windows
 //! half of this file allows `unsafe`, and Windows is called directly from
 //! here only (ADR 0030).
@@ -110,6 +116,16 @@ impl Store for Registry {
         }
     }
 }
+
+// ---- The foreground right, for Windows' permission prompt (#2046) ----
+
+/// Let the process `pid` bring a window to the front; see
+/// [`super::foreground`], which is the only caller.
+#[cfg(windows)]
+pub(super) fn allow_set_foreground(pid: u32) -> std::io::Result<()> {
+    windows::allow_set_foreground(pid)
+}
+// ---- end of the foreground right ----
 
 #[cfg(not(windows))]
 fn not_kept() -> std::io::Error {
@@ -461,6 +477,19 @@ mod windows {
     }
 
     // ---- The foreground right, for Windows' permission prompt (#2046) ----
+
+    use windows_sys::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
+
+    pub(super) fn allow_set_foreground(pid: u32) -> io::Result<()> {
+        // SAFETY: takes a process id and returns a BOOL; no pointer is
+        // passed. It "will fail if the calling process cannot set the
+        // foreground window" (AllowSetForegroundWindow), and then grants
+        // nothing; the reason is read at once, before any other call.
+        if unsafe { AllowSetForegroundWindow(pid) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
 
     #[cfg(test)]
     mod foreground_tests {

@@ -27,6 +27,9 @@ The Windows-specific flag is applied here and nowhere else.
   read, with nothing on its pipes.
 - [`detached`]: starting the service, so it outlives the command that
   started it.
+- [`foreground`]: letting another process bring a window to the front,
+  which the desktop app lends the service as it posts a repair whose
+  installer asks Windows for permission; nothing is kept off Windows.
 - [`held`]: a downloaded program's file, created only where nothing is,
   and it and its folder held while it is checked and run, so on Windows
   nobody else can write, delete or rename either in between, and a

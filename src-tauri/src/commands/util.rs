@@ -5,6 +5,7 @@
 use crate::app::AppState;
 use crate::daemon::Service;
 use crate::menu::state_sync;
+use gglib_core::utils::process::foreground::Foreground;
 use tauri::AppHandle;
 
 /// Where the frontend reaches the backend API, the daemon's fixed loopback
@@ -118,14 +119,76 @@ pub(crate) async fn start_gglib(state: tauri::State<'_, AppState>) -> Result<(),
     started
 }
 
+/// Let the service the app talks to bring a window to the front: the page
+/// asks as it posts a repair (#2046).
+///
+/// The service runs the installer of Microsoft's Visual C++ runtime, which
+/// asks Windows for permission, and Windows leaves a prompt asked for from
+/// the background flashing on the taskbar. This app's window has just been
+/// clicked, so it can lend the service the right to come to the front. The
+/// prompt comes only after the service has downloaded the installer (about
+/// 25 MB) and checked it, and the right ends at the user's next input to
+/// any other program, this app's window included (the service has none):
+/// a click or key press during the download ends it. Answers whether the
+/// grant was made; a grant not made changes nothing else, and the repair is
+/// posted as before.
+///
+/// Never waits for the service: a launch or a Start gglib in flight, or a
+/// service the last poll did not reach, is no grant, at once. The poll is
+/// asked rather than the lock, which `DaemonLock::is_held` would take for
+/// an instant (`daemon/holder.rs` says why, and what that leaves).
+#[tauri::command]
+pub(crate) async fn allow_service_foreground(
+    state: tauri::State<'_, AppState>,
+) -> Result<bool, String> {
+    let reachable = state.snapshot.read().await.reachable;
+    Ok(allow_service(
+        reachable,
+        crate::daemon::service_pid,
+        gglib_core::utils::process::foreground::allow_foreground,
+    ))
+}
+
+/// When the last poll reached the service (`reachable`), ask `allow` to
+/// grant the process `pid` names; whether it did. Otherwise nothing is
+/// read or asked.
+fn allow_service(
+    reachable: bool,
+    pid: impl FnOnce() -> Option<u32>,
+    allow: impl FnOnce(u32) -> std::io::Result<Foreground>,
+) -> bool {
+    if !reachable {
+        return false;
+    }
+    let Some(pid) = pid() else {
+        return false;
+    };
+    match allow(pid) {
+        Ok(Foreground::Allowed) => {
+            tracing::info!(
+                pid,
+                "the service may come to the front for Windows' permission prompt"
+            );
+            true
+        }
+        Ok(Foreground::NotNeeded) => false,
+        Err(e) => {
+            tracing::warn!(
+                pid,
+                error = %e,
+                "the service could not be let to come to the front; Windows may leave its permission prompt on the taskbar"
+            );
+            false
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use gglib_core::utils::process::foreground::Foreground;
-
     use super::*;
-    use crate::daemon::{LAUNCH_WAIT, Ownership};
+    use crate::daemon::{DaemonSnapshot, LAUNCH_WAIT, Ownership};
 
     /// The daemon's token file, as the answer reads it. A launch that comes
     /// up rewrites it, so a test can tell an answer read before the launch
@@ -289,60 +352,70 @@ mod tests {
         }
     }
 
-    /// A service the app talks to: the launch settled on it.
-    fn running() -> Service {
-        let (service, launch) = Service::launching();
-        launch.settle(Ok(Ownership::Adopted));
-        service
+    /// What the last poll says of a service it reached.
+    fn reached() -> bool {
+        DaemonSnapshot {
+            reachable: true,
+            ..DaemonSnapshot::default()
+        }
+        .reachable
     }
 
     /// The service the app talks to is the one allowed, by the id its
     /// record gives, and the page hears that the grant was made.
-    #[tokio::test]
-    async fn the_service_the_app_talks_to_is_allowed() {
+    #[test]
+    fn the_service_the_app_talks_to_is_allowed() {
         let grants = Grants::answering(|| Ok(Foreground::Allowed));
-        let granted = allow_service(&running(), || Some(4242), |pid| grants.allow(pid)).await;
+        let granted = allow_service(reached(), || Some(4242), |pid| grants.allow(pid));
         assert!(granted);
         assert_eq!(grants.asked(), [4242]);
     }
 
     /// With no service known (no record of a running one), nothing is
     /// asked and nothing is granted.
-    #[tokio::test]
-    async fn no_known_service_asks_nothing() {
+    #[test]
+    fn no_known_service_asks_nothing() {
         let grants = Grants::answering(|| Ok(Foreground::Allowed));
-        let granted = allow_service(&running(), || None, |pid| grants.allow(pid)).await;
+        let granted = allow_service(reached(), || None, |pid| grants.allow(pid));
         assert!(!granted);
         assert_eq!(grants.asked(), Vec::<u32>::new());
     }
 
-    /// A launch that failed leaves no service to allow: the record is not
-    /// even read.
-    #[tokio::test]
-    async fn a_failed_launch_asks_nothing() {
-        let (service, launch) = Service::launching();
-        launch.settle(Err("the gglib daemon did not come up within 15s".to_owned()));
-        let grants = Grants::answering(|| Ok(Foreground::Allowed));
-        let granted = allow_service(
-            &service,
-            || panic!("the record was read with no service running"),
-            |pid| grants.allow(pid),
-        )
-        .await;
-        assert!(!granted);
-        assert_eq!(grants.asked(), Vec::<u32>::new());
+    /// A launch or a Start gglib in flight, and a service the last poll did
+    /// not reach (a failed launch, a stopped service), are no grant at
+    /// once: nothing waits for the launch, the record is not even read.
+    #[test]
+    fn a_service_not_reached_asks_nothing_and_waits_for_nothing() {
+        for snapshot in [DaemonSnapshot::starting(), DaemonSnapshot::default()] {
+            let grants = Grants::answering(|| Ok(Foreground::Allowed));
+            let granted = allow_service(
+                snapshot.reachable,
+                || panic!("the record was read with no service reached"),
+                |pid| grants.allow(pid),
+            );
+            assert!(!granted);
+            assert_eq!(grants.asked(), Vec::<u32>::new());
+        }
     }
 
     /// Windows refusing, and an OS with no such right, are both no grant:
     /// the page then posts the repair as it would have.
-    #[tokio::test]
-    async fn a_refusal_or_no_such_right_is_no_grant() {
+    #[test]
+    fn a_refusal_or_no_such_right_is_no_grant() {
         let refused = Grants::answering(|| Err(std::io::Error::from_raw_os_error(5)));
-        assert!(!allow_service(&running(), || Some(4242), |pid| refused.allow(pid)).await);
+        assert!(!allow_service(
+            reached(),
+            || Some(4242),
+            |pid| refused.allow(pid)
+        ));
         assert_eq!(refused.asked(), [4242]);
 
         let none = Grants::answering(|| Ok(Foreground::NotNeeded));
-        assert!(!allow_service(&running(), || Some(4242), |pid| none.allow(pid)).await);
+        assert!(!allow_service(
+            reached(),
+            || Some(4242),
+            |pid| none.allow(pid)
+        ));
         assert_eq!(none.asked(), [4242]);
     }
 }

@@ -125,6 +125,40 @@ comment).
 > short. What the edit does to the text is `gglib_core::paths::user_path`,
 > tested on every OS.
 
+> **Amendment, 2026-11-16 ([#2046](https://github.com/mmogr/gglib/issues/2046)).**
+> Decision 4 now holds `AllowSetForegroundWindow` too. The desktop app's
+> Repair has the service install Microsoft's Visual C++ runtime, and the
+> installer asks Windows for permission. The service is a background
+> process with no window, and Windows leaves a prompt asked for from the
+> background minimised on the taskbar, flashing. The app's window, just
+> clicked, can lend a process the right to come to the front:
+> `AllowSetForegroundWindow(pid)` "enables the specified process to set the
+> foreground window", "the calling process must already be able to set the
+> foreground window", and the right ends "the next time that either the
+> user generates input, unless the input is directed at that process, or
+> the next time a process calls `AllowSetForegroundWindow`". So the page
+> asks the app (`allow_service_foreground`) as it posts the repair, waiting
+> 300 ms at most for the answer, and the app grants it to the service by
+> the process id the service's lock record (`daemon.json`) gives, when the
+> app's last poll reached the service; it waits for no launch, and does not
+> touch the lock, which a check of it would take for an instant. The grant
+> is made seconds before the prompt: the service first downloads the
+> installer (about 25 MB) and checks it, and a click or key press anywhere
+> in that time, in gglib's window too, ends the right.
+> The owner call is `gglib_core::utils::process::foreground::allow_foreground`,
+> the same on every OS: it says `Allowed` when Windows granted, and
+> `NotNeeded` off Windows, and refuses `u32::MAX` (`ASFW_ANY`, every
+> process) and `0` (the System Idle Process) without asking. The call is in
+> `host.rs` beside the others.
+> What Microsoft does not document: whether the right reaches the processes
+> the service starts (the documented case is a process "started by the
+> foreground process"), and what decides where the consent prompt opens,
+> beyond "the UAC elevation mechanism uses the HWND as part of determining
+> whether the elevation is a background or foreground elevation" (Windows
+> Vista's UAC guidance). Whether the prompt then comes to the front is a
+> run on the Windows VM, not a test; where it does not, the offer's words
+> still say to look for a flashing shield on the taskbar.
+
 ## Consequences
 
 - `crates/gglib-core/tests/detached_spawn.rs` holds the A5 fault on every

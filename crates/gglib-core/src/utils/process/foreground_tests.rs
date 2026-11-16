@@ -20,6 +20,15 @@ fn every_process_at_once_is_refused() {
     assert_eq!(refused.kind(), io::ErrorKind::InvalidInput, "{refused}");
 }
 
+/// `0` is the System Idle Process, never a program gglib started, and
+/// Windows does not say what a grant to it does. A lock record that says
+/// `0` is refused on every OS, before Windows is asked.
+#[test]
+fn process_id_zero_is_refused() {
+    let refused = allow_foreground(0).expect_err("a grant to process id 0 is refused");
+    assert_eq!(refused.kind(), io::ErrorKind::InvalidInput, "{refused}");
+}
+
 /// This process's own id. Off Windows there is no such right, and the
 /// answer says nothing was granted. On Windows the answer is Windows' own
 /// (`host.rs` holds the two side by side): granted, or refused with
@@ -41,22 +50,38 @@ fn this_process_is_answered_with_what_happened() {
     }
 }
 
-/// An id no process has is never reported allowed. Windows' documentation
-/// says the call fails when the caller cannot set the foreground, and names
-/// no result for an id of no process. That the call also fails then is not
-/// documented, and this test is where it is checked: a yes for nobody
-/// would claim a grant that reaches no one. No process id comes near this
-/// one (Windows' ids are small multiples of four, though no document
-/// promises it).
+/// An id no process has is never reported allowed. Windows documents that
+/// the call fails when the caller cannot set the foreground, and names no
+/// result for an id of no process. So what this checks depends on the
+/// runner:
+///
+/// - where this process can grant (its own id is granted), the unknown id
+///   must be refused: that is the check of the unknown id, which Windows
+///   does not document;
+/// - where it cannot, the call fails for that reason whatever the id, and
+///   this checks only that nothing is reported allowed, and says so.
+///
+/// No process id comes near this one (Windows' ids are small multiples of
+/// four, though no document promises it).
 #[test]
 fn a_process_that_does_not_exist_is_not_allowed() {
-    let answer = allow_foreground(0xFFFF_FFF0);
-    if cfg!(windows) {
-        assert!(
-            answer.is_err(),
-            "allowed a process that does not exist: {answer:?}"
+    if !cfg!(windows) {
+        assert_eq!(
+            allow_foreground(0xFFFF_FFF0).expect("nothing to refuse"),
+            Foreground::NotNeeded
         );
-    } else {
-        assert_eq!(answer.expect("nothing to refuse"), Foreground::NotNeeded);
+        return;
+    }
+    let can_grant = allow_foreground(std::process::id()).is_ok();
+    let answer = allow_foreground(0xFFFF_FFF0);
+    assert!(
+        answer.is_err(),
+        "allowed a process that does not exist: {answer:?}"
+    );
+    if !can_grant {
+        eprintln!(
+            "this process cannot set the foreground here, so the unknown id was refused for that \
+             reason; the unknown id itself was not checked"
+        );
     }
 }

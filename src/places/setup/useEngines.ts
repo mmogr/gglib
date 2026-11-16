@@ -22,7 +22,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getEngineStatus, repairEngine, streamEngineInstall } from '../../services/transport/api/setup';
+import { postRepair } from '../../hooks/useEngine';
+import { getEngineStatus, streamEngineInstall } from '../../services/transport/api/setup';
 import type { EngineStatus, LlamaProgressEvent, RuntimeKind } from '../../types/setup';
 import { formatError } from '../../utils/errors';
 
@@ -191,7 +192,7 @@ export function useEngines(): SetupEngines {
         return;
       }
       patch(kind, { repairing: true, repaired: null });
-      void repairEngine(kind)
+      void postRepair(kind)
         .then(
           (report) => report.says,
           (err: unknown) => formatError(err),

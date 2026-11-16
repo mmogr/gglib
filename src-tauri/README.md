@@ -56,6 +56,7 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
    - `log_from_frontend` - Forward frontend logs to the Rust logger
    - `show_main_window` - Bring the main window forward (the tray panel's Open gglib)
    - `start_gglib` - Start the daemon the way the tray menu's Start gglib does (the main window's Start gglib, when no daemon answers)
+   - `allow_service_foreground` - Let the daemon bring a window to the front as the page posts a repair whose installer asks Windows for permission, so the prompt is not left on the taskbar
 
 6. **Real-Time Events**: The daemon's `/api/events` endpoint streams Server-Sent Events to each webview:
    - `server_*` events - Server lifecycle and health updates

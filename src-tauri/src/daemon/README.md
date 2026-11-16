@@ -39,6 +39,18 @@ failed Start gglib after this app's own daemon stopped still owns what it
 spawned, and quitting stops it; a first launch that failed finds a late
 daemon (or one started from a terminal) as not this app's to stop.
 
+## The service's process id
+
+`holder.rs` reads it from the record the service's lock writes beside it
+(`daemon.json`), only for the port this app talks to; `/health` does not
+say it. The lock is not touched (checking it would take it for an
+instant): `allow_service_foreground` reads the record only when the
+watcher's last poll reached the service, and waits for no launch. It lends
+that process the right to come to the front as a repair is posted, so
+Windows' permission prompt for the installer it runs is not left on the
+taskbar. A service killed since the last poll leaves its record, and its
+id is read until the poll notices.
+
 ## Ownership
 
 Which of those three happened is kept, because it decides what quitting is

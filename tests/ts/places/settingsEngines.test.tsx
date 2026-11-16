@@ -36,6 +36,7 @@ import type {
 import type { RenderedApp } from './harness';
 import { appSettings } from '../fixtures/settings';
 import { engineState } from './setupFixtures';
+import { GRANT_WAIT_MS } from '../../../src/hooks/useEngine';
 
 interface Stream {
   onEvent: (event: LlamaProgressEvent) => void;
@@ -552,6 +553,30 @@ describe('the engine rows', () => {
 
       expect(await r.findByText(RUNTIME_SAYS)).toBeInTheDocument();
       expect(sent.filter((s) => s === 'allow_service_foreground' || s === 'repair')).toEqual(['allow_service_foreground', 'repair']);
+    });
+
+    it('in the app, posts the repair within GRANT_WAIT_MS when the grant never answers', async () => {
+      inTheApp();
+      const at: Record<string, number> = {};
+      vi.mocked(invoke).mockImplementation((command: string) => {
+        sent.push(command);
+        at[command] = performance.now();
+        return new Promise(() => {});
+      });
+      fake.repair = async () => {
+        sent.push('repair');
+        at.repair = performance.now();
+        return { outcome: 'installed', works: true, says: RUNTIME_SAYS };
+      };
+      renderApp('/settings/engines');
+      const r = await row('llama.cpp');
+
+      await userEvent.click(await r.findByRole('button', { name: 'Repair' }));
+
+      expect(await r.findByText(RUNTIME_SAYS)).toBeInTheDocument();
+      expect(sent.filter((s) => s === 'allow_service_foreground' || s === 'repair')).toEqual(['allow_service_foreground', 'repair']);
+      // The limit, with room for a slow runner's timer: far short of the launch's 15 s.
+      expect(at.repair - at.allow_service_foreground).toBeLessThan(GRANT_WAIT_MS + 1500);
     });
 
     it('in a browser, posts the repair with nothing to grant, and keeps where to look', async () => {
