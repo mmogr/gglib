@@ -32,7 +32,7 @@ pub const PINNED_SD_RELEASE: &str = "master-1098-b521db4";
 /// 2.43. CI reads the installed build and holds this to it
 /// (`the_floor_is_the_glibc_the_pinned_linux_build_asks_for`), so a pin
 /// whose builds ask for another version cannot merge without it.
-pub(crate) const PINNED_SD_LINUX_GLIBC: Glibc = Glibc(2, 38);
+pub(crate) const PINNED_SD_LINUX_GLIBC: Glibc = Glibc(2, 43);
 
 /// Environment override for [`PINNED_SD_RELEASE`]: a release tag, or
 /// `latest` for upstream's newest. Unset or blank installs the pin.

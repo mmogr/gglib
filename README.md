@@ -273,6 +273,13 @@ The apt packages need Ubuntu 24.04+ or Debian 13+. On Arch the packages are
 the AUR's `gglib-bin` and `gglib-gui-bin`, so once they are on the AUR an AUR
 helper updates the same install.
 
+Drawing images needs a newer system than chat does. The image runtime's
+pre-built Linux release needs Ubuntu 26.04 or newer (glibc 2.43). On an older
+system, Ubuntu 24.04 and Debian 13 among them, gglib downloads nothing and
+builds it from source instead, which takes git, CMake and a C++ compiler:
+`gglib up` offers the build, and `gglib config sd install` runs it. Chat is
+not affected.
+
 ### Pre-built binaries (macOS, Linux, Windows)
 
 Download from the [Releases page](https://github.com/mmogr/gglib/releases)

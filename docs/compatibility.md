@@ -30,5 +30,6 @@ These can change in any release:
 ## Platforms
 
 - **macOS (Apple silicon) and Linux:** built and tested.
+- **Drawing images on Linux:** the image runtime's pre-built release needs glibc 2.43 or newer, which is Ubuntu 26.04 and later. On an older system, Ubuntu 24.04 and Debian 13 among them, gglib builds it from source instead of downloading it. Chat runs on the same systems as before.
 - **Windows 11 (x64):** built and tested with no GPU, from the installer to a working chat. A GPU, drawing images and pairing a second device aren't tested there yet. [#1959](https://github.com/mmogr/gglib/issues/1959) lists what was found and fixed.
 - **macOS builds aren't signed or notarized yet.** [Install](../README.md#pre-built-binaries-macos-linux-windows) says how to open them.
