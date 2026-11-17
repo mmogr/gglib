@@ -62,8 +62,9 @@ const MAX_REDIRECTS: usize = 10;
 pub(crate) const STALL_AFTER: Duration = Duration::from_secs(30);
 
 /// How long a connection is given to open. Shorter than [`STALL_AFTER`], so a
-/// host that cannot be reached fails at once with the client's own error,
-/// and is not taken for a quiet connection and tried again.
+/// connection that will not open ends with the client's own error and is
+/// never taken for a quiet one. (A refused connection ends sooner: at once
+/// on Unix, after a few seconds of retried attempts on Windows.)
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Reconnects after a lost connection before the download gives up.
@@ -252,7 +253,8 @@ pub(crate) async fn download_file(
             // A connection that did not open, or broke, once this download
             // has had bytes or a quiet connection: the network dropped for a
             // while, as Wi-Fi does. The first connection of a download that
-            // has had nothing fails at once: the host may simply be wrong.
+            // has had nothing ends the download, spending no reconnects: the
+            // host may simply be wrong.
             Err(NativeError::Network(why)) if carry.received > 0 || lost.in_a_row > 0 => {
                 tracing::warn!(url = req.url, why, "download connection failed");
                 Cause::Failed
@@ -795,8 +797,8 @@ async fn send_unless_cancelled(
     stall_after: Duration,
 ) -> Result<Response, NativeError> {
     let send = async {
-        // A connection that does not open fails at once, by the client's
-        // connect timeout, which runs out before this clock does: only a
+        // A connection that does not open fails by the client's own error,
+        // its connect timeout running out before this clock does: only a
         // server that opened and then said nothing is quiet.
         tokio::time::timeout(stall_after, request.send())
             .await

@@ -71,8 +71,9 @@ The native path (`native.rs`) is responsible for:
   that is down has the reconnects' whole span, about 2 minutes, to come back
   in. Then it fails with `DownloadError::Interrupted`, whose sentence says
   for how long nothing arrived and that trying again carries on from the
-  part. The first connection of a download that has had nothing fails at
-  once, and its error names the cause (`could not connect to <host>: …`).
+  part. The first connection of a download that has had nothing ends the
+  download when it fails, spending no reconnects, and its error names the
+  cause (`could not connect to <host>: …`).
 - **One file, not two spliced.** The first connection's digest and size are
   kept, and a later connection that gives another is of a changed file: the
   part is removed and the file started over, once, with a note on the row.

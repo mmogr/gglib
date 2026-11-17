@@ -272,17 +272,21 @@ async fn a_cancel_on_a_quiet_connection_ends_the_transfer_at_once() {
 // ============================================================================
 
 /// A server whose first connection gets the first `sent` bytes of `body`
-/// and then nothing, held open. It stops listening once it has taken that
-/// connection, so every reconnect is refused, as when the network is down;
-/// with `back_after`, it listens on the same port again that long after,
-/// honouring `Range`. Answers its address.
-async fn goes_away(body: Vec<u8>, sent: usize, back_after: Option<Duration>) -> String {
+/// and then nothing, held open. Then the network is down: the next
+/// `down_for` connections (every one, with `None`) are taken and closed
+/// unanswered, which fails the client's request at once on every OS. After
+/// them it serves the file, honouring `Range`. Answers its address.
+///
+/// The way down is counted in connections, not timed, and the one listener
+/// is kept throughout: a closed port is refused at once on Unix but only
+/// after a few seconds of retried attempts on Windows, and a port re-bound
+/// at once is not dependable there either.
+async fn goes_away(body: Vec<u8>, sent: usize, down_for: Option<usize>) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let etag = sha256_of(&body);
     tokio::spawn(async move {
         let incoming = gglib_test_http::incoming(&listener).await.unwrap();
-        drop(listener);
         let (first_body, first_etag) = (body.clone(), etag.clone());
         tokio::spawn(async move {
             let (_request, mut socket) = incoming.request().await.unwrap();
@@ -296,12 +300,16 @@ async fn goes_away(body: Vec<u8>, sent: usize, back_after: Option<Duration>) -> 
             std::future::pending::<()>().await;
         });
 
-        let Some(after) = back_after else { return };
-        tokio::time::sleep(after).await;
-        let socket = tokio::net::TcpSocket::new_v4().unwrap();
-        socket.set_reuseaddr(true).unwrap();
-        socket.bind(addr).unwrap();
-        let listener = socket.listen(16).unwrap();
+        let mut closed = 0;
+        while down_for.is_none_or(|down| closed < down) {
+            // Taken and dropped with nothing read or written: the request
+            // fails before any answer, as one to an unreachable host does.
+            let Ok(incoming) = gglib_test_http::incoming(&listener).await else {
+                return;
+            };
+            drop(incoming);
+            closed += 1;
+        }
         while let Ok((request, mut socket)) = gglib_test_http::accept(&listener).await {
             let start: usize = request
                 .header("range")
@@ -323,14 +331,15 @@ async fn goes_away(body: Vec<u8>, sent: usize, back_after: Option<Duration>) -> 
     format!("http://{addr}/model.gguf")
 }
 
-/// The connection goes quiet, and then the network is down: every
-/// reconnect is refused, until it comes back. The refused reconnects are
-/// tried again, spaced a quiet time apart, and the download carries on
-/// from its part once the server can be reached.
+/// The connection goes quiet, and then the network is down: the next two
+/// reconnects fail before any answer. They are counted and tried again,
+/// spaced a quiet time apart, and the third carries on from the part. The
+/// quiet connection is reconnect 1, so the two that fail are 2 and 3 of 3:
+/// the last one the bound allows is the one that gets through.
 #[tokio::test]
 async fn a_download_reconnects_once_the_network_comes_back() {
     let body = body_of(8192);
-    let url = goes_away(body.clone(), 3000, Some(Duration::from_millis(1500))).await;
+    let url = goes_away(body.clone(), 3000, Some(2)).await;
     let fx = Fixture::new();
     let seen = Arc::new(Seen::default());
 
@@ -339,17 +348,26 @@ async fn a_download_reconnects_once_the_network_comes_back() {
         .expect("the download carries on once the server is back");
 
     assert_eq!(std::fs::read(&fx.dest).unwrap(), body, "the file is whole");
-    let notices = seen.notices();
-    assert!(
-        notices
-            .iter()
-            .any(|n| n == "no data for 1s, reconnecting (2 of 3)…"),
-        "a refused reconnect is counted and said: {notices:?}"
+    let notices: Vec<String> = seen
+        .notices()
+        .into_iter()
+        .filter(|n| n.contains("reconnecting"))
+        .collect();
+    assert_eq!(
+        notices,
+        [
+            "no data for 1s, reconnecting (1 of 3)…",
+            "no data for 1s, reconnecting (2 of 3)…",
+            "no data for 1s, reconnecting (3 of 3)…",
+        ],
+        "each failed reconnect is counted and said"
     );
 }
 
-/// The network never comes back: the refused reconnects run out, and the
-/// download ends in the stall's sentence, not the transport's error.
+/// The network never comes back: the failed reconnects run out, and the
+/// download ends in the stall's sentence, not the transport's error. The
+/// time is the quiet connection's and the two failed reconnects' waits,
+/// each one quiet time; the last failed reconnect is not waited out.
 #[tokio::test]
 async fn a_network_that_never_comes_back_ends_in_the_stall_sentence() {
     let body = body_of(8192);
@@ -368,7 +386,7 @@ async fn a_network_that_never_comes_back_ends_in_the_stall_sentence() {
          from the 2.93 KiB already downloaded"
     );
     assert!(
-        started.elapsed() < QUIET * 6,
+        started.elapsed() < QUIET * 10,
         "it gives up within its bound, took {:?}",
         started.elapsed()
     );
@@ -418,10 +436,12 @@ async fn a_connection_that_breaks_mid_body_is_reconnected_at_once() {
 }
 
 /// The first connection of a download with nothing on disk that cannot be
-/// made fails at once: there is nothing to carry on from, and the host may
-/// simply be wrong.
+/// made ends the download, spending no reconnects: there is nothing to
+/// carry on from, and the host may simply be wrong. How long the refusal
+/// takes is the OS's (at once on Unix, a few seconds of retried attempts on
+/// Windows), so what is checked is that nothing was reconnected.
 #[tokio::test]
-async fn a_first_connection_that_cannot_be_made_fails_at_once() {
+async fn a_first_connection_that_cannot_be_made_spends_no_reconnects() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     drop(listener);
@@ -429,18 +449,20 @@ async fn a_first_connection_that_cannot_be_made_fails_at_once() {
     let fx = Fixture::new();
     let seen = Arc::new(Seen::default());
 
-    let started = Instant::now();
     let err = run(&quiet_request(&url, &fx, 8192, &seen))
         .await
         .expect_err("nothing answers");
 
-    assert!(started.elapsed() < QUIET, "took {:?}", started.elapsed());
     assert!(
         err.to_string()
             .starts_with("Network error: could not connect to 127.0.0.1: "),
         "the cause is said plainly: {err}"
     );
-    assert!(seen.notices().is_empty());
+    assert!(
+        seen.notices().is_empty(),
+        "no reconnect was tried: {:?}",
+        seen.notices()
+    );
 }
 
 // ============================================================================
