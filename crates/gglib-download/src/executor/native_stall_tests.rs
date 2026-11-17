@@ -439,7 +439,11 @@ async fn a_connection_that_breaks_mid_body_is_reconnected_at_once() {
 /// made ends the download, spending no reconnects: there is nothing to
 /// carry on from, and the host may simply be wrong. How long the refusal
 /// takes is the OS's (at once on Unix, a few seconds of retried attempts on
-/// Windows), so what is checked is that nothing was reconnected.
+/// Windows), so what is checked is that nothing was reconnected. The quiet
+/// time is the one a real download runs with, not the tests' short one:
+/// Windows' refusal takes longer than [`QUIET`], and a connect still open
+/// when the quiet time passes is a quiet connection, not a refused one
+/// (on CI: "no data arrived for 4s; 0 bytes kept").
 #[tokio::test]
 async fn a_first_connection_that_cannot_be_made_spends_no_reconnects() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -448,10 +452,12 @@ async fn a_first_connection_that_cannot_be_made_spends_no_reconnects() {
     let url = format!("http://{addr}/model.gguf");
     let fx = Fixture::new();
     let seen = Arc::new(Seen::default());
+    let request = NativeDownload {
+        stall_after: STALL_AFTER,
+        ..quiet_request(&url, &fx, 8192, &seen)
+    };
 
-    let err = run(&quiet_request(&url, &fx, 8192, &seen))
-        .await
-        .expect_err("nothing answers");
+    let err = run(&request).await.expect_err("nothing answers");
 
     assert!(
         err.to_string()
