@@ -134,6 +134,8 @@ fn main() {
             commands::util::show_main_window,
             // OS integration: the main window's Start gglib, when no daemon answers
             commands::util::start_gglib,
+            // OS integration: a window's poll of whether the daemon answers
+            commands::util::daemon_answers,
             // Frontend logging: bridge to Rust tracing
             commands::app_logs::log_from_frontend,
         ])

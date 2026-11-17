@@ -6,11 +6,14 @@
  * daemon that is there. As those probes do, it
  * counts only an answer that says it is gglib's (`service: "gglib-daemon"`):
  * another program on the port is no daemon. The daemon lets the pages it
- * lets read `/api` read `/health` too (CORS), the desktop window included.
- * It is a plain `fetch` outside the client's 401 handling (the token
- * re-read), through the same time limit as every request
+ * lets read `/api` read `/health` too (CORS).
+ * In a browser it is a plain `fetch` outside the client's 401 handling (the
+ * token re-read), through the same time limit as every request
  * (`timeLimit.ts`): 1.5 s, the reply included, so a daemon that does not
- * answer reads as not there instead of leaving the question open.
+ * answer reads as not there instead of leaving the question open. In the
+ * desktop app the app asks for the window (`appHealthProbe`), with the same
+ * 1.5 s and the same reading of the answer, so the probe never waits behind
+ * the page's own requests for one of the WebView's connections.
  *
  * `tokenRefusal` is the one `/api` read (`/api/version`) a browser tab makes
  * to learn whether the daemon takes the token it holds. A daemon that
@@ -21,13 +24,15 @@
  */
 
 import { TransportError } from '../errors';
-import { apiFetch, healthUrl } from './client';
+import { apiFetch, appHealthProbe, healthUrl } from './client';
 import { TOKEN_REQUIRED } from './daemonToken';
 import { fetchWithin, HEALTH_LIMIT_MS, limitFor } from './timeLimit';
 
 /** Whether a daemon answers at this session's address. */
 export async function probeDaemon(): Promise<boolean> {
   try {
+    const app = await appHealthProbe();
+    if (app !== null) return app;
     return await fetchWithin(
       await healthUrl(),
       { cache: 'no-store' },

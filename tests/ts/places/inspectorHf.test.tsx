@@ -104,9 +104,29 @@ describe('the inspector, a Hugging Face repo', () => {
   it('reads the repo by its address, so a reload keeps it, and sums it up', async () => {
     renderHf([quant('Q4_K_M', 4000)]);
     expect(await within(inspector()).findByRole('heading', { name: REPO })).toBeInTheDocument();
-    expect(transport.getHfModelSummary).toHaveBeenCalledWith(REPO);
+    expect(transport.getHfModelSummary).toHaveBeenCalledWith(REPO, expect.any(AbortSignal));
     expect(await within(inspector()).findByText('calls tools')).toBeInTheDocument();
     expect(within(inspector()).getByText(/^8\.0B/)).toBeInTheDocument();
+  });
+
+  it('stops every read still out when the repo is left, so none holds a connection to the daemon', async () => {
+    // The Hub is slow: no read of the four is answered.
+    const out: AbortSignal[] = [];
+    const never = (_id: string, signal: AbortSignal) => {
+      out.push(signal);
+      return new Promise<never>(() => {});
+    };
+    transport.getHfModelSummary.mockImplementation(never);
+    transport.getHfQuantizations.mockImplementationOnce(never as never);
+    transport.getHfPick.mockImplementationOnce(never as never);
+    transport.getHfToolSupport.mockImplementationOnce(never as never);
+    const { router } = renderHf([]);
+    await waitFor(() => expect(out).toHaveLength(4));
+    expect(out.every((signal) => !signal.aborted)).toBe(true);
+
+    await act(() => router.navigate('/'));
+
+    expect(out.every((signal) => signal.aborted)).toBe(true);
   });
 
   it('selects no row and guesses no pick when the daemon marks none, until one is chosen', async () => {
@@ -131,7 +151,7 @@ describe('the inspector, a Hugging Face repo', () => {
     await waitFor(() => expect(size('Q8_0')).toHaveAttribute('aria-selected', 'true'));
     expect(within(size('Q8_0')).getByRole('img', { name: "gglib's pick" })).toBeInTheDocument();
     expect(within(inspector()).getAllByRole('img', { name: "gglib's pick" })).toHaveLength(1);
-    expect(transport.getHfPick).toHaveBeenCalledWith(REPO);
+    expect(transport.getHfPick).toHaveBeenCalledWith(REPO, expect.any(AbortSignal));
   });
 
   it("selects the daemon's pick even where a larger full-precision variant fits", async () => {

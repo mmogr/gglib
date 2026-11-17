@@ -10,7 +10,9 @@
  * once, and only two in a row say gone; another program answering on the port
  * is no daemon, as Rust's probes say. The probe goes to `/health` with no
  * credential, and counts only an answer that says it is gglib's. In the
- * desktop app it asks the daemon's own address and never the tab's token.
+ * desktop app the window asks the app (`daemon_answers`), never by a `fetch`
+ * of its own and never about a tab's token, so a daemon is not called gone
+ * while the page's own requests wait for one of the WebView's connections.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -35,6 +37,21 @@ const daemon = {
   api: (): Response => json({ semver: '0.31.0', display: '0.31.0', sha: 'a', fingerprint: 'a' }),
 };
 
+/**
+ * The desktop app's own probe (`daemon_answers`): Rust asks `/health` over a
+ * connection of its own and reads the answer as the page does.
+ */
+const app = { answers: (): Promise<boolean> => Promise.resolve(daemon.up) };
+
+/** The desktop bridge: the daemon's address, and the app's probe of it. */
+const bridge = (info: () => Promise<unknown>) => ({
+  invoke: vi.fn((cmd: string) => {
+    if (cmd === 'get_embedded_api_info') return info();
+    if (cmd === 'daemon_answers') return app.answers();
+    return Promise.resolve(null);
+  }),
+});
+
 let fetchMock: ReturnType<typeof vi.fn>;
 
 const calls = (path: string) =>
@@ -58,6 +75,7 @@ beforeEach(() => {
   localStorage.clear();
   window.history.replaceState(null, '', '/settings/about');
   daemon.up = true;
+  app.answers = () => Promise.resolve(daemon.up);
   daemon.health = () => json({ service: 'gglib-daemon', status: 'ok' });
   daemon.api = () => json({ semver: '0.31.0', display: '0.31.0', sha: 'a', fingerprint: 'a' });
   fetchMock = vi.fn(async (url: string) => {
@@ -184,13 +202,10 @@ describe("the window while the desktop app's launch of gglib is in flight", () =
     const waiting: Array<() => void> = [];
     const answer = () =>
       outcome!.ok ? Promise.resolve({ port: 9887, token: 'minted' }) : Promise.reject(WHY);
-    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {
-      invoke: vi.fn((cmd: string) => {
-        if (cmd !== 'get_embedded_api_info') return Promise.resolve(null);
-        if (outcome) return answer();
-        return new Promise((resolve, reject) => waiting.push(() => void answer().then(resolve, reject)));
-      }),
-    };
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = bridge(() => {
+      if (outcome) return answer();
+      return new Promise((resolve, reject) => waiting.push(() => void answer().then(resolve, reject)));
+    });
     return async (ok: boolean) => {
       outcome = ok ? { ok: true } : { ok: false };
       await act(async () => {
@@ -264,10 +279,8 @@ describe("the window while the desktop app's launch of gglib is in flight", () =
   });
 
   it('draws the window once the address is known, before the probe has answered', async () => {
-    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {
-      invoke: vi.fn(async (cmd: string) => (cmd === 'get_embedded_api_info' ? { port: 9887, token: 'desk' } : null)),
-    };
-    daemon.health = () => new Promise<Response>(() => {}) as unknown as Response;
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = bridge(async () => ({ port: 9887, token: 'desk' }));
+    app.answers = () => new Promise<boolean>(() => {});
     await renderGate();
     expect(await screen.findByText('the window')).toBeInTheDocument();
     expect(screen.queryByText(STARTING)).not.toBeInTheDocument();
@@ -282,15 +295,50 @@ describe("the window while the desktop app's launch of gglib is in flight", () =
 });
 
 describe("the window's gate in the desktop app", () => {
-  it("asks the daemon's own address, and never asks about a tab's token", async () => {
-    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {
-      invoke: vi.fn(async (cmd: string) => (cmd === 'get_embedded_api_info' ? { port: 9887, token: 'desk' } : null)),
-    };
+  const DOWN = "gglib isn't running, so nothing can be served.";
+  const desktop = () => {
+    const tauri = bridge(async () => ({ port: 9887, token: 'desk' }));
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = tauri;
+    return tauri;
+  };
+  const asked = (tauri: ReturnType<typeof bridge>) => tauri.invoke.mock.calls.filter(([cmd]) => cmd === 'daemon_answers');
+
+  it("asks the app whether the daemon answers, never by a fetch of its own, and never about a tab's token", async () => {
+    const tauri = desktop();
     await renderGate();
     expect(await screen.findByText('the window')).toBeInTheDocument();
     await nextProbe();
 
-    expect(calls('/health')[0][0]).toBe('http://127.0.0.1:9887/health');
+    expect(asked(tauri).length).toBeGreaterThanOrEqual(2);
+    expect(calls('/health')).toHaveLength(0);
     expect(calls('/api/version')).toHaveLength(0);
+  });
+
+  it('is not called gone while every request the page makes of the daemon goes unanswered', async () => {
+    // The WebView's six connections are all held by slow reads: a `fetch`
+    // of anything more would wait behind them past any probe's limit.
+    desktop();
+    fetchMock.mockImplementation(() => new Promise<Response>(() => {}));
+    await renderGate();
+    expect(await screen.findByText('the window')).toBeInTheDocument();
+
+    for (let poll = 0; poll < 5; poll += 1) await nextProbe();
+
+    expect(screen.getByText('the window')).toBeInTheDocument();
+    expect(screen.queryByText(DOWN)).not.toBeInTheDocument();
+  });
+
+  it("says gglib isn't running once the app's own probe says so, and gives the window back when it answers", async () => {
+    desktop();
+    await renderGate();
+    expect(await screen.findByText('the window')).toBeInTheDocument();
+
+    daemon.up = false;
+    await nextProbe();
+    expect(await screen.findByText(DOWN)).toBeInTheDocument();
+
+    daemon.up = true;
+    await nextProbe();
+    expect(await screen.findByText('the window')).toBeInTheDocument();
   });
 });
