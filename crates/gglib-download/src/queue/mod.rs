@@ -6,9 +6,10 @@ mod types;
 
 use std::collections::VecDeque;
 
+#[cfg(test)]
+use gglib_core::download::DownloadOutcome;
 use gglib_core::download::{
-    CompletionKey, DownloadError, DownloadId, DownloadOutcome, FINISHED_LIMIT, FinishedDownload,
-    QueueSnapshot,
+    CompletionKey, DownloadError, DownloadId, FINISHED_LIMIT, FinishedDownload, QueueSnapshot,
 };
 use gglib_core::ports::ResolvedFile;
 
@@ -234,13 +235,24 @@ impl DownloadQueue {
 
     /// Record how the download `id` ended, in place of any earlier ending of
     /// it, and answer the entry. The oldest make way past [`FINISHED_LIMIT`].
+    #[cfg(test)]
     pub(crate) fn record_outcome(
         &mut self,
         id: &DownloadId,
         outcome: DownloadOutcome,
     ) -> FinishedDownload {
+        self.record_ending(id, FinishedDownload::new(id, outcome))
+    }
+
+    /// Record `ended` as how the download `id` ended, in place of any
+    /// earlier ending of it, and answer it. The oldest make way past
+    /// [`FINISHED_LIMIT`].
+    pub(crate) fn record_ending(
+        &mut self,
+        id: &DownloadId,
+        ended: FinishedDownload,
+    ) -> FinishedDownload {
         self.forget_outcome(id);
-        let ended = FinishedDownload::new(id, outcome);
         self.finished.push(ended.clone());
         let excess = self.finished.len().saturating_sub(FINISHED_LIMIT);
         self.finished.drain(..excess);

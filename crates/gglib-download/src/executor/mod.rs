@@ -170,11 +170,15 @@ async fn run_native(
     url: &str,
     counter: &Arc<FileCounter>,
 ) -> Result<(), DownloadError> {
+    // A forced fetch (an upgrade) is pinned to its revision, and its bytes
+    // land in a part of that revision's own.
+    let commit = plan.force.then_some(plan.revision);
     if plan.force {
         // The old file stays in place until the new one is verified and
-        // renamed over it. Only a partial from an earlier attempt goes: its
-        // bytes may be of another revision.
-        let _ = std::fs::remove_file(native::part_path_for(dest));
+        // renamed over it. A part of this revision from an earlier attempt
+        // is carried on from; any other part goes, its bytes being of
+        // another revision.
+        native::remove_other_parts(dest, &native::part_path_for(dest, commit));
     } else if dest.exists() {
         // Already here. The manager removes files that fail validation
         // before we are called, so anything still present is trusted.
@@ -184,10 +188,13 @@ async fn run_native(
     let request = native::NativeDownload {
         url,
         dest,
+        commit,
         token: plan.token,
         expected_size: known_size(plan.expected_size),
         progress: Some(counter.raw_callback()),
         cancel: plan.cancel.clone(),
+        notice: plan.notice.clone(),
+        stall_after: native::STALL_AFTER,
     };
 
     native::download_file(http_client(), &request)
@@ -209,7 +216,9 @@ fn to_download_error(e: NativeError) -> DownloadError {
         NativeError::Http { status, message } => {
             DownloadError::network_with_status(message, status)
         }
-        NativeError::Network(message) => DownloadError::network(message),
+        NativeError::Network(message) | NativeError::Refused(message) => {
+            DownloadError::network(message)
+        }
         NativeError::ChecksumMismatch { expected, actual } => {
             DownloadError::integrity_failed(expected, actual)
         }
@@ -221,6 +230,14 @@ fn to_download_error(e: NativeError) -> DownloadError {
             DownloadError::network(format!("too many redirects for {url}"))
         }
         NativeError::Cancelled => DownloadError::Cancelled,
+        NativeError::Stalled { kept, quiet } => {
+            DownloadError::interrupted(kept, u32::try_from(quiet.as_secs()).unwrap_or(u32::MAX))
+        }
+        // A single quiet connection is answered with a reconnect inside the
+        // transfer, and never reaches here.
+        e @ (NativeError::Quiet(_) | NativeError::Changed(_)) => {
+            DownloadError::network(e.to_string())
+        }
     }
 }
 

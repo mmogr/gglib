@@ -42,7 +42,8 @@ pub struct DownloadRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub percent: Option<f64>,
     /// Bytes per second off the network. Absent until there is enough to go
-    /// on, and whenever the download is not transferring.
+    /// on, whenever the download is not transferring, and while a note
+    /// stands in for its progress.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub speed_bps: Option<f64>,
@@ -91,10 +92,19 @@ pub struct DownloadRowText {
     pub bytes: String,
     /// `42.3%`. Stays below `100.0%` until the last byte is in place.
     pub percent: String,
-    /// `118.4 MB/s`, or a dash while it is not yet known.
+    /// `118.4 MB/s`, or a dash while it is not yet known. Empty while a note
+    /// stands in for progress.
     pub speed: String,
-    /// `ETA 2m 40s`, or `ETA` and a dash while it is not yet known.
+    /// `ETA 2m 40s`, or `ETA` and a dash while it is not yet known. Empty
+    /// while a note stands in for progress.
     pub eta: String,
+    /// The note standing in for progress while the download is under way
+    /// and nothing arrives (`no data for 30s, reconnecting (1 of 3)…`, a
+    /// part being checked). It is the status too; a renderer that leaves a
+    /// plain transfer's status out shows this. Absent otherwise.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notice: Option<String>,
 }
 
 /// The status of a download whose transfer is under way with nothing more
@@ -191,6 +201,14 @@ impl<'a> RowFacts<'a> {
         self.phase == DownloadPhase::Downloading
     }
 
+    /// Whether a speed and a time remaining are worth showing: bytes are
+    /// moving and no note stands in for them. A note is up while nothing
+    /// arrives (a reconnect, a part being checked), when the last speed is
+    /// only decaying and the time remaining from it is nonsense.
+    fn is_measured(&self) -> bool {
+        self.is_transferring() && self.notice.is_none()
+    }
+
     /// The size of every file together. A total of 0 is no total.
     fn known_total(&self) -> Option<u64> {
         self.total.filter(|&total| total > 0)
@@ -200,13 +218,15 @@ impl<'a> RowFacts<'a> {
 /// Build a download's row from its facts.
 ///
 /// A speed and a time remaining are carried only while the download is
-/// transferring: once its bytes are in, the last reading is history.
+/// transferring with no note standing in for its progress: once its bytes
+/// are in, the last reading is history, and while a note is up nothing is
+/// arriving to measure.
 #[must_use]
 pub fn row(facts: &RowFacts<'_>) -> DownloadRow {
     let total = facts.known_total();
     #[allow(clippy::cast_precision_loss)]
     let percent = total.map(|total| (facts.bytes as f64 / total as f64 * 100.0).clamp(0.0, 100.0));
-    let transferring = facts.is_transferring();
+    let measured = facts.is_measured();
 
     DownloadRow {
         id: facts.id.to_string(),
@@ -217,8 +237,8 @@ pub fn row(facts: &RowFacts<'_>) -> DownloadRow {
         downloaded_bytes: facts.bytes,
         total_bytes: total,
         percent,
-        speed_bps: facts.speed_bps.filter(|_| transferring),
-        eta_seconds: facts.eta_seconds.filter(|_| transferring),
+        speed_bps: facts.speed_bps.filter(|_| measured),
+        eta_seconds: facts.eta_seconds.filter(|_| measured),
         text: DownloadRowText::of(facts),
     }
 }
@@ -230,6 +250,7 @@ impl DownloadRowText {
         let total = facts.known_total();
         let queued = facts.phase == DownloadPhase::Queued;
         let transferring = facts.is_transferring();
+        let measured = facts.is_measured();
 
         let status = match facts.phase {
             DownloadPhase::Queued => "Queued",
@@ -255,16 +276,17 @@ impl DownloadRowText {
             status: status.to_string(),
             bytes,
             percent,
-            speed: if transferring {
+            speed: if measured {
                 format_rate(facts.speed_bps)
             } else {
                 String::new()
             },
-            eta: if transferring {
+            eta: if measured {
                 format!("ETA {}", format_duration(facts.eta_seconds))
             } else {
                 String::new()
             },
+            notice: facts.notice.filter(|_| transferring).map(str::to_string),
         }
     }
 }

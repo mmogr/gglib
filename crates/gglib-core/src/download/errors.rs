@@ -7,6 +7,25 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::format::{format_duration, format_size};
+
+/// What a download that gave up on a quiet connection says: what happened,
+/// and that trying again carries on from the part already there.
+/// With nothing downloaded, there is no part to carry on from, and it says so.
+fn interrupted_sentence(bytes_downloaded: u64, quiet_secs: u32) -> String {
+    let quiet = format_duration(Some(f64::from(quiet_secs)));
+    if bytes_downloaded == 0 {
+        return format!(
+            "no data arrived for {quiet}, so the download stopped before any of the file arrived"
+        );
+    }
+    format!(
+        "no data arrived for {quiet}, so the download stopped; trying again carries on from the {} \
+         already downloaded",
+        format_size(bytes_downloaded)
+    )
+}
+
 /// Error type for download operations.
 ///
 /// Designed to be serializable across FFI boundaries (Tauri, CLI, etc.)
@@ -71,11 +90,16 @@ pub enum DownloadError {
     #[error("Download cancelled")]
     Cancelled,
 
-    /// Download was interrupted and can be resumed.
-    #[error("Download interrupted at {bytes_downloaded} bytes")]
+    /// The connection sent nothing for `quiet_secs` over every reconnect,
+    /// so the download stopped. The bytes it has are kept, and trying again
+    /// carries on from them.
+    #[error("{}", interrupted_sentence(*bytes_downloaded, *quiet_secs))]
     Interrupted {
-        /// Bytes downloaded before interruption.
+        /// Bytes of the file on disk, kept for the next try.
         bytes_downloaded: u64,
+        /// How long nothing arrived before the download stopped, in seconds.
+        #[serde(default)]
+        quiet_secs: u32,
     },
 
     /// Integrity check failed (checksum mismatch).
@@ -158,6 +182,16 @@ impl DownloadError {
         }
     }
 
+    /// A download that stopped after nothing arrived for `quiet_secs`, with
+    /// `bytes_downloaded` of the file kept on disk.
+    #[must_use]
+    pub const fn interrupted(bytes_downloaded: u64, quiet_secs: u32) -> Self {
+        Self::Interrupted {
+            bytes_downloaded,
+            quiet_secs,
+        }
+    }
+
     /// Create a generic error.
     pub fn other(message: impl Into<String>) -> Self {
         Self::Other {
@@ -197,9 +231,7 @@ impl DownloadError {
                 format!("Download '{id}' is not in the queue.")
             }
             Self::Cancelled => "Download was cancelled.".to_string(),
-            Self::Interrupted { bytes_downloaded } => {
-                format!("Download interrupted after {bytes_downloaded} bytes. You can resume it.")
-            }
+            Self::Interrupted { .. } => self.to_string(),
             Self::IntegrityFailed { .. } => {
                 "File integrity check failed. The download may be corrupted.".to_string()
             }
@@ -221,6 +253,27 @@ mod tests {
 
         let parsed: DownloadError = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, err);
+    }
+
+    /// The sentence a download that gave up on a quiet connection ends with.
+    #[test]
+    fn an_interrupted_download_says_what_happened_and_that_a_retry_carries_on() {
+        let err = DownloadError::interrupted(4_133_906_022, 120);
+        assert_eq!(
+            err.to_string(),
+            "no data arrived for 2m 00s, so the download stopped; trying again carries on \
+             from the 3.85 GiB already downloaded"
+        );
+        assert_eq!(err.user_message(), err.to_string());
+    }
+
+    /// With nothing downloaded there is no part to carry on from.
+    #[test]
+    fn an_interrupted_download_with_nothing_downloaded_says_so() {
+        assert_eq!(
+            DownloadError::interrupted(0, 120).to_string(),
+            "no data arrived for 2m 00s, so the download stopped before any of the file arrived"
+        );
     }
 
     #[test]

@@ -52,7 +52,10 @@ impl DownloadManagerImpl {
             DownloadOutcome::Cancelled => CompletionKind::Cancelled,
         };
         self.record_completion_in_run(&item, kind).await;
-        Some(queue.record_outcome(id, outcome))
+        // An upgrade is tried again as an upgrade of its model.
+        let upgrade_of = item.upgrade.as_ref().map(|upgrade| upgrade.model_id);
+        let ended = FinishedDownload::new(id, outcome).upgrading(upgrade_of);
+        Some(queue.record_ending(id, ended))
     }
 
     /// Say that downloads ended, and publish the queue without them. The

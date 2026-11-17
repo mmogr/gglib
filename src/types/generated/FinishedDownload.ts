@@ -21,4 +21,18 @@ outcome: DownloadOutcome,
  * How it ended, in words, ready to print. Made here and nowhere else,
  * so a toast, a terminal line and a command's error all read the same.
  */
-text: string, };
+text: string, 
+/**
+ * The repository the download is from, as queueing it again takes it.
+ */
+model_id: string, 
+/**
+ * The quantization the download names, when it names one.
+ */
+quantization?: string, 
+/**
+ * The library model the download was an upgrade of. Trying it again is
+ * upgrading that model again, not queueing its repository, which would
+ * find the old copy on disk and fetch nothing.
+ */
+upgrade_of?: number, };

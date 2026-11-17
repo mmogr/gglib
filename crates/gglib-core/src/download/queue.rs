@@ -65,6 +65,19 @@ pub struct FinishedDownload {
     /// How it ended, in words, ready to print. Made here and nowhere else,
     /// so a toast, a terminal line and a command's error all read the same.
     pub text: String,
+    /// The repository the download is from, as queueing it again takes it.
+    #[serde(default)]
+    pub model_id: String,
+    /// The quantization the download names, when it names one.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quantization: Option<String>,
+    /// The library model the download was an upgrade of. Trying it again is
+    /// upgrading that model again, not queueing its repository, which would
+    /// find the old copy on disk and fetch nothing.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upgrade_of: Option<i64>,
 }
 
 impl FinishedDownload {
@@ -85,7 +98,18 @@ impl FinishedDownload {
             title,
             outcome,
             text,
+            model_id: id.model_id().to_string(),
+            quantization: id.quantization().map(str::to_string),
+            upgrade_of: None,
         }
+    }
+
+    /// The entry, for a download that was the upgrade of library model
+    /// `model_id`, when it was one.
+    #[must_use]
+    pub const fn upgrading(mut self, model_id: Option<i64>) -> Self {
+        self.upgrade_of = model_id;
+        self
     }
 }
 

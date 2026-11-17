@@ -7,7 +7,10 @@
  *
  * Get it sets up faster downloads first where they are to be
  * (`useFastDownloads`), then queues that size, and its row's own words follow it (`2.1 GiB / 5.0 GiB ·
- * 52.0 MB/s · ETA 1m 0s`, TX-13); Continue does not wait for it. Choose
+ * 52.0 MB/s · ETA 1m 0s`, TX-13), a note such as a reconnect leading them; Continue does not
+ * wait for it. A download that ended without the model says so, in its ending's words, with
+ * Retry, which queues it again: one that gave up on a quiet connection or was cut off carries
+ * on from its part on disk, and one whose bytes failed their check starts over. Choose
  * another goes on and leaves the choice to the Library's search once setup
  * is done; Skip goes on with no model. "Use another machine's models ›" opens a
  * pairing field, joined as the Devices place joins. A library that already
@@ -110,7 +113,8 @@ const Download: FC<{ first: FirstModel; onRetry: () => void }> = ({ first, onRet
           {/* Dynamic: the bar's fill is the row's percentage. */}
           <span className="block h-full bg-text-secondary" style={{ width: `${row.percent}%` }} />
         </span>
-        <span className="tabular-nums">{[row.text.bytes, row.text.speed, row.text.eta].filter(Boolean).join(' · ')}</span>
+        {/* A note (a reconnect, a part being checked) leads; the row then has no speed or time remaining. */}
+        <span className="tabular-nums">{[row.text.notice, row.text.bytes, row.text.speed, row.text.eta].filter(Boolean).join(' · ')}</span>
       </span>
     );
   }

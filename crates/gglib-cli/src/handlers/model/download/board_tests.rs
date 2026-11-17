@@ -166,7 +166,24 @@ fn a_bar_is_made_of_the_rows_text() {
     };
     let noted = bar_parts(&row(&noted));
     assert_eq!(noted.position, 0, "no size, so an empty bar");
-    assert_eq!(noted.message, "using direct transfer… · 0 B · — · ETA —");
+    assert_eq!(
+        noted.message, "using direct transfer… · 0 B",
+        "a note stands in for the speed and the time remaining"
+    );
+
+    let reconnecting = RowFacts {
+        phase: DownloadPhase::Downloading,
+        bytes: 4_133_906_022,
+        speed_bps: Some(199.0),
+        eta_seconds: Some(359_999.0),
+        notice: Some("no data for 30s, reconnecting (1 of 3)…"),
+        ..RowFacts::waiting(&id, 1, None, Some(6_517_725_184))
+    };
+    assert_eq!(
+        bar_parts(&row(&reconnecting)).message,
+        "no data for 30s, reconnecting (1 of 3)… · 63.4% · 3.85 GiB / 6.07 GiB",
+        "the line a terminal shows while the download reconnects"
+    );
 }
 
 /// The fill is the row's percentage in tenths, rounded down, so a row that
@@ -248,6 +265,9 @@ fn an_outcome_line_is_the_entrys_text_behind_a_mark() {
         title: "o/a:Q8_0".to_string(),
         outcome,
         text: text.to_string(),
+        model_id: "o/a".to_string(),
+        quantization: Some("Q8_0".to_string()),
+        upgrade_of: None,
     };
     let completed = DownloadOutcome::Completed { message: None };
     let failed = DownloadOutcome::Failed {

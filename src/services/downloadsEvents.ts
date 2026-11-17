@@ -130,7 +130,20 @@ export async function cancelDownload(id: string): Promise<void> {
   }
 }
 
-/** Take a waiting download off the queue, every file of it, then read the queue. */
+/**
+ * Upgrade library model `modelId` again, as a failed upgrade is tried
+ * again: queueing its repository instead would find the old copy on disk
+ * and fetch nothing. Then read the queue.
+ */
+export async function upgradeAgain(modelId: number): Promise<void> {
+  await getTransport().upgradeModel(modelId);
+  await bridge.refresh();
+}
+
+/**
+ * Take a waiting download off the queue, every file of it, or drop a
+ * finished one's entry, then read the queue.
+ */
 export async function removeFromQueue(id: string): Promise<void> {
   try {
     await getTransport().removeFromQueue(id);

@@ -105,3 +105,29 @@ fn a_finished_download_says_how_it_ended() {
         "owner/repo:Q8_0: download failed: no route"
     );
 }
+
+/// An ending carries what trying the download again takes, so no client
+/// parses it back out of the ID: the repository and the quantization, and
+/// the library model when the download was that model's upgrade.
+#[test]
+fn a_finished_download_carries_what_trying_it_again_takes() {
+    let id = DownloadId::new("owner/repo", Some("Q8_0"));
+    let failed = || DownloadOutcome::Failed {
+        error: "no route".to_string(),
+    };
+
+    let ended = FinishedDownload::new(&id, failed());
+    assert_eq!(ended.model_id, "owner/repo");
+    assert_eq!(ended.quantization.as_deref(), Some("Q8_0"));
+    assert_eq!(ended.upgrade_of, None);
+
+    let upgrade = FinishedDownload::new(&id, failed()).upgrading(Some(7));
+    assert_eq!(upgrade.upgrade_of, Some(7));
+    let json = serde_json::to_value(&upgrade).unwrap();
+    assert_eq!(json["upgrade_of"], 7);
+    assert_eq!(json["model_id"], "owner/repo");
+
+    let bare = FinishedDownload::new(&DownloadId::from("owner/repo"), failed());
+    let json = serde_json::to_value(&bare).unwrap();
+    assert!(json.get("quantization").is_none() && json.get("upgrade_of").is_none());
+}
