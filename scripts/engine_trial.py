@@ -44,7 +44,9 @@ before that and prints the comment.
 
 `--self-test` runs every reader and every refusal on planted inputs, and
 holds the comment to scripts/fixtures/engine-trial-comment.txt, the sample
-scripts/record_trial.sh's own self-test reads, so the two cannot drift.
+scripts/record_trial.sh's own self-test reads, so the two cannot drift. It
+asks the question on a terminal of its own, with a line typed there, and
+with no terminal at all.
 
 Exit codes:
     0  done, or the self-test passed
@@ -60,11 +62,13 @@ import json
 import os
 import platform
 import re
+import select
 import shutil
 import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
 
 REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -465,12 +469,18 @@ def approve(number: int, print_only: bool) -> int:
 
 
 def ask(question: str) -> str:
-    """One line typed by a person on this terminal; a refusal where there is none."""
+    """One line typed by a person on this terminal; a refusal where there is none.
+
+    The terminal is opened once to read and once to write. Python opens no
+    text file both ways on what cannot seek, and a terminal cannot: one `r+`
+    open fails on every terminal, with an error that reads here as there
+    being none.
+    """
     try:
-        with open("/dev/tty", "r+", encoding="utf-8") as tty:
-            tty.write(question)
-            tty.flush()
-            return tty.readline().strip()
+        with open("/dev/tty", encoding="utf-8") as heard, open("/dev/tty", "w", encoding="utf-8") as shown:
+            shown.write(question)
+            shown.flush()
+            return heard.readline().strip()
     except OSError as err:
         raise Refusal("there is no terminal to ask on: approving is a person's act; run this in your own terminal") from err
 
@@ -516,6 +526,62 @@ def planted_database(path: str, rows: list[tuple[str, str, str]]) -> None:
     with sqlite3.connect(path) as db:
         db.execute("CREATE TABLE chat_messages (role TEXT, content TEXT, created_at TEXT)")
         db.executemany("INSERT INTO chat_messages VALUES (?, ?, ?)", rows)
+
+
+def asked_in_a_child(typed: str | None) -> tuple[bool, str]:
+    """What `ask` gives a child process, and whether its question was shown.
+
+    The child has a terminal of its own with `typed` typed on it once the
+    question shows, or, with `None`, no terminal at all. A refusal comes back
+    as its words after `refused: `. A child still waiting after ten seconds is
+    ended, and its answer is whatever it had said.
+    """
+    import pty  # Not on Windows, which has no /dev/tty for `ask` either.
+
+    question = "release: "
+    answer_out, answer_in = os.pipe()
+    pid, terminal = (os.fork(), None) if typed is None else pty.fork()
+    if pid == 0:
+        try:
+            os.close(answer_out)
+            if typed is None:
+                os.setsid()
+            try:
+                heard = ask(question)
+            except Refusal as refusal:
+                heard = f"refused: {refusal}"
+            os.write(answer_in, heard.encode())
+        finally:
+            os._exit(0)
+    os.close(answer_in)
+    reading = {answer_out} if terminal is None else {answer_out, terminal}
+    shown, answer, sent = b"", b"", False
+    deadline = time.monotonic() + 10
+    while answer_out in reading and time.monotonic() < deadline:
+        ready, _, _ = select.select(list(reading), [], [], 0.2)
+        for descriptor in ready:
+            try:
+                chunk = os.read(descriptor, 1024)
+            except OSError:
+                chunk = b""
+            if not chunk:
+                reading.discard(descriptor)
+            elif descriptor == answer_out:
+                answer += chunk
+            else:
+                shown += chunk
+        if terminal is not None and not sent and question.encode() in shown:
+            os.write(terminal, f"{typed}\n".encode())
+            sent = True
+    try:
+        os.kill(pid, 9)
+    except ProcessLookupError:
+        pass
+    os.waitpid(pid, 0)
+    os.close(answer_out)
+    if terminal is not None:
+        os.close(terminal)
+    return question.encode() in shown, answer.decode()
 
 
 def self_test() -> bool:
@@ -610,12 +676,24 @@ def self_test() -> bool:
         sample = None
     check("the comment is scripts/fixtures/engine-trial-comment.txt", comment(SAMPLE) == sample, FIXTURE)
 
+    # 7. The release is asked for on a terminal: a real one, since a terminal
+    #    is what `ask` opens, and nowhere else. Windows has neither.
+    if os.name != "nt":
+        asked = asked_in_a_child("  master-1094-3bad892 ")
+        check("the release is asked for on a terminal, and what is typed comes back", asked == (True, "master-1094-3bad892"), asked)
+        _, nowhere = asked_in_a_child(None)
+        check("with no terminal the question is refused", nowhere.startswith("refused: there is no terminal to ask on"), nowhere)
+
     if failures:
         print("❌ self-test failed:", file=sys.stderr)
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)
         return False
-    print("✅ self-test: a bump is read, a release is told from a version line, use is counted, the comment is the shared sample", file=sys.stderr)
+    print(
+        "✅ self-test: a bump is read, a release is told from a version line, use is counted, the comment is the shared sample, "
+        "the release is asked for on a terminal",
+        file=sys.stderr,
+    )
     return True
 
 
