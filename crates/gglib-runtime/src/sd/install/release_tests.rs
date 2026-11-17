@@ -26,10 +26,12 @@ const ASSETS: [&str; 9] = [
     "sd-master-228c707-bin-win-vulkan-x64.zip",
 ];
 
-fn gpu(nvidia_with_cuda: bool, vulkan: bool) -> GpuInfo {
+/// `nvidia`: an NVIDIA card whose driver runs CUDA 12, and no CUDA toolkit.
+fn gpu(nvidia: bool, vulkan: bool) -> GpuInfo {
     GpuInfo {
-        has_nvidia_gpu: nvidia_with_cuda,
-        cuda_version: nvidia_with_cuda.then(|| "12.4".to_owned()),
+        has_nvidia_gpu: nvidia,
+        cuda_version: None,
+        nvidia_driver: nvidia.then(|| "551.61".to_owned()),
         has_metal: false,
         has_vulkan: vulkan,
         vulkan_headers: false,
@@ -310,6 +312,33 @@ fn only_the_cuda_build_fetches_the_cuda_runtime_and_its_pattern_finds_only_that_
     ] {
         assert_eq!(pick(os, "x86_64", &gpu).cuda_runtime, None, "{os}");
     }
+}
+
+/// An NVIDIA card with its driver and no CUDA toolkit takes the CUDA build,
+/// whose CUDA libraries come with the download; a driver older than CUDA
+/// 12.4, or none answering, takes Vulkan whatever toolkit is installed. The
+/// twin of llama.cpp's test of the same choice.
+#[test]
+fn the_cuda_build_is_chosen_for_an_nvidia_driver_with_no_toolkit() {
+    let machine = |driver: Option<&str>, toolkit: Option<&str>| GpuInfo {
+        nvidia_driver: driver.map(str::to_owned),
+        cuda_version: toolkit.map(str::to_owned),
+        ..gpu(true, true)
+    };
+    let description = |gpu: &GpuInfo| pick("windows", "x86_64", gpu).description;
+
+    assert_eq!(
+        description(&machine(Some("617.42"), None)),
+        "Windows x64 (CUDA 12)"
+    );
+    assert_eq!(
+        description(&machine(Some("546.33"), Some("12.4"))),
+        "Windows x64 (Vulkan)"
+    );
+    assert_eq!(
+        description(&machine(None, Some("12.4"))),
+        "Windows x64 (Vulkan)"
+    );
 }
 
 /// The Vulkan loader alone, a software rasteriser or a list with no device

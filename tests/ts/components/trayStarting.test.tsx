@@ -72,8 +72,12 @@ describe('the tray popover while the launch is in flight', () => {
   const noAnswerYet = () => vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
 
   it('says nothing about starting once the address is known, before the probe has answered', async () => {
+    // The desktop's probe is the app's (`daemon_answers`), not answered yet either.
     (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {
-      invoke: vi.fn(async (cmd: string) => (cmd === 'get_embedded_api_info' ? { port: 9887, token: 'desk' } : null)),
+      invoke: vi.fn((cmd: string) => {
+        if (cmd === 'get_embedded_api_info') return Promise.resolve({ port: 9887, token: 'desk' });
+        return cmd === 'daemon_answers' ? new Promise(() => {}) : Promise.resolve(null);
+      }),
     };
     noAnswerYet();
     const { TrayPanel } = await import('../../../src/tray/TrayPanel');

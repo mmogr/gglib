@@ -11,6 +11,7 @@ Low-level layout and display primitives built on Tailwind design tokens. These a
 | `Stack.tsx` | Vertical flex container; `gap`, `align`, `justify` props |
 | `Row.tsx` | Horizontal flex container; same props as `Stack` |
 | `Readout.tsx` | Label, value and quiet unit; `intent` colours the value only |
+| `PathText.tsx` | A file path in monospace that wraps after a `\` or `/`, never inside a folder's name unless the name outruns the line |
 | `Label.tsx` | Semantic `<label>` or `<span>`; sizes: `xs`, `sm`, `base`; `muted` for secondary text |
 | `EmptyState.tsx` | Centred placeholder with icon slot, title, description, optional action |
 | `Skeleton.tsx` | Shimmer-animated placeholder; variants: `text`, `rect`, `circle`; `count` for multiples |

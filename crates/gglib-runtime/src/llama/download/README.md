@@ -12,8 +12,10 @@ Platform support (`llama_platform_asset`):
 - macOS ARM64 and x64: Metal
 - Linux x64 and ARM64: Vulkan when a Vulkan GPU is there, else the CPU build,
   with a warning (CUDA is a source build, with `--build`)
-- Windows x64: CUDA 12.4 for an NVIDIA GPU with CUDA, else Vulkan, else the
-  CPU build, with a warning; Windows ARM64: Vulkan, else the CPU build
+- Windows x64: CUDA 12.4 for an NVIDIA GPU whose driver runs it (551.61 or
+  newer; the CUDA toolkit is not needed, the runtime package is downloaded
+  beside the build), else Vulkan, else the CPU build, with a warning; Windows
+  ARM64: Vulkan, else the CPU build
 
 This module holds what is llama.cpp's own: the override of its pin
 (`GGLIB_LLAMA_RELEASE`), the platform table, the CUDA runtime package, and

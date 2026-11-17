@@ -166,6 +166,56 @@ fn the_recording_is_of_the_pinned_llama_server() {
     );
 }
 
+/// sd-server's recorded `--version` is the pinned release's too. It prints
+/// its commit, the last part of `master-<n>-<commit>`, so a
+/// stable-diffusion.cpp pin moved without recording again fails here as
+/// llama.cpp's does above (#2080).
+#[test]
+fn the_recording_is_of_the_pinned_sd_server() {
+    let version = include_str!("../../../contracts/upstream/sd/version.txt");
+    let pin = crate::sd::PINNED_SD_RELEASE;
+    let commit = pin.rsplit('-').next().unwrap_or_default();
+    assert!(
+        !commit.is_empty() && version.trim_end().ends_with(&format!("commit {commit}")),
+        "contracts/upstream/sd/version.txt is {version:?} and the pin is {pin}; record it \
+         again at the pin"
+    );
+}
+
+/// Each engine's pinned release is the one on record as tried
+/// (`contracts/upstream/<engine>/trial.json`), so a pin does not move
+/// without its engine being used for real first: on the owner's machine,
+/// with the gglib they use, which CI cannot do. `make engine-trial` installs
+/// a pin pull request's engine there, and `make engine-trial-approve` says so
+/// on the pull request, whose `/tried` comment the Engine trial workflow
+/// records on the branch (`scripts/record_trial.sh`). Until then a pull
+/// request that moves a pin fails here, on every OS.
+#[test]
+fn each_pinned_engine_is_the_release_on_record_as_tried() {
+    for (product, record, pin) in [
+        (
+            "llama.cpp",
+            include_str!("../../../contracts/upstream/llama/trial.json"),
+            gglib_core::domain::engine_pins::PINNED_LLAMA_RELEASE,
+        ),
+        (
+            "stable-diffusion.cpp",
+            include_str!("../../../contracts/upstream/sd/trial.json"),
+            crate::sd::PINNED_SD_RELEASE,
+        ),
+    ] {
+        let record: serde_json::Value =
+            serde_json::from_str(record).unwrap_or_else(|e| panic!("{product}'s trial.json: {e}"));
+        assert_eq!(
+            record["release"].as_str(),
+            Some(pin),
+            "{product} is pinned at {pin} and has not been tried there. Try this pull \
+             request's engine on your own machine with `make engine-trial PR=<its number>`, \
+             use gglib, then `make engine-trial-approve PR=<its number>`"
+        );
+    }
+}
+
 /// A redacted body keeps every key and loses what was generated or is local.
 #[test]
 fn a_redacted_stream_keeps_its_keys_and_drops_what_was_generated() {

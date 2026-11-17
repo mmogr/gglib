@@ -17,6 +17,7 @@
 import { Fragment, useEffect, useRef, useState, type FC, type ReactNode } from 'react';
 import { Check, ChevronRight, ExternalLink } from 'lucide-react';
 import { CopyValue } from '../../components/CopyValue';
+import { PathText } from '../../components/primitives';
 import { VERDICT_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
@@ -181,7 +182,7 @@ export const Details: FC<DetailsProps> = ({ model, detail, loaded, port, onUpdat
       <dl className="mt-sm grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-md gap-y-sm">
         <Item label="File">
           <span className="flex items-start gap-xs">
-            <span className="min-w-0 flex-1 break-all text-left font-mono">{model.filePath}</span>
+            <PathText path={model.filePath} className="flex-1 text-left" />
             <CopyValue value={model.filePath} label="Copy the path" />
           </span>
           <span className="flex items-baseline gap-sm text-text-secondary">

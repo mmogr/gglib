@@ -87,9 +87,17 @@ enum Probe {
     Foreign,
 }
 
+/// How long a window's question of whether the daemon answers may take:
+/// what the page's own health probe is given (`HEALTH_LIMIT_MS`).
+const ANSWERS_TIMEOUT: Duration = Duration::from_millis(1500);
+
 async fn probe(client: &reqwest::Client) -> Probe {
+    probe_within(client, PROBE_TIMEOUT).await
+}
+
+async fn probe_within(client: &reqwest::Client, timeout: Duration) -> Probe {
     let url = format!("{}/health", base_url());
-    let Ok(response) = client.get(&url).timeout(PROBE_TIMEOUT).send().await else {
+    let Ok(response) = client.get(&url).timeout(timeout).send().await else {
         return Probe::NotRunning;
     };
     match response.json::<serde_json::Value>().await {
@@ -241,6 +249,19 @@ impl Daemon {
         };
         launch.settle(started.clone().map(|()| keeps));
         started
+    }
+
+    /// Whether gglib's daemon answers its health probe now.
+    ///
+    /// Asked for a window, over this process's own connection: a window's
+    /// `fetch` waits its turn behind the page's other requests to the daemon,
+    /// of which the `WebView` sends six at a time, and a probe left waiting
+    /// there reads a healthy daemon as gone.
+    pub(crate) async fn answers(&self) -> bool {
+        matches!(
+            probe_within(&self.client, ANSWERS_TIMEOUT).await,
+            Probe::Running
+        )
     }
 
     /// GET a JSON value from the daemon.

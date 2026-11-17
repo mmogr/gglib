@@ -27,7 +27,7 @@ a pattern, and exactly one asset must match it.
 |-----------------|---------------------------------------|--------------------------------------------|
 | macOS, any arch | `-bin-Darwin-macOS-` … `-arm64.zip`   | `sd-server`, `libstable-diffusion.dylib`   |
 | Linux `x86_64`  | `-bin-Linux-` … `-x86_64-vulkan.zip`, or `-x86_64.zip` with no Vulkan runtime (a warning) | `sd-server`, `libstable-diffusion.so` |
-| Windows `x86_64`| `-bin-win-cuda12-`, `-bin-win-vulkan-` or `-bin-win-cpu-` … `-x64.zip` by GPU (the CPU build with a warning), plus the CUDA runtime package for CUDA | `sd-server.exe`, `stable-diffusion.dll` |
+| Windows `x86_64`| `-bin-win-cuda12-`, `-bin-win-vulkan-` or `-bin-win-cpu-` … `-x64.zip` by GPU (CUDA for an NVIDIA driver that runs CUDA 12, with no CUDA toolkit needed; the CPU build with a warning), plus the CUDA runtime package for CUDA | `sd-server.exe`, `stable-diffusion.dll` |
 
 The macOS asset is a universal binary named after its arm64 runner, and its
 `sd-server` finds the dylib through `@executable_path`. Any other platform
