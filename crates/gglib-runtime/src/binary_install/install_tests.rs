@@ -420,10 +420,21 @@ async fn an_install_whose_server_cannot_start_fails_its_verify_saying_why() {
 
     let run = run(&fake, &spec(AssetChoice::First), target(&dirs, LINUX)).await;
 
-    let refusal = run
-        .result
-        .expect_err("a server that cannot start")
-        .to_string();
+    let error = run.result.expect_err("a server that cannot start");
+    // Typed, so the daemon's install can tell an engine that is there but
+    // cannot run from an install that failed (#2060), and the command line
+    // can offer the runtime (#2033).
+    let not_working = error
+        .downcast_ref::<crate::engine::NotWorking>()
+        .expect("the engine check's own error");
+    assert!(
+        matches!(
+            not_working.failure,
+            gglib_core::utils::process::bounded::Failure::MissingLibrary { .. }
+        ),
+        "{not_working:?}"
+    );
+    let refusal = error.to_string();
     assert!(
         refusal.contains("the library libwidget.so it needs is missing"),
         "{refusal}"

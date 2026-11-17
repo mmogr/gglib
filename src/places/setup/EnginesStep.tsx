@@ -8,8 +8,10 @@
  * An installed engine says so in the word every surface uses
  * (`ENGINE_WORDS`), each with why it does not work when it does not, and
  * Repair beside the daemon's words for it where gglib can repair it; one
- * that needs building says Not installed. llama.cpp's failure is
- * an error under its line, with Retry;
+ * that needs building says Not installed. An engine installed but unable
+ * to run is said once, in its status's words: its install completed. A
+ * failed install of llama.cpp is an error under its line, with Retry, until
+ * the engine works;
  * stable-diffusion.cpp's and the accelerator's are warnings (SU-2). Where
  * only a terminal can build llama.cpp, the step names the command the
  * daemon gives, with Check again, and looks for the build by itself every
