@@ -1018,6 +1018,20 @@ jobs:
           # fallback.
           fetch-depth: 2
 
+      # contracts/upstream/<engine>/trial.json says the pinned engine was
+      # tried on the owner's machine, and `Test (Rust)` holds the pin to it.
+      # It is written on a branch of this repository, from the owner's
+      # comment (engine-trial.yml). A pull request from anywhere else that
+      # changes one would be a bump approving itself.
+      - name: A pull request from another repository changes no trial record
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          changed=$(git diff --name-only HEAD^1 HEAD -- 'contracts/upstream/*/trial.json')
+          if [ -n "$changed" ]; then
+            echo "::error title=a trial record changed::${changed//$'\n'/, } is written from the owner's /tried comment on a branch of this repository, not by a pull request from another one."
+            exit 1
+          fi
+
       # scripts/apple/ffi-inputs-changed.sh reads gglib-ffi's closure with
       # `cargo tree`.
       - name: Install Rust toolchain

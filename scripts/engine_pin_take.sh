@@ -14,8 +14,10 @@
 # over in the same form. This script is how either takes a handover: it
 # refuses anything but regular files at those paths, mirrors
 # contracts/upstream/ from the handover, keeps approvals.json and README.md
-# from this checkout (no recording job writes either: approvals.json is
-# written on a pull request's branch from the owner's `/approve` comment),
+# and each engine's trial.json from this checkout (no recording job writes
+# any of them: approvals.json and trial.json are written on a pull request's
+# branch from the owner's `/approve` and `/tried` comments, and a trial.json
+# a recording job handed over would be a bump approving itself),
 # copies the pin file, and prints the recorder line made safe for the body.
 # It runs from the checkout's root, and never runs anything the handover
 # holds.
@@ -26,7 +28,8 @@ set -euo pipefail
 HANDOVER=$1 FILE=$2
 FILES=$HANDOVER/files
 UPSTREAM=contracts/upstream
-FROM_CHECKOUT=("$UPSTREAM/llama/approvals.json" "$UPSTREAM/README.md")
+FROM_CHECKOUT=("$UPSTREAM/llama/approvals.json" "$UPSTREAM/README.md"
+  "$UPSTREAM/llama/trial.json" "$UPSTREAM/sd/trial.json")
 
 refuse() { echo "::error title=the handover is refused::$1" >&2; exit 1; }
 
