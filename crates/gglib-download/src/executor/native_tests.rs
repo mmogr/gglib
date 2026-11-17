@@ -538,6 +538,9 @@ async fn resumes_after_an_interrupted_transfer() {
             body: body.clone(),
             limit: cut,
         },
+        // The reconnect after the cut is refused, which ends the first
+        // attempt: a refusal is an answer, not a lost connection.
+        Reply::Status(503),
         Reply::File {
             body: body.clone(),
             etag: Some(etag),
@@ -548,15 +551,12 @@ async fn resumes_after_an_interrupted_transfer() {
     let url = server.url();
     let size = Some(len_of(&body));
 
-    // First attempt: the server hangs up mid-body.
+    // First attempt: the server hangs up mid-body, then refuses.
     let err = download_file(&build_client(), &request(&url, &fx.dest, size, None))
         .await
         .expect_err("a truncated body must not be accepted");
     assert!(
-        matches!(
-            err,
-            NativeError::Network(_) | NativeError::SizeMismatch { .. }
-        ),
+        matches!(err, NativeError::Http { status: 503, .. }),
         "got {err:?}"
     );
 
@@ -589,10 +589,10 @@ async fn resumes_after_an_interrupted_transfer() {
     assert!(!fx.part().exists());
 
     let ranges = server.ranges();
-    assert_eq!(ranges.len(), 2, "two requests: {ranges:?}");
+    assert_eq!(ranges.len(), 3, "three requests: {ranges:?}");
     assert_eq!(ranges[0], None, "the first attempt asks for the whole file");
     assert_eq!(
-        ranges[1],
+        ranges[2],
         Some(format!("bytes={partial}-")),
         "the retry asks only for what is missing"
     );

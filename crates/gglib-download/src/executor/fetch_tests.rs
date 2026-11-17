@@ -113,10 +113,13 @@ async fn a_fallback_rewinds_the_bytes_and_continues_the_wire() {
 /// where it was: the new bytes go beside it until they are complete.
 #[tokio::test]
 async fn a_forced_fetch_that_fails_keeps_the_old_file() {
-    let server = TestServer::start(vec![Reply::Truncated {
-        body: body_of(4096),
-        limit: 1000,
-    }])
+    let server = TestServer::start(vec![
+        Reply::Truncated {
+            body: body_of(4096),
+            limit: 1000,
+        },
+        Reply::Status(503),
+    ])
     .await;
     let dir = tempfile::tempdir().expect("tempdir");
     let dest = dir.path().join("model.gguf");

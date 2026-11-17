@@ -66,11 +66,16 @@ pub(crate) const STALL_AFTER: Duration = Duration::from_secs(30);
 /// and is not taken for a quiet connection and tried again.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// Reconnects after a quiet connection before the download gives up.
+/// Reconnects after a lost connection before the download gives up.
 ///
-/// They count only while nothing arrives: a connection that brought any
-/// bytes before going quiet starts the count again. With [`STALL_AFTER`],
-/// a download gives up after two minutes in which nothing arrived.
+/// They count only while nothing arrives: a connection that took the part
+/// further before it was lost starts the count again. Each lost connection
+/// that brought nothing spans at least [`STALL_AFTER`] before the next, so a
+/// download whose connection goes quiet gives up two minutes after its last
+/// byte when the reconnects open and go quiet too (four quiet times, and a
+/// little more when they are slow to open), a minute and a half after when
+/// they cannot be opened (the last is not waited out), and one whose
+/// connection broke, a minute after. The give-up sentence says which.
 pub(crate) const STALL_RECONNECTS: u32 = 3;
 
 /// Block read at a time when a part on disk is hashed, between two checks
@@ -96,6 +101,12 @@ pub(crate) enum NativeError {
     /// The transfer itself failed (DNS, TLS, connection reset, timeout).
     #[error("Network error: {0}")]
     Network(String),
+
+    /// The server answered with something that cannot be used, and asking
+    /// again would get the same: a part that cannot be placed in the file,
+    /// a redirect that goes nowhere.
+    #[error("Network error: {0}")]
+    Refused(String),
 
     /// The bytes on disk do not match the digest the server advertised.
     #[error("Checksum mismatch: expected {expected}, got {actual}")]
@@ -195,7 +206,9 @@ pub(crate) struct NativeDownload<'a> {
 /// A connection that sends nothing for `req.stall_after` is dropped, and the
 /// transfer carries on from the bytes on disk over a new one, up to
 /// [`STALL_RECONNECTS`] times in a row with nothing arriving; then it fails
-/// with [`NativeError::Stalled`], keeping the part.
+/// with [`NativeError::Stalled`], keeping the part. Once the download has
+/// had bytes or a quiet connection, a connection that breaks or will not
+/// open is lost the same way (see [`Lost::after`]).
 ///
 /// On success the file exists at `req.dest` and no `.part` file remains. On a
 /// verification failure the `.part` file is removed, because resuming onto
@@ -214,7 +227,7 @@ pub(crate) async fn download_file(
         furthest: existing_len(&part_path),
         ..Carry::default()
     };
-    let mut quiet_in_a_row = 0;
+    let mut lost = Lost::default();
     let mut started_over = false;
     let outcome = loop {
         let resume_from = existing_len(&part_path);
@@ -232,36 +245,17 @@ pub(crate) async fn download_file(
             let hasher = hash_part(&part_path, resume_from, req.cancel.as_ref()).await?;
             carry.hashed = Some((hasher, resume_from));
         }
-        match stream_to_part(client, req, &part_path, resume_from, &mut carry).await {
+        let began = tokio::time::Instant::now();
+        let cause = match stream_to_part(client, req, &part_path, resume_from, &mut carry).await {
             Ok(outcome) => break outcome,
-            Err(NativeError::Quiet(_)) => {
-                // Bytes past the furthest the part has reached start the
-                // count again. Bytes that only make up what a server that
-                // ignored the range threw away are no progress.
-                let reached = existing_len(&part_path);
-                if reached > carry.furthest {
-                    carry.furthest = reached;
-                    quiet_in_a_row = 0;
-                }
-                quiet_in_a_row += 1;
-                if quiet_in_a_row > STALL_RECONNECTS {
-                    return Err(NativeError::Stalled {
-                        kept: existing_len(&part_path),
-                        quiet: req.stall_after * (STALL_RECONNECTS + 1),
-                    });
-                }
-                tracing::warn!(
-                    url = req.url,
-                    reconnect = quiet_in_a_row,
-                    "download connection went quiet; reconnecting"
-                );
-                notify(
-                    req,
-                    &format!(
-                        "no data for {}, reconnecting ({quiet_in_a_row} of {STALL_RECONNECTS})…",
-                        format_duration(Some(req.stall_after.as_secs_f64()))
-                    ),
-                );
+            Err(NativeError::Quiet(_)) => Cause::Quiet,
+            // A connection that did not open, or broke, once this download
+            // has had bytes or a quiet connection: the network dropped for a
+            // while, as Wi-Fi does. The first connection of a download that
+            // has had nothing fails at once: the host may simply be wrong.
+            Err(NativeError::Network(why)) if carry.received > 0 || lost.in_a_row > 0 => {
+                tracing::warn!(url = req.url, why, "download connection failed");
+                Cause::Failed
             }
             // The file is not the one the part holds the start of: start it
             // over rather than splice two files, once.
@@ -274,14 +268,17 @@ pub(crate) async fn download_file(
                     ..Carry::default()
                 };
                 notify(req, &format!("{why}; starting it over…"));
+                continue;
             }
             Err(NativeError::Changed(why)) => {
-                return Err(NativeError::Network(format!(
+                return Err(NativeError::Refused(format!(
                     "{why} again while it downloaded"
                 )));
             }
             Err(e) => return Err(e),
-        }
+        };
+        lost.after(req, &part_path, &mut carry, cause, began)
+            .await?;
     };
 
     verify(&part_path, req.expected_size, outcome.digest.as_ref())?;
@@ -344,6 +341,98 @@ impl Carry {
     fn to_hash(&self, len: u64) -> bool {
         let no_digest = self.answered && self.digest.is_none();
         len > 0 && !no_digest && self.hashed.as_ref().is_none_or(|(_, at)| *at != len)
+    }
+}
+
+/// How a connection of a download in progress was lost.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Cause {
+    /// It sent nothing for the quiet time.
+    Quiet,
+    /// It did not open, or broke: an error rather than silence.
+    Failed,
+}
+
+/// The connections a download has lost in a row with the part getting no
+/// further, and how long nothing has arrived over them.
+#[derive(Default)]
+struct Lost {
+    /// Connections lost in a row; reconnects so far, as the row counts them.
+    in_a_row: u32,
+    /// What lost the first of them, which the row's note names.
+    first: Option<Cause>,
+    /// Quiet times that have passed over them with nothing arriving.
+    windows: u32,
+}
+
+impl Lost {
+    /// A connection was lost by `cause`, having begun at `began`. Count it,
+    /// and say on the row that the download reconnects; or, past
+    /// [`STALL_RECONNECTS`], end it with [`NativeError::Stalled`].
+    ///
+    /// Bytes past the furthest the part has reached start the count again.
+    /// Bytes that only make up what a server that ignored the range threw
+    /// away are no progress. A connection that failed having brought
+    /// nothing is tried again only once a quiet time has passed since it
+    /// began, so a dropped network has the reconnects' whole span to come
+    /// back in, and the download gives up after about the time it says.
+    async fn after(
+        &mut self,
+        req: &NativeDownload<'_>,
+        part_path: &Path,
+        carry: &mut Carry,
+        cause: Cause,
+        began: tokio::time::Instant,
+    ) -> Result<(), NativeError> {
+        let reached = existing_len(part_path);
+        let progressed = reached > carry.furthest;
+        if progressed {
+            carry.furthest = reached;
+            *self = Self::default();
+        }
+        self.in_a_row += 1;
+        let first = *self.first.get_or_insert(cause);
+        if cause == Cause::Quiet {
+            self.windows += 1;
+        }
+        if self.in_a_row > STALL_RECONNECTS {
+            return Err(NativeError::Stalled {
+                kept: reached,
+                quiet: req.stall_after * self.windows,
+            });
+        }
+
+        let n = self.in_a_row;
+        tracing::warn!(
+            url = req.url,
+            reconnect = n,
+            "download connection lost; reconnecting"
+        );
+        let why = match first {
+            Cause::Quiet => format!(
+                "no data for {}",
+                format_duration(Some(req.stall_after.as_secs_f64()))
+            ),
+            Cause::Failed => "connection lost".to_string(),
+        };
+        notify(
+            req,
+            &format!("{why}, reconnecting ({n} of {STALL_RECONNECTS})…"),
+        );
+
+        if cause == Cause::Failed && !progressed {
+            let pause = tokio::time::sleep_until(began + req.stall_after);
+            match req.cancel.as_ref() {
+                Some(cancel) => tokio::select! {
+                    biased;
+                    () = cancel.cancelled() => return Err(NativeError::Cancelled),
+                    () = pause => {}
+                },
+                None => pause.await,
+            }
+            self.windows += 1;
+        }
+        Ok(())
     }
 }
 
@@ -469,24 +558,25 @@ async fn stream_to_part(
             next.await
         };
 
-        let Ok(chunk) = chunk else {
-            // Quiet: keep what arrived, its hash and its count for the next
-            // connection. Dropping the stream drops this connection.
-            drop(stream);
-            drop(tx);
-            let hasher = join_sink(&mut sink).await?;
-            report(downloaded);
-            carry.hashed = hasher.map(|h| (h, downloaded));
-            carry.received = received_before + (downloaded - start_at);
-            return Err(NativeError::Quiet(req.stall_after));
+        let lost = match chunk {
+            Ok(Some(Ok(chunk))) => Ok(chunk),
+            Ok(None) => break,
+            // Quiet, or broken: either way the connection is lost.
+            Err(_) => Err(NativeError::Quiet(req.stall_after)),
+            Ok(Some(Err(e))) => Err(NativeError::Network(describe(&e))),
         };
-        let Some(chunk) = chunk else { break };
-        let chunk = match chunk {
+        let chunk = match lost {
             Ok(chunk) => chunk,
-            Err(e) => {
+            Err(lost) => {
+                // Keep what arrived, its hash and its count for the next
+                // connection. Dropping the stream drops this one.
+                drop(stream);
                 drop(tx);
-                let _ = sink.await;
-                return Err(NativeError::Network(e.to_string()));
+                let hasher = join_sink(&mut sink).await?;
+                report(downloaded);
+                carry.hashed = hasher.map(|h| (h, downloaded));
+                carry.received = received_before + (downloaded - start_at);
+                return Err(lost);
             }
         };
 
@@ -553,20 +643,20 @@ fn check_range(
 ) -> Result<(), NativeError> {
     let range = headers.get(CONTENT_RANGE).and_then(|v| v.to_str().ok());
     let Some(start) = range.and_then(parse_content_range_start) else {
-        return Err(NativeError::Network(format!(
+        return Err(NativeError::Refused(format!(
             "asked for the file from byte {asked}, and the server did not say where its \
              answer starts"
         )));
     };
     if start != asked {
-        return Err(NativeError::Network(format!(
+        return Err(NativeError::Refused(format!(
             "asked for the file from byte {asked}, and the server sent it from byte {start}"
         )));
     }
     let total = range.and_then(parse_content_range_total);
     if let (Some(total), Some(expected)) = (total, expected_size) {
         if total != expected {
-            return Err(NativeError::Network(format!(
+            return Err(NativeError::Refused(format!(
                 "the server's file is {total} bytes, not the {expected} expected"
             )));
         }
@@ -648,7 +738,7 @@ async fn send_following_redirects(
     resume_from: u64,
 ) -> Result<(Response, Option<String>), NativeError> {
     let mut url = Url::parse(req.url)
-        .map_err(|e| NativeError::Network(format!("invalid URL {}: {e}", req.url)))?;
+        .map_err(|e| NativeError::Refused(format!("invalid URL {}: {e}", req.url)))?;
     let origin_host = url.host_str().map(str::to_owned);
     let mut linked_etag: Option<String> = None;
 
@@ -684,12 +774,12 @@ async fn send_following_redirects(
             .get(LOCATION)
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| {
-                NativeError::Network(format!("redirect from {url} carried no Location"))
+                NativeError::Refused(format!("redirect from {url} carried no Location"))
             })?;
 
         url = url
             .join(location)
-            .map_err(|e| NativeError::Network(format!("bad redirect target {location}: {e}")))?;
+            .map_err(|e| NativeError::Refused(format!("bad redirect target {location}: {e}")))?;
     }
 
     Err(NativeError::TooManyRedirects(req.url.to_string()))
@@ -711,7 +801,7 @@ async fn send_unless_cancelled(
         tokio::time::timeout(stall_after, request.send())
             .await
             .map_err(|_| NativeError::Quiet(stall_after))?
-            .map_err(|e| NativeError::Network(e.to_string()))
+            .map_err(|e| NativeError::Network(describe(&e)))
     };
     let Some(cancel) = cancel else {
         return send.await;
@@ -720,6 +810,31 @@ async fn send_unless_cancelled(
         biased;
         () = cancel.cancelled() => Err(NativeError::Cancelled),
         response = send => response,
+    }
+}
+
+/// A transport error in plain words: what failed, then the cause at the
+/// bottom of its chain (`could not connect to huggingface.co: Network is
+/// unreachable (os error 51)`), rather than reqwest's own `error sending
+/// request for url (…)`, which names the address and not what went wrong.
+fn describe(e: &reqwest::Error) -> String {
+    let mut cause: &dyn std::error::Error = e;
+    while let Some(next) = cause.source() {
+        cause = next;
+    }
+    let host = e
+        .url()
+        .and_then(Url::host_str)
+        .unwrap_or("the server")
+        .to_string();
+    if e.is_connect() {
+        format!("could not connect to {host}: {cause}")
+    } else if e.is_body() || e.is_decode() {
+        format!("the connection to {host} broke: {cause}")
+    } else if std::ptr::addr_eq(cause, e) {
+        e.to_string()
+    } else {
+        format!("the request to {host} failed: {cause}")
     }
 }
 

@@ -216,7 +216,9 @@ fn to_download_error(e: NativeError) -> DownloadError {
         NativeError::Http { status, message } => {
             DownloadError::network_with_status(message, status)
         }
-        NativeError::Network(message) => DownloadError::network(message),
+        NativeError::Network(message) | NativeError::Refused(message) => {
+            DownloadError::network(message)
+        }
         NativeError::ChecksumMismatch { expected, actual } => {
             DownloadError::integrity_failed(expected, actual)
         }

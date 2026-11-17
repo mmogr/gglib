@@ -63,11 +63,16 @@ The native path (`native.rs`) is responsible for:
   the transfer carries on from the bytes on disk over a new one, keeping its
   hash and its count of bytes received, up to `STALL_RECONNECTS` (3) times in
   a row with nothing arriving; a connection that takes the part past the
-  furthest it has reached starts the count again. Then it fails with
-  `DownloadError::Interrupted`, whose sentence says that trying again carries
-  on from the part. A connection that does not open (`CONNECT_TIMEOUT`, 20 s,
-  shorter than the quiet time) and one that errors (a reset) are not
-  reconnected: they fail as before, keeping the part.
+  furthest it has reached starts the count again. Once a download has had
+  bytes or a quiet connection, a connection that breaks (a reset) or does
+  not open (`CONNECT_TIMEOUT`, 20 s) is lost the same way and counts the
+  same: a reset that brought bytes is reconnected at once, and one that
+  brought nothing is tried again a quiet time after it began, so a network
+  that is down has the reconnects' whole span, about 2 minutes, to come back
+  in. Then it fails with `DownloadError::Interrupted`, whose sentence says
+  for how long nothing arrived and that trying again carries on from the
+  part. The first connection of a download that has had nothing fails at
+  once, and its error names the cause (`could not connect to <host>: …`).
 - **One file, not two spliced.** The first connection's digest and size are
   kept, and a later connection that gives another is of a changed file: the
   part is removed and the file started over, once, with a note on the row.

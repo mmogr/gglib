@@ -113,7 +113,9 @@ This crate is in the **Infrastructure Layer** — it orchestrates downloads usin
   the same upgrade tried again carries on from it and no other revision's
   bytes are taken for its start. A connection that sends nothing for 30 s is
   dropped and the transfer carries on over a new one, saying so on the row
-  (`no data for 30s, reconnecting (1 of 3)…`); after three reconnects in a
+  (`no data for 30s, reconnecting (1 of 3)…`); a connection that breaks or
+  cannot be opened once bytes have arrived is reconnected the same way
+  (`connection lost, reconnecting (1 of 3)…`). After three reconnects in a
   row with nothing arriving it gives up with a sentence that says trying
   again carries on from the part (or, with nothing downloaded, that nothing
   arrived). Any other failure is not retried: it ends as failed. Queued
