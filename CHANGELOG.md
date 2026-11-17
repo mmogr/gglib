@@ -1,5 +1,85 @@
 # Changelog
 
+## [0.38.0-rc.1](https://github.com/mmogr/gglib/compare/v0.37.0-rc.1...v0.38.0-rc.1) (2026-11-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **runtime:** the model gglib suggests, and what its suggestion downloads, changed on every OS. `gglib up`, setup's "Get it" and the Library's suggested download now take the suggested model's Q4_K_M size, where they took the largest size that fit. A model is suggested only if a load serves it its full 32K of context on this machine; failing that, the one served the most context, if 8K or more. So some machines are suggested a smaller model than before: with no GPU, 6 and 9 GiB of RAM get the 3B (was the 7B), 16 GiB the 7B (was the 14B) and 24 GiB the 14B (was the 30B); a 7 GiB card gets the 3B (was the 7B); an 18 GB Mac gets the 7B (was the 14B). A GPU whose memory cannot be read gets no suggestion. A download that names no size is judged by the load's own budget: with no GPU that is three quarters of RAM, not all of it, and with an unreadable GPU it takes the smallest size. Models already downloaded are not touched, and any size can still be chosen by hand.
+* **cli:** an answer piped to a question is no longer read: `echo y | gglib model remove 3` refuses, so pass `--yes` (or `--param-count` to `gglib model add`). A confirmation nobody could answer exits 1, where it printed "cancelled" and exited 0. `gglib daemon stop --remote` from a script, or with its error output sent to a file, needs `--yes`.
+* **proxy:** an install that never set `proxy-autostart` now has the endpoint on when gglib starts, on the stored port and address, and `gglib config reset` turns it on too; `gglib config set proxy-autostart false` keeps it off. With `proxy-host` stored as `0.0.0.0`, the endpoint that start brings up, and the one `gglib up` starts, listen on every address and demand a key, generated when none is stored; `up` no longer forces `127.0.0.1`. A `gglib serve`, `gglib proxy` or `gglib model load --pin` that finds a running endpoint of another shape no longer attaches to it or is refused for it: in a terminal it asks, and in a script it changes nothing and exits non-zero, so pass `-y` to switch. From a cold start nothing is asked: the command launches gglib with the endpoint off and starts its own. `POST /api/proxy/start` and `/api/proxy/start-pinned` answer an endpoint of another shape with 409 `endpoint_differs` where they answered 200; send `replace: true` to switch it.
+* **host:** `LaunchPlan::command_line` takes the shell to write for and returns a `CommandLine` (the shell, the program, each argument and the whole line), not a `String`. A CLI or desktop app from this release that meets a running service from before it shows no launch line and says the service is an older build; stop the service and start it again.
+* **paths:** a library gglib 0.37 or earlier wrote on Windows that holds a model or a chat folder is refused, since those builds stored each such path with the `\\?\` prefix. Move its gglib.db aside, and gglib.db-wal and gglib.db-shm with it if they are beside it (`gglib config paths` shows where), then start gglib again for a new library. The old one's chats, settings, tool servers, and benchmark, compare and tune history stay in the moved file. Add your models with `gglib model add <file>`; the model files are not touched. Any other library, every one made on macOS or Linux among them, is upgraded as usual.
+
+### What gglib now does
+
+* **installer:** after the Windows install, gglib runs in a new terminal ([#2024](https://github.com/mmogr/gglib/issues/2024)) ([aee563c](https://github.com/mmogr/gglib/commit/aee563cf85a0b7e62a6348c2d8445d32cec950ac))
+* **proxy:** the endpoint is on when gglib starts, and switching it asks first ([#2037](https://github.com/mmogr/gglib/issues/2037)) ([4eb2a6f](https://github.com/mmogr/gglib/commit/4eb2a6fc0ffb49521417ae7cb1e2c17eb3c18cb0))
+* **runtime:** an engine missing Microsoft's runtime can be repaired from gglib ([#2033](https://github.com/mmogr/gglib/issues/2033)) ([10abc3f](https://github.com/mmogr/gglib/commit/10abc3f02e8226395dac6deb1c80c07d8047ab31))
+* **tauri:** a second launch shows the first window and passes on its arguments ([#2007](https://github.com/mmogr/gglib/issues/2007)) ([201ae5e](https://github.com/mmogr/gglib/commit/201ae5e6345900a30e484a9e7fccbc85b14932da))
+
+
+### What it stopped getting wrong
+
+* **agent:** Thinking off tells the model's template too, so the reply is the answer and the title is a title ([#2049](https://github.com/mmogr/gglib/issues/2049)) ([9fd5b2c](https://github.com/mmogr/gglib/commit/9fd5b2ca8a4a208a8ee25bfdef0a1559d5897a18))
+* **app-services:** a load goes on when the endpoint cannot start, and says why it is off ([#2059](https://github.com/mmogr/gglib/issues/2059)) ([1a9e06c](https://github.com/mmogr/gglib/commit/1a9e06c7753a95e7e3ec86457f76139b6366c998))
+* **chat:** the thread follows a reply to its end in the desktop app ([#1967](https://github.com/mmogr/gglib/issues/1967)) ([84226cf](https://github.com/mmogr/gglib/commit/84226cf802c2d0903f8b3f931f488469f956424b)), closes [#1966](https://github.com/mmogr/gglib/issues/1966)
+* **cli:** a chat or question started in a system folder reads no files, and says so ([#2042](https://github.com/mmogr/gglib/issues/2042)) ([fa8bd6a](https://github.com/mmogr/gglib/commit/fa8bd6aed667be4a333e7a2c07bae585a842d13c))
+* **cli:** a question is asked only of a terminal, and a script answers it with a flag ([#2043](https://github.com/mmogr/gglib/issues/2043)) ([467d40e](https://github.com/mmogr/gglib/commit/467d40ecdc8e15c53282d291cee2abad3f883f50))
+* **cli:** check-deps tells an installed gglib what it needs, not what a source build needs ([#2019](https://github.com/mmogr/gglib/issues/2019)) ([667b86f](https://github.com/mmogr/gglib/commit/667b86ff1370953e002c6c484a2ee17aa3cac7c7))
+* **cli:** gglib.exe has an 8 MB stack on Windows, so a debug build starts ([#1973](https://github.com/mmogr/gglib/issues/1973)) ([5156af2](https://github.com/mmogr/gglib/commit/5156af2b6f3d5e24220cc8952a3f8ea6fe29caca)), closes [#1969](https://github.com/mmogr/gglib/issues/1969)
+* **cli:** the CLI's tables fit the terminal they are printed in ([#2040](https://github.com/mmogr/gglib/issues/2040)) ([6d13f7a](https://github.com/mmogr/gglib/commit/6d13f7abc7880dfdc6e4390ffe147a5cd7f60c87))
+* **core:** waiting for the endpoint ends at its limit ([#1976](https://github.com/mmogr/gglib/issues/1976)) ([b46effd](https://github.com/mmogr/gglib/commit/b46effd1368b0d9d6d5af4ed81c6c97c98984c9d)), closes [#1972](https://github.com/mmogr/gglib/issues/1972)
+* **daemon:** a service whose console window closes kills its engines at once ([#2001](https://github.com/mmogr/gglib/issues/2001)) ([4196bc3](https://github.com/mmogr/gglib/commit/4196bc395976902dfd1fcf9e1740f0c2c6066cf9))
+* **daemon:** the service's pid is read on Windows, and a gone process is seen as gone ([#1990](https://github.com/mmogr/gglib/issues/1990)) ([a6e3676](https://github.com/mmogr/gglib/commit/a6e36766402ee4668195c0c751f0dd206fe14756))
+* **download:** a quiet or dropped connection is reconnected and the download goes on, and a resume no longer stops the service answering ([#2066](https://github.com/mmogr/gglib/issues/2066)) ([0ae484b](https://github.com/mmogr/gglib/commit/0ae484bbb88ebfeae571911ff693e0c3268fd86f))
+* **host:** the app says what machine the service is on, and the launch line is written for that machine's shell ([#2022](https://github.com/mmogr/gglib/issues/2022)) ([a848f51](https://github.com/mmogr/gglib/commit/a848f512b801787475c2cffd91cc465d1e1ce5b5))
+* **installer:** an install or uninstall on Windows stops gglib's service before it changes a file ([#2052](https://github.com/mmogr/gglib/issues/2052)) ([f45dbf5](https://github.com/mmogr/gglib/commit/f45dbf565d50355bb04e040c00fd774630236da2))
+* **mcp:** stopping a server stops everything it started ([#2044](https://github.com/mmogr/gglib/issues/2044)) ([8a6ae20](https://github.com/mmogr/gglib/commit/8a6ae201661b117774d1991a1eaf9a64ed34dcf4))
+* **mcp:** the file tools read a /-rooted path and print paths with / on Windows ([#1975](https://github.com/mmogr/gglib/issues/1975)) ([c5782c7](https://github.com/mmogr/gglib/commit/c5782c7acd759b4976fd3a65132ed3202763d2f9)), closes [#1971](https://github.com/mmogr/gglib/issues/1971)
+* **mcp:** the tool finder finds Windows programs, and --args takes flags ([#1998](https://github.com/mmogr/gglib/issues/1998)) ([8afa329](https://github.com/mmogr/gglib/commit/8afa329f9fedcb04899ef5b46808240c68c11b7b))
+* **paths:** a path is stored, shown and handed to an engine without Windows' verbatim prefix ([#2014](https://github.com/mmogr/gglib/issues/2014)) ([2e1dc49](https://github.com/mmogr/gglib/commit/2e1dc49a58525d0b7f3df1d2fcd379334c0d18d6))
+* **process:** a program gglib asks what it is has ten seconds to answer ([#1994](https://github.com/mmogr/gglib/issues/1994)) ([70aa508](https://github.com/mmogr/gglib/commit/70aa50815666d70c5b7d08e8e2ac38aa4bb45986))
+* **process:** on Windows the engines end with the service, however it ends ([#2017](https://github.com/mmogr/gglib/issues/2017)) ([0411f5a](https://github.com/mmogr/gglib/commit/0411f5ac31745dc8d3a1ad74536029656f29da0c))
+* **process:** the service starts hidden, on a console of its own, and a captured command ends ([#1987](https://github.com/mmogr/gglib/issues/1987)) ([9a5229b](https://github.com/mmogr/gglib/commit/9a5229b2871df4e19f93df66fd24b001494bf9d5))
+* **proxy:** starting a model says the endpoint is on, as every start does ([#2009](https://github.com/mmogr/gglib/issues/2009)) ([3fba298](https://github.com/mmogr/gglib/commit/3fba298ff526c5bd4f472613df939e1ad8ef3888))
+* **runtime:** a machine with no GPU is fitted to its RAM, and says so ([#2029](https://github.com/mmogr/gglib/issues/2029)) ([a33e827](https://github.com/mmogr/gglib/commit/a33e82799339ed1c543cb6c9b02b2df555f9e169))
+* **runtime:** a model that cannot load says why ([#2031](https://github.com/mmogr/gglib/issues/2031)) ([d2c9681](https://github.com/mmogr/gglib/commit/d2c96810e7598d701bbb6d1d4232708e03aa4d35))
+* **runtime:** a suggested size, and every size the picker calls fitting, fits by the load's own rule ([9389a91](https://github.com/mmogr/gglib/commit/9389a913bc6f77441178928a42375fb391797af5))
+* **runtime:** an engine just written is asked again while Linux calls it busy ([#2056](https://github.com/mmogr/gglib/issues/2056)) ([d7a16a5](https://github.com/mmogr/gglib/commit/d7a16a5f1a5d42c79364f573f68afbe8f592aec9))
+* **runtime:** an engine missing a library is said to be not working, with the reason ([#2016](https://github.com/mmogr/gglib/issues/2016)) ([014746d](https://github.com/mmogr/gglib/commit/014746dcc066ac37a85e73ab02c3cadf9a60d389))
+* **runtime:** the CPU build is chosen when no Vulkan device is a GPU ([#2000](https://github.com/mmogr/gglib/issues/2000)) ([0ffc967](https://github.com/mmogr/gglib/commit/0ffc9675b2ad7b39db51619fbc89287ece678402))
+* **runtime:** the launch line starts the engine gglib runs, on any free port, and says when the engine is not installed ([#2057](https://github.com/mmogr/gglib/issues/2057)) ([1a14ccb](https://github.com/mmogr/gglib/commit/1a14ccbe0b93b25ac44cd808a8c9f66bf1004271))
+* **setup:** an engine that needs Microsoft's runtime is installed and not working, not a failed install ([#2064](https://github.com/mmogr/gglib/issues/2064)) ([55dcd67](https://github.com/mmogr/gglib/commit/55dcd67342104b4fbcc7fa118696edae6781d513))
+* **tauri:** the app answers "where is the service?" only once it knows ([#2027](https://github.com/mmogr/gglib/issues/2027)) ([2f1dfd4](https://github.com/mmogr/gglib/commit/2f1dfd4b414d4e191cb475a0451246245b2f5d44))
+* **tauri:** the tray icon is black on Windows' light taskbar and white on its dark one ([#2051](https://github.com/mmogr/gglib/issues/2051)) ([370033e](https://github.com/mmogr/gglib/commit/370033e616eb4fd0e0a66b3d53081dafe4ac917d))
+* **web:** a page that throws shows gglib's own screen, and the window lives ([#1989](https://github.com/mmogr/gglib/issues/1989)) ([e59bf70](https://github.com/mmogr/gglib/commit/e59bf70693c6fe2f96193f0af70a8dba8d86d49f))
+* **web:** a reply stream that ends before its run is read again ([#2003](https://github.com/mmogr/gglib/issues/2003)) ([79a848a](https://github.com/mmogr/gglib/commit/79a848acba1e3dcfef6f12f5d3b3d6948823b697))
+* **web:** a request to the service that is never answered ends ([#1996](https://github.com/mmogr/gglib/issues/1996)) ([12876d1](https://github.com/mmogr/gglib/commit/12876d1bd2078708261c38daee7ea0e30f00cbfc))
+* **web:** every store reads the service again when the event stream opens, so a cold start fills them all ([#2011](https://github.com/mmogr/gglib/issues/2011)) ([d1a9f17](https://github.com/mmogr/gglib/commit/d1a9f174d70239af30ab4018808232e9a72bf557))
+* **web:** the size picker no longer crashes the Windows app, and the frontend is tested in real browser engines ([#1992](https://github.com/mmogr/gglib/issues/1992)) ([3084100](https://github.com/mmogr/gglib/commit/3084100c805f7081b538e7f810f153f40369ab27))
+
+
+### Documentation
+
+* **readme:** Windows is tested, from the installer to a chat ([#2071](https://github.com/mmogr/gglib/issues/2071)) ([81fa332](https://github.com/mmogr/gglib/commit/81fa33253c75b481ad7f6808587ac10458b71a26))
+* the README and the promise page say Windows is experimental ([#1964](https://github.com/mmogr/gglib/issues/1964)) ([608c5ca](https://github.com/mmogr/gglib/commit/608c5ca3a64d3a804768d2a054870ca2df00634b))
+
+
+### Internal
+
+* **app-services:** a test that reads the stand-in engines twice holds them ([#2070](https://github.com/mmogr/gglib/issues/2070)) ([4aeb125](https://github.com/mmogr/gglib/commit/4aeb125498b98494fbdb25f85a6ba07ea03e6d14))
+* **cli:** the engine fixtures name the binaries as gglib looks for them on each OS ([#1977](https://github.com/mmogr/gglib/issues/1977)) ([3fb5e2e](https://github.com/mmogr/gglib/commit/3fb5e2eb5c1d9ad28d525904c3a5081f3393cdc5)), closes [#1970](https://github.com/mmogr/gglib/issues/1970)
+* **engines:** the Windows leg of CLI Check installs and checks the pinned engines ([#1978](https://github.com/mmogr/gglib/issues/1978)) ([7b0de5e](https://github.com/mmogr/gglib/commit/7b0de5ec0da067afc35bee8ce4ee77af03e19b84)), closes [#1961](https://github.com/mmogr/gglib/issues/1961)
+* **make:** setup-stable returns to the branch it started on ([#1957](https://github.com/mmogr/gglib/issues/1957)) ([bcfc646](https://github.com/mmogr/gglib/commit/bcfc6460611fd64cb60eb3cf7d0f919a37483360))
+* **proc:** a stand-in program lets process tests run on every OS ([#1980](https://github.com/mmogr/gglib/issues/1980)) ([2456801](https://github.com/mmogr/gglib/commit/24568015f4d4c4ff8c62f63cbba01d2b1758a2ff))
+* **release:** a stable branch follows each promoted release ([#1956](https://github.com/mmogr/gglib/issues/1956)) ([f6c7b98](https://github.com/mmogr/gglib/commit/f6c7b98a2edc60a22e64605699b0d069c5eab1d9))
+* **release:** a test run can build one target ([#1979](https://github.com/mmogr/gglib/issues/1979)) ([2e42762](https://github.com/mmogr/gglib/commit/2e42762c7e16601925858a6a2f9535e2418e96ea)), closes [#1962](https://github.com/mmogr/gglib/issues/1962)
+* **release:** each OS's built release is installed and asked one question before it publishes ([#2035](https://github.com/mmogr/gglib/issues/2035)) ([20ca5b9](https://github.com/mmogr/gglib/commit/20ca5b9f7e95c4ae1c63a618d3a725e6998b3b40))
+* the Rust tests run on macOS and Windows, held to a list of known failures ([#1965](https://github.com/mmogr/gglib/issues/1965)) ([34a8b47](https://github.com/mmogr/gglib/commit/34a8b47a837fcaff170a6c810f5691d8aa0ea345)), closes [#1960](https://github.com/mmogr/gglib/issues/1960)
+* thirteen tests that assumed Unix run on Windows too ([#1974](https://github.com/mmogr/gglib/issues/1974)) ([1ab88d2](https://github.com/mmogr/gglib/commit/1ab88d269576a77c08406a08d0559640d9c113fa))
+* **windows:** gglib.exe links the C runtime statically and needs no Visual C++ runtime ([#2005](https://github.com/mmogr/gglib/issues/2005)) ([7a0b0e7](https://github.com/mmogr/gglib/commit/7a0b0e791e6cd9e0d88730e45d0f2c361112a39e))
+
 ## [0.37.0-rc.1](https://github.com/mmogr/gglib/compare/v0.36.0-rc.3...v0.37.0-rc.1) (2026-11-14)
 
 
