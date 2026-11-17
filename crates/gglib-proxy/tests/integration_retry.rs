@@ -58,10 +58,11 @@ async fn a_retry_restores_saves_and_records_the_restart(streaming: bool) {
     } else {
         spawn_mock_upstream_with_slots(upstream_cancel.clone(), dir).await
     };
+    let dead = dead_port();
     let runtime = ScriptedRuntime::new(vec![
         target(live, false),
         // The server has died, and this admission does not know it.
-        target(dead_port().await, false),
+        target(dead.port(), false),
         // The retry's admission is the one that starts it again.
         target(live, true),
         target(live, false),
@@ -134,8 +135,9 @@ async fn a_retry_writes_the_fresh_servers_dashboard_entries() {
     let live = spawn_mock_upstream(vec![CHAT_STREAM], upstream_cancel.clone()).await;
     let launched_as =
         |quantization: &str| LaunchNarration::new(MODEL, Some(quantization.into()), 0);
+    let dead = dead_port();
     let runtime = ScriptedRuntime::new(vec![
-        target(dead_port().await, false).with_narration(launched_as("Q4_K_M")),
+        target(dead.port(), false).with_narration(launched_as("Q4_K_M")),
         target(live, true)
             .with_cache_ram_health(CacheRamHealth::Low { mb: 64 })
             .with_narration(launched_as("Q8_0")),
@@ -168,7 +170,8 @@ async fn a_retry_writes_the_fresh_servers_dashboard_entries() {
 /// still loading gets and the Retry-After the retry policy gives.
 #[tokio::test]
 async fn a_retry_that_finds_the_upstream_dead_again_answers_503_with_the_policys_retry_after() {
-    let runtime = ScriptedRuntime::new(vec![target(dead_port().await, false)]);
+    let dead = dead_port();
+    let runtime = ScriptedRuntime::new(vec![target(dead.port(), false)]);
     let (proxy, proxy_cancel) = spawn_proxy_with_runtime(
         Arc::clone(&runtime) as Arc<dyn ModelRuntimePort>,
         MODEL,

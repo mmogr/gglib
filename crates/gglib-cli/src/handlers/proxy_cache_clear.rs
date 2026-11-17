@@ -88,8 +88,11 @@ mod tests {
 
     #[tokio::test]
     async fn execute_unreachable_proxy_returns_error() {
-        // Use a port that nothing is listening on — simulates proxy not running
-        let result = execute("127.0.0.1", 59999, None, None).await;
+        // A port held for this test and refusing: the proxy is not running.
+        // A port named here could be handed to another test's fake server,
+        // whose answer then reads as a cleared cache.
+        let closed = gglib_test_http::RefusingPort::hold().expect("a loopback port");
+        let result = execute("127.0.0.1", closed.port(), None, None).await;
         assert!(result.is_err(), "Expected error when proxy is unreachable");
         let err_msg = result.unwrap_err().to_string();
         assert!(

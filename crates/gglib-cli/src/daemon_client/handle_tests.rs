@@ -6,10 +6,10 @@
 
 use std::io::Write as _;
 use std::net::TcpListener;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use gglib_core::Settings;
-use gglib_test_http::blocking;
+use gglib_test_http::{RefusingPort, blocking};
 
 use super::auth::STAND_IN_TOKEN;
 use super::*;
@@ -86,12 +86,13 @@ pub(crate) fn daemon_health() -> String {
     .to_string()
 }
 
-/// A loopback port nothing listens on.
+/// A loopback port nothing listens on: one port, held for as long as the
+/// test binary runs, so every connection to it is refused and the system
+/// hands it to no test's stand-in.
 pub(crate) fn nobody() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .and_then(|listener| listener.local_addr())
-        .expect("a loopback port")
-        .port()
+    static HELD: LazyLock<RefusingPort> =
+        LazyLock::new(|| RefusingPort::hold().expect("a loopback port"));
+    HELD.port()
 }
 
 /// The proxy's key is the flag when one is given, and otherwise the stored

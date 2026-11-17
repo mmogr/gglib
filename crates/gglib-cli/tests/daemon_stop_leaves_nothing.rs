@@ -5,19 +5,14 @@
 //! make again a data folder the user deleted.
 //!
 //! The built binary runs with `GGLIB_DATA_DIR` naming a folder of the
-//! test's own and `GGLIB_DAEMON_PORT` a port nothing listens on, so it
-//! never reaches a service running on this machine.
+//! test's own and `GGLIB_DAEMON_PORT` a port the test holds, where every
+//! connection is refused, so it never reaches a service running on this
+//! machine or another test's stand-in.
 
-use std::net::TcpListener;
 use std::path::Path;
 
 use gglib_core::utils::process::cmd;
-
-/// A loopback port nothing listens on once this returns.
-fn free_port() -> u16 {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("a port");
-    listener.local_addr().expect("its address").port()
-}
+use gglib_test_http::RefusingPort;
 
 /// Run `gglib daemon stop` with its data folder at `data`; its stderr.
 fn stop(data: &Path, port: u16) -> String {
@@ -49,7 +44,8 @@ fn a_stop_with_nothing_running_leaves_no_data_folder_and_no_log() {
     let absent = scratch.path().join("data");
     let empty = scratch.path().join("empty");
     std::fs::create_dir(&empty).expect("an empty folder");
-    let port = free_port();
+    let closed = RefusingPort::hold().expect("a loopback port");
+    let port = closed.port();
 
     let said = stop(&absent, port);
     assert!(said.contains("Daemon is not running."), "{said}");

@@ -19,13 +19,15 @@ use std::sync::{Arc, Mutex};
 use gglib_app_services::types::{McpServerConfigDto, McpServerDto, McpServerInfo, McpToolInfo};
 use gglib_core::contracts::http::daemon::{MCP_SERVERS_PATH, mcp_server_start_path};
 use gglib_core::domain::mcp::{McpLifecycle, McpServerStatus, NewMcpServer};
-use gglib_test_http::blocking;
+use gglib_test_http::{RefusingPort, blocking};
 
 #[path = "support/data_dir.rs"]
 mod data_dir;
 
-/// A loopback port nothing listens on.
-fn closed_port() -> u16 {
+/// A loopback port nothing listens on, and that a daemon could still start
+/// on: bound and let go. The system can hand it to another listener from
+/// then on, so only the test that needs it free uses it.
+fn free_port() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     listener.local_addr().expect("its address").port()
 }
@@ -33,7 +35,8 @@ fn closed_port() -> u16 {
 /// `gglib mcp <args>` over the data directory `root`, with no daemon: its
 /// port is one nothing listens on.
 fn mcp(root: &Path, args: &[&str]) -> Output {
-    mcp_on(root, closed_port(), args)
+    let closed = RefusingPort::hold().expect("a loopback port");
+    mcp_on(root, closed.port(), args)
 }
 
 /// `gglib mcp <args>` over the data directory `root`, with the daemon on
@@ -574,7 +577,7 @@ fn list_says_a_failed_server_is_failed_and_why() {
 fn list_with_no_daemon_shows_dashes_and_starts_none() {
     let root = tempfile::tempdir().expect("temp data dir");
     added(root.path(), "fs", &[]);
-    let port = closed_port();
+    let port = free_port();
 
     let listed = succeeded(&mcp_on(root.path(), port, &["list"]));
 
