@@ -10,6 +10,8 @@ SSE with the same event names, reports its status, and is removed, and an
 install or a removal is refused while a model runs on that engine. Each
 engine's install and removal take one slot of its own (`install_slot`), so
 neither starts while the other runs. The daemon installs downloads only: an
-install the command line would build is refused, naming the command.
+install the command line would build is refused, naming the command. An
+install whose engine is there but cannot run ends `completed`: the engine's
+status says why, with the repair.
 
 <!-- module-docs:end -->

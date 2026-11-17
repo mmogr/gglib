@@ -151,6 +151,7 @@ describe("setup's engines", () => {
     const drawing = line(region, 'stable-diffusion.cpp (for drawing)');
     await waitFor(() => expect(drawing).toHaveTextContent('skipped — chat works without it'));
     expect(within(drawing).getByRole('status')).toHaveTextContent('Failed to install stable-diffusion.cpp: no asset');
+    expect(within(drawing).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     expect(within(region).queryByRole('alert')).not.toBeInTheDocument();
     expect(within(region).getByRole('button', { name: 'Continue' })).toBeEnabled();
   });
@@ -270,6 +271,78 @@ describe("setup's engines", () => {
     expect(within(llama).getByText('Installed')).toBeInTheDocument();
     expect(within(drawing).queryByText('Installed, not working')).not.toBeInTheDocument();
     expect(within(region).queryByRole('button', { name: 'Repair' })).not.toBeInTheDocument();
+    expect(within(region).getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it("says an install whose engine cannot start once, in its status's words, with Repair and no Retry, and nothing of it once Repair has made it work", async () => {
+    // The daemon's install puts the files there; its Verify finds each
+    // engine cannot start for want of Microsoft's runtime. The install
+    // completes, and the engine's status says why and offers the repair.
+    const reason = (server: string) =>
+      `${server} cannot start: a library it needs is missing. Windows does not say which; on a new machine it is most likely the Microsoft Visual C++ Redistributable (x64).`;
+    const fix = {
+      fix: 'install_visual_cpp_runtime',
+      offer: 'gglib can install the Microsoft Visual C++ Redistributable (x64) from Microsoft. Windows will ask for permission; if no question appears, look for a flashing shield on the taskbar.',
+      action: 'Repair',
+      waiting: null,
+    } as const;
+    const says = 'Installed the Microsoft Visual C++ Redistributable (x64). llama-server works now.';
+    api.repairEngine.mockImplementation(async () => {
+      answer('llama', engine('llama', true));
+      answer('stable_diffusion', engine('stable_diffusion', true));
+      return { outcome: 'installed', works: true, says };
+    });
+    const { user, region } = await reachEngines();
+    const llama = line(region, 'llama.cpp');
+    const drawing = line(region, 'stable-diffusion.cpp (for drawing)');
+
+    const installing = await stream('llama');
+    answer('llama', engine('llama', true, { broken: reason('llama-server'), fix }));
+    act(() => installing.onEvent({ type: 'completed', version: 'b11429' }));
+    const sd = await stream('stable_diffusion');
+    answer('stable_diffusion', engine('stable_diffusion', true, { broken: reason('sd-server'), fix }));
+    act(() => sd.onEvent({ type: 'completed', version: 'master-948-228c707' }));
+    await waitFor(() => expect(within(drawing).getByText(fix.offer)).toBeInTheDocument());
+
+    for (const [row, server] of [[llama, 'llama-server'], [drawing, 'sd-server']] as const) {
+      expect(within(row).getByText('Installed, not working')).toBeInTheDocument();
+      expect(row.textContent?.split(`${server} cannot start`)).toHaveLength(2);
+      expect(row).not.toHaveTextContent(/internal error|Failed to install|did not install|skipped/);
+      expect(within(row).queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+      expect(within(row).getByRole('button', { name: 'Repair' })).toBeInTheDocument();
+    }
+
+    await user.click(within(llama).getByRole('button', { name: 'Repair' }));
+
+    expect(await within(llama).findByText(says)).toBeInTheDocument();
+    await waitFor(() => expect(within(drawing).queryByText('Installed, not working')).not.toBeInTheDocument());
+    for (const row of [llama, drawing]) {
+      expect(within(row).getByText('Installed')).toBeInTheDocument();
+      expect(row).not.toHaveTextContent(/cannot start|internal error|Failed to install/);
+      expect(within(row).queryByRole('alert')).not.toBeInTheDocument();
+      expect(within(row).queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    }
+    expect(within(region).getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it("says nothing of an install's failure once the engine it was for works", async () => {
+    const { region } = await reachEngines();
+    const llama = await stream('llama');
+    // The install finished on the daemon after the stream that watched it ended.
+    answer('llama', engine('llama', true));
+    act(() => llama.onClose?.());
+    const sd = await stream('stable_diffusion');
+    answer('stable_diffusion', engine('stable_diffusion', true));
+    act(() => sd.onEvent({ type: 'failed', message: 'Failed to install stable-diffusion.cpp: the connection was reset' }));
+
+    const drawing = line(region, 'stable-diffusion.cpp (for drawing)');
+    await waitFor(() => expect(drawing).toHaveTextContent('Installed'));
+    await waitFor(() => expect(line(region, 'llama.cpp')).toHaveTextContent('Installed'));
+    for (const row of [line(region, 'llama.cpp'), drawing]) {
+      expect(row).not.toHaveTextContent(/Failed to install|ended before it reported|did not install|skipped/);
+      expect(within(row).queryByRole('alert')).not.toBeInTheDocument();
+      expect(within(row).queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    }
     expect(within(region).getByRole('button', { name: 'Continue' })).toBeEnabled();
   });
 
