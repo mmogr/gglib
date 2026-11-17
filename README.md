@@ -294,10 +294,13 @@ and run `./gglib up`. The binaries are not code-signed yet:
   first; if gglib is still running in a terminal, the installer says so
   and stops.
 
-**Windows is experimental.** Its first test found that a new install doesn't
-get from the installer to a working chat without help.
+**Windows is tested on Windows 11 (x64) with no GPU:** a new install gets
+from the installer to a working chat. On a Windows with no Microsoft Visual
+C++ runtime the app offers to install it; Windows' permission question for
+that can wait on the taskbar as a flashing shield. Not tested on Windows
+yet: a GPU, drawing images, and pairing a second device.
 [#1959](https://github.com/mmogr/gglib/issues/1959) lists what was found and
-tracks the fixes.
+fixed.
 
 Each release also carries gglib for an iOS or macOS app to link,
 `GglibFFI-<version>.xcframework.zip`, its Swift binding in
