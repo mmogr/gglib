@@ -33,6 +33,17 @@ The macOS asset is a universal binary named after its arm64 runner, and its
 `sd-server` finds the dylib through `@executable_path`. Any other platform
 has no asset and builds from source.
 
+A Linux build runs only where glibc is at least the one of the Ubuntu image
+upstream built it on. `PINNED_SD_LINUX_GLIBC` is the newest glibc the pinned
+release's Linux builds ask for, and moves with the pin. On a system whose
+glibc is older (read with `getconf GNU_LIBC_VERSION`, `system/glibc.rs`)
+the pinned release has no download: nothing is fetched, the reason names
+both versions, and the install is a source build, as on a platform with no
+asset. A release `GGLIB_SD_RELEASE` names is not held to the pin's floor,
+and neither is a system whose glibc cannot be read; a server that then
+cannot start says it was built for a newer system, from the install's own
+check. CI reads the installed build and holds the constant to it.
+
 ## The command line
 
 `--diffusion-model <file>` for a diffusion-only family (Flux.1, Qwen-Image

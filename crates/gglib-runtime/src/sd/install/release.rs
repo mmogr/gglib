@@ -7,7 +7,10 @@ use std::path::PathBuf;
 use gglib_core::paths::sd_data_dir;
 use gglib_core::utils::system::GpuInfo;
 
-use crate::binary_install::{ArchiveLayout, AssetChoice, AssetMatcher, ReleaseSpec};
+use crate::binary_install::{
+    ArchiveLayout, AssetChoice, AssetMatcher, ReleaseSelector, ReleaseSpec, resolve_selector,
+};
+use crate::system::glibc::{Glibc, host_glibc};
 
 /// The stable-diffusion.cpp release gglib installs unless told otherwise.
 ///
@@ -18,6 +21,18 @@ use crate::binary_install::{ArchiveLayout, AssetChoice, AssetMatcher, ReleaseSpe
 /// different engines. Moving the pin is a deliberate commit with what changed
 /// in its message. Upstream tags `master-<build>-<short commit>`.
 pub const PINNED_SD_RELEASE: &str = "master-1025-8ee08e3";
+
+/// The newest glibc the pinned release's Linux builds ask for: the oldest a
+/// system can have and run them.
+///
+/// It moves with the pin, in the same commit. Upstream builds each release on
+/// one Ubuntu image, and a build needs at least that image's glibc:
+/// `master-1025-8ee08e3` was built on Ubuntu 24.04 and asks for 2.38, and
+/// from `master-1044-f8ea2e1` they are built on Ubuntu 26.04 and ask for
+/// 2.43. CI reads the installed build and holds this to it
+/// (`the_floor_is_the_glibc_the_pinned_linux_build_asks_for`), so a pin
+/// whose builds ask for another version cannot merge without it.
+pub(crate) const PINNED_SD_LINUX_GLIBC: Glibc = Glibc(2, 38);
 
 /// Environment override for [`PINNED_SD_RELEASE`]: a release tag, or
 /// `latest` for upstream's newest. Unset or blank installs the pin.
@@ -160,9 +175,48 @@ pub(crate) fn sd_platform_asset(
     }
 }
 
+/// Why the pinned release's Linux download cannot run on a system whose
+/// glibc is `has`, when it is older than the `needs` the download was built
+/// against; `None` when it runs, or when nothing here can say.
+///
+/// Nothing is said of a release an override names, whose builds may need
+/// another glibc, nor where `has` reads nothing: the install's own check
+/// then says why a server cannot start. `has` is asked only on Linux, of
+/// the pin.
+pub(crate) fn glibc_too_old(
+    os: &str,
+    selector: &ReleaseSelector,
+    needs: Glibc,
+    has: impl FnOnce() -> Option<Glibc>,
+) -> Option<String> {
+    let pinned = matches!(selector, ReleaseSelector::Tag(tag) if tag == PINNED_SD_RELEASE);
+    if os != "linux" || !pinned {
+        return None;
+    }
+    let has = has()?;
+    (has < needs).then(|| {
+        format!(
+            "stable-diffusion.cpp's pre-built Linux build needs glibc {needs} or newer, and \
+             this system has glibc {has}"
+        )
+    })
+}
+
 /// The pre-built asset for this machine, probing its GPU where the choice
 /// depends on one.
+///
+/// `Err` also where the pinned Linux build needs a newer glibc than this
+/// system has ([`glibc_too_old`]): nothing that cannot start is downloaded,
+/// and a source build is the way to install.
 pub fn check_sd_prebuilt_availability() -> std::result::Result<SdAsset, String> {
+    let os = std::env::consts::OS;
     let gpu = crate::system::gpu::gpu_for_downloads();
-    sd_platform_asset(std::env::consts::OS, std::env::consts::ARCH, &gpu)
+    let asset = sd_platform_asset(os, std::env::consts::ARCH, &gpu)?;
+    let too_old = glibc_too_old(
+        os,
+        &resolve_selector(&SD_RELEASE),
+        PINNED_SD_LINUX_GLIBC,
+        host_glibc,
+    );
+    too_old.map_or(Ok(asset), Err)
 }

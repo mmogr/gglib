@@ -30,6 +30,12 @@ read it asks the operating system: on Linux a GPU device node and a Vulkan
 driver's ICD manifest, on Windows a display adapter with a Vulkan driver
 registered. The Vulkan loader alone is not a GPU.
 
+`glibc.rs` reads this system's glibc version, by asking glibc's own
+`getconf`: the image engine's Linux download runs only where glibc is at
+least the one it was built against, and its platform table compares the two
+before anything is downloaded. Off Linux, and on a Linux with another libc,
+there is none to read.
+
 `fit_memory.rs` decides what a context is sized against, the one answer
 every launch, every plan of one and the endpoint's advertisement read
 (`fit_memory()`): a GPU's memory as read; with no GPU at all, the share of
