@@ -1,15 +1,17 @@
-stable-diffusion.cpp version unknown, commit 8ee08e3
+stable-diffusion.cpp version unknown, commit 3bad892
 Usage: sd-server [options]
 
 Svr Options:
-  -l, --listen-ip <string>      server listen ip (default: 127.0.0.1)
-  --serve-html-path <string>    path to HTML file to serve at root (optional)
-  --listen-port <int>           server listen port (default: 1234)
-  --color                       colors the logging tags according to level
-  -h, --help                    show this help message and exit
-  --model-dir                   model root; repeat to search multiple directories (default: models)
-  --log-level                   minimum log level, one of [debug, verbose, info, warn, error] (default: info)
-  -v, --verbose                 equivalent to --log-level verbose
+  -l, --listen-ip <string>         server listen ip (default: 127.0.0.1)
+  --serve-html-path <string>       path to HTML file to serve at root (optional)
+  --listen-port <int>              server listen port (default: 1234)
+  --max-pending-jobs <int>         maximum number of pending async jobs (default: 64)
+  --completed-ttl-seconds <int>    retention time for completed async jobs in seconds (default: 600)
+  --color                          colors the logging tags according to level
+  -h, --help                       show this help message and exit
+  --model-dir                      model root; repeat to search multiple directories (default: models)
+  --log-level                      minimum log level, one of [debug, verbose, info, warn, error] (default: info)
+  -v, --verbose                    equivalent to --log-level verbose
 
 Context Options:
   -m, --model <string>                     path to full model
@@ -28,7 +30,7 @@ Context Options:
   --high-noise-diffusion-model <string>    path to the standalone high noise diffusion model
   --uncond-diffusion-model <string>        path to the standalone unconditional diffusion model, currently used by
                                            Ideogram4 CFG
-  --embeddings-connectors <string>         path to LTXAV embeddings connectors
+  --embeddings-connectors <string>         path to embeddings connectors (LTXAV or P-H3-Image)
   --vae <string>                           path to standalone vae model
   --vae-format <string>                    VAE latent format override: auto, flux, sd3, flux2, or wan (default: auto)
   --audio-vae <string>                     path to standalone LTX audio vae model
@@ -131,7 +133,7 @@ Default Generation Options:
                                            x_offset, y_offset, mask_mode, merge_masks, invert_mask, mask_blur,
                                            inpaint_padding, inpaint_width, inpaint_height, denoising_strength, steps,
                                            cfg_scale, sample_method, scheduler, sort_by
-  -i, --init-img <string>                  path to the init image
+  -i, --init-img <string>                  path to the init image, or a single input image for vid_upscale
   --end-img <string>                       path to the end image, required by flf2v
   --mask <string>                          path to the mask image
   --control-image <string>                 path to control image, control net
@@ -146,6 +148,11 @@ Default Generation Options:
   --hires-upscaler <string>                highres fix upscaler, Lanczos, Nearest, Latent, Latent (nearest), Latent
                                            (nearest-exact), Latent (antialiased), Latent (bicubic), Latent (bicubic
                                            antialiased), or a model name under --hires-upscalers-dir (default: Latent)
+  --control-type <string>                  kind of the control image, one of [openpose, depth, scribble, canny, normal,
+                                           segment, tile, repaint]. Required by an SDXL Control Net Union model (tile
+                                           and repaint only exist in its ProMax variant), ignored by any other Control
+                                           Net. Also accepted: hed, softedge, pidi, ted (scribble); lineart,
+                                           anime_lineart, mlsd (canny); seg (segment); inpaint, outpaint (repaint)
   --extra-sample-args <string>             extra sampler/scheduler/guidance args, key=value list. CFG supports
                                            guidance_schedule; APG supports apg_eta, apg_momentum, apg_norm_threshold,
                                            apg_norm_threshold_smoothing; SLG supports slg_uncond; lcm supports
@@ -247,9 +254,13 @@ Default Generation Options:
                                            logit_normal, flux2, flux, beta, llada_image], alias: normal=discrete,
                                            default: model-specific
   --sigmas                                 custom sigma values for the sampler, comma-separated (e.g.,
-                                           "14.61,7.8,3.5,0.0") or preset: qwen-image-2.1-turbo.
+                                           "14.61,7.8,3.5,0.0") or preset: qwen-image-2.1-turbo, p-h3-image,
+                                           minimax-h3-image, hyperflow-h3-flash-4, hyperflow-h3-flash-6,
+                                           hyperflow-h3-flash-8.
   --hires-sigmas                           custom sigma values for the highres fix second pass, comma-separated (e.g.,
-                                           "0.85,0.725,0.421875,0.0") or preset: qwen-image-2.1-turbo.
+                                           "0.85,0.725,0.421875,0.0") or preset: qwen-image-2.1-turbo, p-h3-image,
+                                           minimax-h3-image, hyperflow-h3-flash-4, hyperflow-h3-flash-6,
+                                           hyperflow-h3-flash-8.
   --skip-layers                            layers to skip for SLG steps (default: [7,8,9])
   --high-noise-skip-layers                 (high noise) layers to skip for SLG steps (default: [7,8,9])
   -r, --ref-image                          reference image for Flux Kontext or MiniMax-H3 Ref2VA (can be used multiple
