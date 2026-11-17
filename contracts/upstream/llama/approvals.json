@@ -51,6 +51,7 @@
     "approved": [
       "--adaptive-decay",
       "--adaptive-target",
+      "--allow-unauthenticated-tools",
       "--api-key",
       "--api-key-file",
       "--api-prefix",
@@ -117,6 +118,7 @@
       "--lora-scaled",
       "--mcp-servers-config",
       "--mcp-servers-json",
+      "--media-allow-private-urls",
       "--media-path",
       "--metrics",
       "--min-p",
@@ -130,6 +132,7 @@
       "--models-max",
       "--models-memory-margin",
       "--models-preset",
+      "--moe-cache-cpu-share",
       "--moe-cache-mib",
       "--mtmd-batch-max-tokens",
       "--no-host",
@@ -139,6 +142,7 @@
       "--override-kv",
       "--path",
       "--perf",
+      "--ple",
       "--poll",
       "--poll-batch",
       "--pooling",
@@ -228,6 +232,8 @@
       "--top-k",
       "--top-nsigma",
       "--top-p",
+      "--tts-lang",
+      "--tts-voice",
       "--typical",
       "--ui",
       "--ui-config",
@@ -266,7 +272,6 @@
       "-ctxcp",
       "-dev",
       "-dr",
-      "-dt",
       "-e",
       "-fa",
       "-fit",
@@ -311,7 +316,7 @@
       "-ub",
       "-v"
     ],
-    "note": "keeping, because --connect is a WebRTC link to one server's web UI through llama-connect; gglib's tunnel reaches the daemon, the proxy and /mcp"
+    "note": "keeping, because the new flags are TTS, MoE cache, shard loading and network guards, none a remote transport"
   },
   "image_token_delta": {
     "approved": 258,
