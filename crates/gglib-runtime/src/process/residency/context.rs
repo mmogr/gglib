@@ -1,6 +1,7 @@
-//! The context a launch resolves to, and the fit it may fall back from.
+//! The context a launch resolves to.
 //!
-//! Split from `mod.rs`, which keeps the admission path.
+//! Split from `mod.rs`, which keeps the admission path. The fit it may fall
+//! back from is gglib-core's `fit_on_device`.
 
 use gglib_core::server_config::{
     ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
@@ -41,26 +42,6 @@ pub(super) fn resolve_launch_opts(
     opts.global_default_ctx = default_ctx;
     let (resolved_ctx, ctx_source) = resolve_context_size_with_source(&opts);
     (opts, resolved_ctx, ctx_source)
-}
-
-/// Fit against the reserved budget, falling back to the undivided device.
-///
-/// A seam, not indirection: the chain is the whole of the co-resident
-/// reservation's escape hatch, and inlining it left the behaviour unguarded —
-/// deleting the fallback passed every test in the crate.
-///
-/// The seam guards the logic, not the wiring. Passing the same budget as both
-/// arguments still neuters the fallback and no test would notice; catching that
-/// needs `admit` exercised end to end, which this module does not do.
-pub(super) fn fit_or_undivided<F>(
-    fit: F,
-    reserved: Option<u64>,
-    undivided: Option<u64>,
-) -> Option<u64>
-where
-    F: Fn(Option<u64>) -> Option<u64>,
-{
-    fit(reserved).or_else(|| fit(undivided))
 }
 
 #[cfg(test)]

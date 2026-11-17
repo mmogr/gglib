@@ -16,7 +16,7 @@ import '@testing-library/jest-dom';
 import type { HfModelSummary, HfSearchRequest, HfSearchResponse } from '../../../src/types';
 
 const library = vi.hoisted(() => ({ models: [] as unknown[] }));
-const suggestion = vi.hoisted(() => ({ answer: null as unknown }));
+const suggestion = vi.hoisted(() => ({ answer: null as unknown, noneReason: undefined as string | undefined }));
 const transport = vi.hoisted(() => ({
   listModels: vi.fn(async () => library.models),
   listServers: vi.fn(async () => []),
@@ -48,7 +48,7 @@ vi.mock('../../../src/services/transport', async () => {
 });
 vi.mock('../../../src/services/transport/api/client', () => ({ get: vi.fn(async () => null) }));
 vi.mock('../../../src/services/transport/api/setup', () => ({
-  getSetupStatus: vi.fn(async () => ({ llamaInstalled: true, llamaCanDownload: true })),
+  getSetupStatus: vi.fn(async () => ({ llamaInstalled: true, llamaCanDownload: true, noSuggestionReason: suggestion.noneReason })),
   streamEngineInstall: vi.fn(() => () => {}),
   getRecommendedModel: vi.fn(async () => suggestion.answer),
 }));
@@ -97,6 +97,7 @@ describe('the one search', () => {
   beforeEach(() => {
     library.models = [guiModel({ id: 1, name: 'Qwen3-4B' })];
     suggestion.answer = null;
+    suggestion.noneReason = undefined;
     for (const mock of Object.values(transport)) mock.mockClear();
     transport.browseHfModels.mockImplementation(async () => page([]));
     transport.getHfModelSummary.mockImplementation(async (id) => hfRepo(id));
@@ -352,6 +353,8 @@ describe('the one search', () => {
     suggestion.answer = {
       repo: 'owner/small-GGUF',
       rationale: 'the smallest model in the list that still calls tools',
+      quantization: 'Q4_K_M',
+      fitSentence: 'Fits this machine with 32K context, of 32K trained.',
       requiredBytes: 5 * 2 ** 30,
       budgetBytes: 16 * 2 ** 30,
       budgetSource: 'unifiedMemory',
@@ -367,9 +370,9 @@ describe('the one search', () => {
 
     const suggested = await screen.findByRole('region', { name: 'Suggested for this Mac' });
     expect(suggested).toHaveTextContent('owner/small-GGUF');
-    expect(suggested).toHaveTextContent('The smallest model in the list that still calls tools. Needs 5.0 GiB of 16.0 GiB unified memory.');
+    expect(suggested).toHaveTextContent('The smallest model in the list that still calls tools. At Q4_K_M, fits this machine with 32K context, of 32K trained.');
     await userEvent.setup().click(within(suggested).getByRole('button', { name: 'Download' }));
-    await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledWith({ modelId: 'owner/small-GGUF', quantization: undefined }));
+    await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledWith({ modelId: 'owner/small-GGUF', quantization: 'Q4_K_M' }));
   });
 
   it('dismisses the suggestion for good, until another repo is suggested', async () => {
@@ -408,6 +411,14 @@ describe('the one search', () => {
     renderLibrary();
     await userEvent.setup().click(field());
     expect(await screen.findByText('Nothing gglib would suggest fits. Search for a smaller model below.')).toBeInTheDocument();
+  });
+
+  it("says the daemon's reason when nothing is suggested because the GPU's memory could not be read", async () => {
+    suggestion.noneReason = "gglib could not read this GPU's memory, so it cannot size a model to it and suggests none: choose one yourself.";
+    renderLibrary();
+    await userEvent.setup().click(field());
+    expect(await screen.findByText(suggestion.noneReason)).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing gglib would suggest fits/)).not.toBeInTheDocument();
   });
 
   it('Find on Hugging Face focuses the search in its scope, by the address the menu uses too', async () => {

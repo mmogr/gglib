@@ -48,6 +48,8 @@ export interface SetupStatus {
   /** Whether the accelerator is set up, as the state every surface words (`FAST_DOWNLOADS_WORDS`). */
   fastDownloads: FastDownloadsState;
   systemMemory?: SystemMemoryInfo | null;
+  /** Why no model is suggested when the reason is not that none fits (a GPU whose memory could not be read), in the daemon's words. */
+  noSuggestionReason?: string | null;
 }
 
 /** Pre-built install phases, in order. */

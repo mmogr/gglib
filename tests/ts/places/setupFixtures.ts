@@ -86,6 +86,8 @@ export function engine(kind: RuntimeKind, installed = false, overrides: Partial<
 export const REC: RecommendationDto = {
   repo: 'unsloth/Qwen3-8B-GGUF',
   rationale: 'strong tool calling at 8B',
+  quantization: 'Q4_K_M',
+  fitSentence: 'Fits this machine with 32K context, of 40K trained.',
   requiredBytes: Math.round(6.5 * GIB),
   budgetBytes: Math.round(43.2 * GIB),
   budgetSource: 'unifiedMemory',

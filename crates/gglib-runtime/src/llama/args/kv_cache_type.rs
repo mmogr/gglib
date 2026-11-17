@@ -15,7 +15,6 @@
 //! to fall back to `f16`/`f16` entirely.
 
 use gglib_core::cache_config::{DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V, KvCacheType};
-use gglib_core::debug_switches;
 
 /// Indicates how the K/V cache types were resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,7 +67,7 @@ impl KvCacheTypeResolution {
 /// `GGLIB_DISABLE_CACHE_AUTOSIZE`; the escape hatch for the Flash Attention
 /// constraint documented in the module docs.
 fn kv_quant_disabled_via_env() -> bool {
-    debug_switches::enabled("GGLIB_DISABLE_KV_QUANT")
+    gglib_core::cache_config::kv_quant_disabled_via_env()
 }
 
 /// Resolve the `--cache-type-k`/`--cache-type-v` types for a llama-server launch.
@@ -186,7 +185,7 @@ mod tests {
     /// form handed what the switch reads as now, whichever way that is.
     #[test]
     fn the_public_resolver_hands_the_pure_form_what_the_switch_reads_as() {
-        let disabled = debug_switches::enabled("GGLIB_DISABLE_KV_QUANT");
+        let disabled = gglib_core::debug_switches::enabled("GGLIB_DISABLE_KV_QUANT");
         assert_eq!(
             resolve_kv_cache_types(None, None),
             resolve_kv_cache_types_inner(None, None, disabled)

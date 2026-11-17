@@ -124,7 +124,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `POST` | `/api/config/system/setup-python` | Set up the Python fast-download helper |
 | `POST` | `/api/config/system/disable-fast-downloads` | Remove the fast-download helper; downloads go back to native HTTP |
 | `GET` | `/api/config/system/diagnostics` | Dependencies, resolved paths and acceleration (`gglib config check-deps`, `paths` and `fast-downloads status` in one) |
-| `GET` | `/api/config/system/recommend-model` | A model sized to this machine's memory, or `null` when none fits |
+| `GET` | `/api/config/system/recommend-model` | The model a load on this machine would serve at its row's 32K (else the one served the most context from 8K), the size its download takes and the load's sentence for it; `null` when none is served 8K, or when a GPU's memory could not be read (`noSuggestionReason` in `/api/config/system/setup-status` then says so) |
 | `GET` | `/api/servers` | The running model servers |
 | `POST` | `/api/servers/start` | Start llama-server (id in the body) |
 | `POST` | `/api/servers/stop` | Stop llama-server (id in the body) |

@@ -186,6 +186,33 @@ async fn with_none_asked_the_largest_quantized_variant_that_fits_is_taken() {
     );
 }
 
+/// The projector a download fetches beside whichever size it takes is
+/// counted with each size, as a load counts it: a size that fits only
+/// without it is passed over.
+#[tokio::test]
+async fn with_none_asked_each_size_is_judged_with_its_projector() {
+    let repo = |projector| {
+        Repo(vec![
+            (
+                "mmproj-F16",
+                projector,
+                GgufFileRole::Projector,
+                FileType(1),
+            ),
+            ("Q6_K_P", 22 * GB, GgufFileRole::Weights, FileType(18)),
+            ("Q8_0", 28 * GB, GgufFileRole::Weights, FileType(7)),
+        ])
+    };
+    assert_eq!(
+        select(repo(1), None, Some(32 * GB)).await,
+        Ok("Q8_0".into())
+    );
+    assert_eq!(
+        select(repo(2 * GB), None, Some(32 * GB)).await,
+        Ok("Q6_K_P".into())
+    );
+}
+
 #[tokio::test]
 async fn with_none_asked_a_repository_of_drafts_alone_is_refused() {
     let repo = Repo(vec![("mtp-Q8_0", 1, GgufFileRole::Sidecar, FileType(7))]);

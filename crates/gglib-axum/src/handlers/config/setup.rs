@@ -71,5 +71,5 @@ pub(crate) async fn diagnostics(
 pub(crate) async fn recommend_model(
     State(state): State<AppState>,
 ) -> Result<Json<Option<RecommendationDto>>, HttpError> {
-    Ok(Json(state.setup.recommend_model().map(Into::into)))
+    Ok(Json(state.setup.recommend_model().await.map(Into::into)))
 }

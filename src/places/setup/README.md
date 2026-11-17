@@ -44,7 +44,10 @@ built from source. In a terminal:", "gglib looks again every few
 seconds."; "Faster downloads", "set up when you get a model",
 "setting up", "needs Python 3; downloads still work", "not set up;
 downloads still work", "setting up faster downloads first"; "Suggested",
-"Nothing gglib would suggest fits."; the suggestion's "Needs … of …",
+"Nothing gglib would suggest fits." (or, when its GPU's memory could not be
+read, the daemon's `noSuggestionReason` in its place); the suggestion's
+"At …, " and the daemon's fit sentence (`fitSentence`), or from an older hub
+"Needs … of …",
 moved unchanged from the Library's (`formatRecommendation`); "system RAM"
 after the machine's RAM is Rust's `BudgetSource::SystemRam` label; "Use another machine's models ›",
 "Joined. Its models are in your Library."; "The test runs when … finishes.",

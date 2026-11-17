@@ -55,6 +55,12 @@ pub struct SetupStatus {
     pub fast_downloads: FastDownloadsState,
     /// System memory information.
     pub system_memory: Option<SystemMemoryInfo>,
+    /// Why no model is suggested to this machine when the reason is not
+    /// that none fits: its GPU's memory could not be read, so a load sizes
+    /// nothing to it (`gglib_runtime::system::UNREADABLE_GPU`). Absent
+    /// otherwise, and from a hub from before it was said.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub no_suggestion_reason: Option<String>,
 }
 
 /// GPU detection results.
@@ -123,6 +129,11 @@ impl SetupOps {
 
         // GPU detection
         let gpu_info_raw = self.deps.system_probe.detect_gpu_info();
+        let no_suggestion_reason = gglib_runtime::system::no_suggestion_reason_on(
+            gglib_runtime::system::a_gpu_is_present(&gpu_info_raw),
+            &self.deps.system_probe.get_system_memory_info(),
+        )
+        .map(str::to_owned);
         let gpu_info = GpuInfoDto {
             has_metal: gpu_info_raw.has_metal,
             has_nvidia: gpu_info_raw.has_nvidia_gpu,
@@ -182,6 +193,7 @@ impl SetupOps {
             python_available,
             fast_downloads,
             system_memory,
+            no_suggestion_reason,
         })
     }
 
@@ -235,14 +247,37 @@ impl SetupOps {
     }
 
     /// A model sized to this machine, from the same shortlist `gglib up` uses
-    /// on a first run.
+    /// on a first run, as a load on this machine fits it: against the load's
+    /// budget for what the probe reads, with the user's
+    /// `default-context-size`.
     ///
-    /// `None` when nothing fits, which is a real answer rather than an error:
-    /// a machine too small for the smallest candidate has to be told so, not
-    /// handed a recommendation it cannot run.
-    pub fn recommend_model(&self) -> Option<gglib_core::domain::recommendation::Recommendation> {
-        let memory = self.deps.system_probe.get_system_memory_info();
-        gglib_core::domain::recommendation::recommend(&memory)
+    /// `None` when nothing fits, or the load has no budget
+    /// ([`SetupStatus::no_suggestion_reason`] says which), which is a real
+    /// answer rather than an error: a machine too small for the smallest
+    /// candidate has to be told so, not handed a recommendation it cannot run.
+    pub async fn recommend_model(
+        &self,
+    ) -> Option<gglib_core::domain::recommendation::Recommendation> {
+        let default_ctx = self
+            .deps
+            .core
+            .settings()
+            .get()
+            .await
+            .ok()
+            .and_then(|s| s.default_context_size);
+        let probe = Arc::clone(&self.deps.system_probe);
+        tokio::task::spawn_blocking(move || {
+            let gpu_present = gglib_runtime::system::a_gpu_is_present(&probe.detect_gpu_info());
+            gglib_runtime::system::recommend_with(
+                gpu_present,
+                &probe.get_system_memory_info(),
+                gglib_runtime::system::launching(default_ctx),
+            )
+        })
+        .await
+        .ok()
+        .flatten()
     }
 
     /// Everything the diagnostics panel shows: dependency matrix, resolved

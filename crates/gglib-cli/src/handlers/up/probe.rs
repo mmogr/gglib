@@ -6,7 +6,6 @@ use anyhow::{Context, Result};
 use gglib_app_services::{GpuInfoDto, SetupDeps, SetupOps, SetupStatus};
 use gglib_core::domain::format_gib;
 use gglib_core::paths::SD_INSTALL_COMMAND;
-use gglib_core::utils::system::SystemMemoryInfo;
 use gglib_runtime::DefaultSystemProbe;
 
 use super::{require_tty, row, sgr, step};
@@ -18,12 +17,9 @@ use gglib_core::domain::{EngineState, RuntimeKind};
 use gglib_runtime::engine::NotWorking;
 use gglib_runtime::engine::{self, PinStanding, pin_state};
 
-/// Run steps 1 and 2, returning the memory figures the model choice needs.
-///
-/// `None` means the probe could not read system memory at all — vanishingly
-/// rare, but it must not be mistaken for "this machine has no memory", which
-/// would silently turn into "nothing fits".
-pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemoryInfo>> {
+/// Run steps 1 and 2. The model choice reads the machine as a load does
+/// (`gglib_runtime::system::sized_against`), not these rows.
+pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<()> {
     // One call for hardware, llama.cpp state and the models directory. This is
     // the same status the GUI's setup wizard renders, so the two surfaces
     // cannot drift into disagreeing about the machine they are running on.
@@ -38,7 +34,7 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
 
     step(1, "Hardware");
     row("backend", &backend_label(&status.gpu_info), None);
-    let memory = report_memory(&status);
+    report_memory(&status);
     row(
         "models",
         &status.models_directory.path,
@@ -68,7 +64,7 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
     }
     ensure_images(yes).await;
 
-    Ok(memory)
+    Ok(())
 }
 
 /// Install stable-diffusion.cpp, which draws images, as `make setup` and the
@@ -222,17 +218,19 @@ fn images_skipped_lines(reason: &str) -> Vec<String> {
     ]
 }
 
-/// Print the memory rows and assemble the figure the recommendation sizes
-/// against.
+/// Print the memory rows.
 ///
 /// The VRAM row is where this command is most likely to mislead, so it says
 /// what it knows. A unified-memory device — Apple Silicon or an integrated GPU
 /// — gets its own row rather than being labelled VRAM, because its budget is a
 /// share of host RAM. A card whose memory could not be read still reports
-/// nothing: falling back to system RAM without saying so would quietly
-/// recommend a model far too large for it.
-fn report_memory(status: &SetupStatus) -> Option<SystemMemoryInfo> {
-    let mem = status.system_memory.as_ref()?;
+/// nothing, and nothing is sized to it, as a load sizes nothing to it:
+/// falling back to system RAM would quietly recommend a model far too large
+/// for it.
+fn report_memory(status: &SetupStatus) {
+    let Some(mem) = status.system_memory.as_ref() else {
+        return;
+    };
     let has_gpu =
         status.gpu_info.has_metal || status.gpu_info.has_nvidia || status.gpu_info.has_vulkan;
 
@@ -248,7 +246,7 @@ fn report_memory(status: &SetupStatus) -> Option<SystemMemoryInfo> {
             row(
                 "VRAM",
                 "not readable on this GPU",
-                Some("sizing against system RAM instead"),
+                Some("no model is sized to it"),
             );
             row("RAM", &format_gib(mem.total_ram_bytes), None);
         }
@@ -260,8 +258,6 @@ fn report_memory(status: &SetupStatus) -> Option<SystemMemoryInfo> {
             );
         }
     }
-
-    Some(mem.clone())
 }
 
 /// Name the acceleration backend from what the GPU probe found.
