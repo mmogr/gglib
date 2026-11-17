@@ -94,8 +94,12 @@ impl Dependency {
 pub struct GpuInfo {
     /// NVIDIA GPU hardware detected (via nvidia-smi, lspci, etc.).
     pub has_nvidia_gpu: bool,
-    /// CUDA toolkit installed and available.
+    /// CUDA toolkit installed and available: what a source build needs.
     pub cuda_version: Option<String>,
+    /// The NVIDIA driver's version as `nvidia-smi` reports it, `617.42`;
+    /// `None` when no driver answers. What a downloaded CUDA build needs:
+    /// the driver runs it, and its CUDA libraries come with the download.
+    pub nvidia_driver: Option<String>,
     /// On macOS (Metal always available).
     pub has_metal: bool,
     /// A Vulkan GPU available: the loader, and a GPU for it to drive, not a
@@ -111,6 +115,32 @@ pub struct GpuInfo {
     /// as a separate package on Linux (e.g. `spirv-headers`) and is
     /// bundled in the `LunarG` Vulkan SDK on Windows.
     pub vulkan_spirv_headers: bool,
+}
+
+/// The first Windows driver that runs CUDA 12.4, the oldest CUDA an engine's
+/// Windows download is built with (NVIDIA's CUDA Toolkit release notes,
+/// "CUDA 12.4 GA").
+const CUDA_12_DRIVER: (u32, u32) = (551, 61);
+
+impl GpuInfo {
+    /// Whether this machine's NVIDIA driver runs a downloaded CUDA 12 build:
+    /// a driver answers, and it is no older than [`CUDA_12_DRIVER`]. A
+    /// version that does not read as `major.minor` runs none.
+    #[must_use]
+    pub fn runs_cuda_12_downloads(&self) -> bool {
+        self.nvidia_driver
+            .as_deref()
+            .and_then(driver_version)
+            .is_some_and(|version| version >= CUDA_12_DRIVER)
+    }
+}
+
+/// `major.minor` of a driver version: `617.42`, or Linux's `550.54.14`.
+fn driver_version(text: &str) -> Option<(u32, u32)> {
+    let mut parts = text.trim().split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    Some((major, minor))
 }
 
 /// System memory information for model fit calculations.
@@ -179,5 +209,26 @@ mod tests {
         .unwrap();
 
         assert!(json.get("gpuMemoryBytes").is_none(), "{json}");
+    }
+
+    /// The driver alone decides: no CUDA toolkit is on any of these machines.
+    #[test]
+    fn a_driver_from_cuda_12_4_on_runs_a_cuda_download() {
+        let runs = |driver: Option<&str>| {
+            GpuInfo {
+                has_nvidia_gpu: true,
+                nvidia_driver: driver.map(str::to_owned),
+                ..GpuInfo::default()
+            }
+            .runs_cuda_12_downloads()
+        };
+
+        for driver in ["551.61", "551.78", "552.12", "617.42", " 617.42\r\n"] {
+            assert!(runs(Some(driver)), "{driver}");
+        }
+        for driver in ["551.60", "546.33", "472.12", "", "unknown", "617"] {
+            assert!(!runs(Some(driver)), "{driver}");
+        }
+        assert!(!runs(None));
     }
 }

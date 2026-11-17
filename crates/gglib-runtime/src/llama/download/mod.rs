@@ -134,7 +134,9 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
 ///   else the CPU build, with a warning. NVIDIA's CUDA builds come with a
 ///   440 MB runtime for one CUDA version; a CUDA build is made from source
 ///   with `--build`.
-/// - Windows `x86_64`: CUDA 12.4 for an NVIDIA GPU with CUDA, else Vulkan,
+/// - Windows `x86_64`: CUDA 12.4 for an NVIDIA GPU whose driver runs it
+///   (`GpuInfo::runs_cuda_12_downloads`; the CUDA toolkit is not asked for,
+///   since the build's CUDA libraries are downloaded beside it), else Vulkan,
 ///   else the CPU build, with a warning. Windows `aarch64`: Vulkan, else the
 ///   CPU build, with a warning.
 /// - Anything else: none, and a source build is the way to install.
@@ -160,7 +162,7 @@ pub(crate) fn llama_platform_asset(os: &str, arch: &str, gpu: &GpuInfo) -> Prebu
             build("bin-ubuntu-vulkan-arm64.tar.gz", "Linux ARM64 (Vulkan)")
         }
         ("linux", "aarch64") => cpu("bin-ubuntu-arm64.tar.gz", "Linux ARM64 (CPU)"),
-        ("windows", "x86_64") if gpu.has_nvidia_gpu && gpu.cuda_version.is_some() => {
+        ("windows", "x86_64") if gpu.has_nvidia_gpu && gpu.runs_cuda_12_downloads() => {
             build("bin-win-cuda-12.4-x64.zip", "Windows x64 (CUDA 12.4)")
         }
         ("windows", "x86_64") if gpu.has_vulkan => {

@@ -29,6 +29,7 @@ pub(crate) fn detect_gpu_info() -> GpuInfo {
     GpuInfo {
         has_nvidia_gpu,
         cuda_version,
+        nvidia_driver: nvidia_driver_version(),
         has_metal,
         // The loader is installed with many desktop systems that have no GPU
         // for it to drive, where a Vulkan build would run on the CPU and say
@@ -50,6 +51,7 @@ pub(crate) fn gpu_for_downloads() -> GpuInfo {
         GpuInfo {
             has_nvidia_gpu: false,
             cuda_version: None,
+            nvidia_driver: None,
             has_metal: cfg!(target_os = "macos"),
             has_vulkan: false,
             vulkan_headers: false,
@@ -97,6 +99,23 @@ fn detect_nvidia_hardware() -> bool {
     }
 
     false
+}
+
+/// The NVIDIA driver's version, asked of `nvidia-smi`, which the driver
+/// installs: the first GPU's, since one driver runs every card. `None` when
+/// it does not answer, as on a machine whose card has no working driver.
+fn nvidia_driver_version() -> Option<String> {
+    let output = run_bounded(
+        cmd("nvidia-smi").args(["--query-gpu=driver_version", "--format=csv,noheader"]),
+        PROBE_WAIT,
+    )
+    .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let version = stdout.lines().next()?.trim();
+    (!version.is_empty()).then(|| version.to_owned())
 }
 
 /// Check if NVIDIA CUDA toolkit is installed.

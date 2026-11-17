@@ -6,7 +6,10 @@
 //! - Log directory: `data_root()/logs` in every build — which honours
 //!   `GGLIB_DATA_DIR`, so an isolated data dir isolates its logs too.
 //!   `./logs/` only as a last resort when no data root resolves.
-//! - Filter: `RUST_LOG` env var wins; otherwise `"debug"` if verbose, else `"warn"`.
+//! - Filter, one per layer: `RUST_LOG` wins for both; otherwise `"debug"` for
+//!   both if verbose; otherwise the console shows `"warn"` and the file keeps
+//!   `"warn,gglib=info"`, so the file says what gglib did (what it installed,
+//!   downloaded, started and stopped) and a terminal stays quiet.
 //! - Console output goes through [`console_println`], which defaults to stderr
 //!   but can be redirected via [`set_console_hook`] — see the "Console hook"
 //!   section below.
@@ -14,7 +17,9 @@
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock, RwLock};
 
-use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{
+    EnvFilter, Layer, Registry, layer::SubscriberExt, util::SubscriberInitExt,
+};
 
 use crate::paths::data_root;
 
@@ -112,14 +117,32 @@ fn resolve_log_dir() -> PathBuf {
     dir
 }
 
-fn build_env_filter(verbose: bool) -> EnvFilter {
-    std::env::var("RUST_LOG").map_or_else(
-        |_| {
-            let level = if verbose { "debug" } else { "warn" };
-            EnvFilter::try_new(level).unwrap_or_default()
-        },
-        |log_env| EnvFilter::try_new(log_env).unwrap_or_default(),
-    )
+/// What the console shows unless told otherwise: warnings and errors.
+const CONSOLE_DEFAULT: &str = "warn";
+
+/// What the log file keeps unless told otherwise: warnings and errors from
+/// everything, and gglib's own `info` lines, which say what it did (an
+/// engine installed, a download ended, a server started with what
+/// arguments, became ready, was stopped). A directive names the start of a
+/// target, so `gglib` is every crate of the workspace. Other crates' `info`
+/// stays out: it is theirs to explain, and it would bury gglib's.
+const FILE_DEFAULT: &str = "warn,gglib=info";
+
+/// The directives the console and the log file are filtered by, in that
+/// order: `RUST_LOG` for both when it is set, else `debug` for both when
+/// `verbose`, else each one's default.
+fn directives(verbose: bool, rust_log: Option<&str>) -> (String, String) {
+    match (rust_log, verbose) {
+        (Some(set), _) => (set.to_owned(), set.to_owned()),
+        (None, true) => ("debug".to_owned(), "debug".to_owned()),
+        (None, false) => (CONSOLE_DEFAULT.to_owned(), FILE_DEFAULT.to_owned()),
+    }
+}
+
+/// The filter `directives` names; one that does not parse filters as
+/// `EnvFilter`'s default does.
+fn filter(directives: &str) -> EnvFilter {
+    EnvFilter::try_new(directives).unwrap_or_default()
 }
 
 /// Initialize the global tracing subscriber.
@@ -135,19 +158,20 @@ pub fn init_tracing(verbose: bool) -> anyhow::Result<()> {
     let file_appender = tracing_appender::rolling::daily(&log_dir, "gglib.log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    let env_filter = build_env_filter(verbose);
+    let (console, file) = directives(verbose, std::env::var("RUST_LOG").ok().as_deref());
 
     let subscriber = Registry::default()
-        .with(env_filter)
         .with(
             tracing_subscriber::fmt::layer()
                 .with_target(true)
-                .with_writer(ConsoleWriter::default),
+                .with_writer(ConsoleWriter::default)
+                .with_filter(filter(&console)),
         )
         .with(
             tracing_subscriber::fmt::layer()
                 .with_writer(non_blocking)
-                .with_target(false),
+                .with_target(false)
+                .with_filter(filter(&file)),
         );
 
     subscriber
@@ -188,5 +212,82 @@ mod tests {
         // After clearing, console_println must not reach the cleared hook.
         console_println("after clear");
         assert_eq!(captured.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn rust_log_wins_for_both_then_verbose_then_each_default() {
+        let pair = |console: &str, file: &str| (console.to_owned(), file.to_owned());
+        assert_eq!(directives(false, None), pair("warn", "warn,gglib=info"));
+        assert_eq!(directives(true, None), pair("debug", "debug"));
+        assert_eq!(directives(false, Some("trace")), pair("trace", "trace"));
+        assert_eq!(directives(true, Some("error")), pair("error", "error"));
+    }
+
+    /// A writer that keeps what a layer wrote.
+    #[derive(Clone, Default)]
+    struct Kept(Arc<Mutex<Vec<u8>>>);
+
+    impl Kept {
+        fn text(&self) -> String {
+            String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+        }
+    }
+
+    impl std::io::Write for Kept {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// With nothing set, the file keeps what gglib did and the console does
+    /// not show it; neither takes another crate's `info`, and both take a
+    /// warning from anywhere. A session that installed both engines,
+    /// downloaded a model and answered two chats once left three lines.
+    #[test]
+    fn the_file_keeps_gglibs_info_and_the_console_does_not() {
+        /// A layer writing to `to` what `lets` lets through.
+        fn layer<S>(to: Kept, lets: EnvFilter) -> impl Layer<S> + Send + Sync + 'static
+        where
+            S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+        {
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_writer(move || to.clone())
+                .with_filter(lets)
+        }
+
+        let (console, file) = directives(false, None);
+        let (shown, kept) = (Kept::default(), Kept::default());
+        let subscriber = Registry::default()
+            .with(layer(shown.clone(), filter(&console)))
+            .with(layer(kept.clone(), filter(&file)));
+
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(target: "gglib_runtime::process::health", "llama-server is ready on port 9000");
+            tracing::info!(target: "gglib.download", "Queue run STARTED");
+            tracing::debug!(target: "gglib_runtime::process", "a detail");
+            tracing::info!(target: "hyper::client", "another crate's news");
+            tracing::warn!(target: "hyper::client", "another crate's warning");
+        });
+
+        let kept = kept.text();
+        assert!(
+            kept.contains("llama-server is ready on port 9000"),
+            "{kept}"
+        );
+        assert!(kept.contains("Queue run STARTED"), "{kept}");
+        assert!(kept.contains("another crate's warning"), "{kept}");
+        assert!(!kept.contains("a detail"), "{kept}");
+        assert!(!kept.contains("another crate's news"), "{kept}");
+
+        let shown = shown.text();
+        assert!(shown.contains("another crate's warning"), "{shown}");
+        assert!(!shown.contains("is ready on port"), "{shown}");
+        assert!(!shown.contains("Queue run STARTED"), "{shown}");
     }
 }

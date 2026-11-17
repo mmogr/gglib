@@ -102,8 +102,9 @@ pub(crate) const CPU_WARNING: &str = "No GPU runtime gglib can use was found, so
 ///   `-arm64` after the runner, though it holds both architectures.
 /// - Linux `x86_64`: the Vulkan build when a Vulkan GPU is there, else the
 ///   CPU build, with a warning.
-/// - Windows `x86_64`: CUDA 12 for an NVIDIA GPU with CUDA, else Vulkan, else
-///   the CPU build, with a warning.
+/// - Windows `x86_64`: CUDA 12 for an NVIDIA GPU whose driver runs it
+///   (`GpuInfo::runs_cuda_12_downloads`, with no CUDA toolkit asked for), else
+///   Vulkan, else the CPU build, with a warning.
 pub(crate) fn sd_platform_asset(
     os: &str,
     arch: &str,
@@ -142,15 +143,17 @@ pub(crate) fn sd_platform_asset(
                 LINUX_REQUIRED,
             )
         }),
-        ("windows", "x86_64") if gpu.has_nvidia_gpu && gpu.cuda_version.is_some() => Ok(SdAsset {
-            cuda_runtime: Some("cudart-sd-bin-win-cu12"),
-            ..asset(
-                &["-bin-win-cuda12-"],
-                "-x64.zip",
-                "Windows x64 (CUDA 12)",
-                WINDOWS_REQUIRED,
-            )
-        }),
+        ("windows", "x86_64") if gpu.has_nvidia_gpu && gpu.runs_cuda_12_downloads() => {
+            Ok(SdAsset {
+                cuda_runtime: Some("cudart-sd-bin-win-cu12"),
+                ..asset(
+                    &["-bin-win-cuda12-"],
+                    "-x64.zip",
+                    "Windows x64 (CUDA 12)",
+                    WINDOWS_REQUIRED,
+                )
+            })
+        }
         ("windows", "x86_64") if gpu.has_vulkan => Ok(asset(
             &["-bin-win-vulkan-"],
             "-x64.zip",

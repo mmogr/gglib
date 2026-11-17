@@ -75,6 +75,9 @@ pub struct GpuInfoDto {
     pub has_nvidia: bool,
     pub has_vulkan: bool,
     pub cuda_version: Option<String>,
+    /// The NVIDIA driver's version, absent when no driver answers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nvidia_driver: Option<String>,
     pub vulkan_headers_installed: bool,
     pub vulkan_glslc_installed: bool,
     pub vulkan_spirv_headers_installed: bool,
@@ -139,6 +142,7 @@ impl SetupOps {
             has_nvidia: gpu_info_raw.has_nvidia_gpu,
             has_vulkan: gpu_info_raw.has_vulkan,
             cuda_version: gpu_info_raw.cuda_version,
+            nvidia_driver: gpu_info_raw.nvidia_driver,
             vulkan_headers_installed: gpu_info_raw.vulkan_headers,
             vulkan_glslc_installed: gpu_info_raw.vulkan_glslc,
             vulkan_spirv_headers_installed: gpu_info_raw.vulkan_spirv_headers,

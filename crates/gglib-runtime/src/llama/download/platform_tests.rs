@@ -11,10 +11,13 @@ use super::{
 };
 use crate::system::vulkan_devices::{VulkanDevices, fixtures, vulkan_gpu_present};
 
+/// `cuda`: the card's driver runs CUDA 12. No machine here has the CUDA
+/// toolkit, which no download reads.
 fn gpu(has_nvidia_gpu: bool, cuda: bool, has_vulkan: bool) -> GpuInfo {
     GpuInfo {
         has_nvidia_gpu,
-        cuda_version: cuda.then(|| "12.4".to_owned()),
+        cuda_version: None,
+        nvidia_driver: cuda.then(|| "551.61".to_owned()),
         has_metal: false,
         has_vulkan,
         vulkan_headers: false,
@@ -127,7 +130,7 @@ fn windows_takes_the_build_its_gpu_runs() {
     let none = gpu(false, false, false);
     let vulkan = gpu(false, false, true);
     let cuda = gpu(true, true, true);
-    let nvidia_without_cuda = gpu(true, false, true);
+    let nvidia_without_a_driver = gpu(true, false, true);
     assert_rows(&[
         (
             "windows",
@@ -140,7 +143,7 @@ fn windows_takes_the_build_its_gpu_runs() {
         (
             "windows",
             "x86_64",
-            &nvidia_without_cuda,
+            &nvidia_without_a_driver,
             "bin-win-vulkan-x64.zip",
             "Windows x64 (Vulkan)",
             false,
@@ -170,6 +173,37 @@ fn windows_takes_the_build_its_gpu_runs() {
             true,
         ),
     ]);
+}
+
+/// An NVIDIA card with its driver and nothing else, which is a new user's
+/// machine, takes the CUDA build: the build's CUDA libraries come with the
+/// download. The toolkit decides nothing, and a driver older than CUDA 12.4
+/// takes Vulkan.
+#[test]
+fn the_cuda_build_is_chosen_for_an_nvidia_driver_with_no_toolkit() {
+    let machine = |driver: Option<&str>, toolkit: Option<&str>| GpuInfo {
+        nvidia_driver: driver.map(str::to_owned),
+        cuda_version: toolkit.map(str::to_owned),
+        ..gpu(true, false, true)
+    };
+    let description = |gpu: &GpuInfo| picked("windows", "x86_64", gpu).unwrap().1;
+
+    assert_eq!(
+        description(&machine(Some("617.42"), None)),
+        "Windows x64 (CUDA 12.4)"
+    );
+    assert_eq!(
+        description(&machine(Some("546.33"), None)),
+        "Windows x64 (Vulkan)"
+    );
+    assert_eq!(
+        description(&machine(Some("546.33"), Some("12.4"))),
+        "Windows x64 (Vulkan)"
+    );
+    assert_eq!(
+        description(&machine(None, Some("12.4"))),
+        "Windows x64 (Vulkan)"
+    );
 }
 
 /// Every platform with a CPU build, and that build's archive.

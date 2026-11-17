@@ -22,6 +22,8 @@ export interface GpuInfo {
   hasNvidia: boolean;
   hasVulkan: boolean;
   cudaVersion?: string | null;
+  /** The NVIDIA driver's version; absent when no driver answers. */
+  nvidiaDriver?: string;
   vulkanHeadersInstalled: boolean;
   vulkanGlslcInstalled: boolean;
   vulkanSpirvHeadersInstalled: boolean;
