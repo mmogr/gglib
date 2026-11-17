@@ -165,6 +165,49 @@ fn an_sd_server_missing_a_library_is_not_working_and_says_why() {
     );
 }
 
+/// An sd-server built for a newer system than this one is installed and not
+/// working: its status names the library and the version it asks for, says
+/// the download is the same again and that a build from source is what
+/// runs here, and a load of it is refused. The stand-in prints what glibc's
+/// loader printed for `master-1094-3bad892` on Ubuntu 24.04 and exits 1, as
+/// it does (#1864).
+#[test]
+fn an_sd_server_built_for_a_newer_system_says_to_build_it_here() {
+    let tmp = tempfile::tempdir().expect("a temp dir");
+    let binary = gglib_test_proc::install(
+        tmp.path(),
+        "sd-server",
+        "eprint ./sd-server: /lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.43' not found \
+         (required by ./libstable-diffusion.so)\nexit 1",
+    );
+
+    let status = sd_status_at(
+        &binary,
+        &tmp.path().join("sd-config.json"),
+        &tmp.path().join("stable-diffusion.cpp"),
+        &pin(),
+    );
+
+    assert!(status.installed);
+    let shown = serde_json::to_value(&status).expect("the status serialises");
+    let reason = shown["healthError"].as_str().unwrap_or_default();
+    for words in [
+        "sd-server cannot start: this system's libm.so.6 is older than it needs: it asks for \
+         GLIBC_2.43",
+        "Installing it again downloads the same build.",
+        "Run 'gglib config sd install --build --force' to build it from source for this system.",
+    ] {
+        assert!(reason.contains(words), "healthError: {reason}");
+    }
+    assert!(!reason.contains("to reinstall it"), "healthError: {reason}");
+    let refused = crate::engine::refuse_if_known_not_working(
+        gglib_core::domain::RuntimeKind::StableDiffusion,
+        &binary,
+    )
+    .expect_err("a load of it is refused");
+    assert_eq!(refused.to_string(), reason);
+}
+
 #[test]
 fn an_unreadable_record_is_reported_not_raised() {
     let tmp = tempfile::tempdir().expect("a temp dir");
