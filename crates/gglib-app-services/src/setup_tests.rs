@@ -97,6 +97,9 @@ async fn the_setup_status_sends_the_directory_and_the_memory_the_settings_routes
 /// `gglib config llama status` and the Settings card do.
 #[tokio::test]
 async fn the_setup_status_says_where_llama_stands_as_the_engine_does() {
+    // Both reads are of llama-server under this binary's data root, which
+    // another test may write between them.
+    let _engines = crate::test_support_engines::Engines::hold().await;
     let (setup, _) = both_surfaces(MockSystemProbePort::default().total_ram_bytes).await;
 
     let status = serde_json::to_value(setup.get_status().await.expect("status")).expect("json");
