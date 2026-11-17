@@ -97,6 +97,7 @@ mod tests {
             gpu: GpuInfo {
                 has_nvidia_gpu: false,
                 cuda_version: None,
+                nvidia_driver: None,
                 has_metal: true,
                 has_vulkan: false,
                 vulkan_headers: false,

@@ -69,6 +69,7 @@ fn no_gpu() -> GpuInfo {
     GpuInfo {
         has_nvidia_gpu: false,
         cuda_version: None,
+        nvidia_driver: None,
         has_metal: false,
         has_vulkan: false,
         vulkan_headers: false,
