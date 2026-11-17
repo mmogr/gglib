@@ -13,11 +13,15 @@ use gglib_core::utils::system::{
     dependency_report, needs_on, parse_os_release,
 };
 
-pub use fit_memory::FitMemory;
 pub(crate) use fit_memory::fit_memory_of;
+pub use fit_memory::{FitMemory, a_gpu_is_present};
 use gpu::{detect_gpu_info, get_system_memory_info};
 pub use host::{free_disk_bytes, host_facts, this_machine_name};
-pub use suggest::{download_budget, download_budget_on, recommend_here, recommend_on};
+pub use suggest::{
+    UNREADABLE_GPU, download_budget, download_budget_on, launching, no_suggestion_reason,
+    no_suggestion_reason_on, recommend_here, recommend_on, recommend_with, sized_against,
+    sized_against_on,
+};
 
 /// Default implementation of `SystemProbePort`.
 ///

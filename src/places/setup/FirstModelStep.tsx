@@ -2,11 +2,11 @@
  * Setup's step 3, First model: the model gglib suggests for this machine,
  * from the daemon's shortlist (`GET /api/config/system/recommend-model`,
  * the one `gglib up` picks from), named by its repository with its own
- * reason and what it needs of the memory it was sized against, as the
- * Library's suggestion says it.
+ * reason, the size its download takes and the daemon's sentence for a load
+ * of that size on this machine, as the Library's suggestion says it.
  *
  * Get it sets up faster downloads first where they are to be
- * (`useFastDownloads`), then queues it, and its row's own words follow it (`2.1 GiB / 5.0 GiB ·
+ * (`useFastDownloads`), then queues that size, and its row's own words follow it (`2.1 GiB / 5.0 GiB ·
  * 52.0 MB/s · ETA 1m 0s`, TX-13); Continue does not wait for it. Choose
  * another goes on and leaves the choice to the Library's search once setup
  * is done; Skip goes on with no model. "Use another machine's models ›" opens a
@@ -121,6 +121,8 @@ const Download: FC<{ first: FirstModel; onRetry: () => void }> = ({ first, onRet
 
 interface FirstModelStepProps {
   rec: RecommendationDto | null;
+  /** Why nothing is suggested, when it is not that nothing fits, in the daemon's words. */
+  noneReason: string | null;
   /** Whether the accelerator is being set up, which Get it waits for. */
   preparing: boolean;
   first: FirstModel;
@@ -131,7 +133,7 @@ interface FirstModelStepProps {
   onBack: () => void;
 }
 
-export const FirstModelStep: FC<FirstModelStepProps> = ({ rec, first, preparing, alreadyDone, advance, onNext, onBack }) => {
+export const FirstModelStep: FC<FirstModelStepProps> = ({ rec, noneReason, first, preparing, alreadyDone, advance, onNext, onBack }) => {
   useAdvance(alreadyDone, advance);
   const get = () => void first.get();
 
@@ -181,7 +183,7 @@ export const FirstModelStep: FC<FirstModelStepProps> = ({ rec, first, preparing,
         )
       }
     >
-      {rec === null && <p className="m-0 text-sm text-text-secondary">Nothing gglib would suggest fits.</p>}
+      {rec === null && <p className="m-0 text-sm text-text-secondary">{noneReason ?? 'Nothing gglib would suggest fits.'}</p>}
       {rec !== null && (
         <Item name="Suggested" state={<code className="min-w-0 break-all font-mono text-text">{rec.repo}</code>}>
           <p className="m-0">{formatRecommendation(rec)}</p>

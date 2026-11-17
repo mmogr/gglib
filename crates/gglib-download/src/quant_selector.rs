@@ -30,7 +30,7 @@ use std::sync::Arc;
 use gglib_core::download::{
     Contender, DownloadError, FitJudge, MemoryFit, NoWeights, Pick, PickReason, pick_variant,
 };
-use gglib_core::ports::huggingface::{label_refusal, match_variant};
+use gglib_core::ports::huggingface::{label_refusal, largest_projector, match_variant};
 use gglib_core::ports::{HfQuantInfo, QuantizationResolver};
 
 use crate::variant_reader::VariantSource;
@@ -123,7 +123,8 @@ impl QuantizationSelector {
 
 /// The variant of `repo_id` a download takes among `available` (listed,
 /// with the roles their heads say) when none is asked for: [`pick_variant`]
-/// over their sizes and roles against `budget_bytes`, reading what it needs
+/// over their sizes and roles against `budget_bytes`, each counted with the
+/// projector fetched beside it, reading what it needs
 /// of each through `source`.
 ///
 /// The one pick a download and the listing's ★ both make
@@ -142,7 +143,21 @@ pub(crate) async fn pick_among(
         })
         .collect();
     let reader = source.reader(repo_id, available);
-    let judge = budget_bytes.map(|budget_bytes| MemoryFit { budget_bytes });
+    // A download fetches the repository's projector with whichever size it
+    // takes, and a load counts it beside the weights. The listing leaves
+    // most roles open, so each open one is read from its head (the reader
+    // keeps what it reads for the pick), as a download's group reads them.
+    let mut roles = available.to_vec();
+    if budget_bytes.is_some() {
+        for (index, variant) in roles.iter_mut().enumerate() {
+            if variant.role.is_none() {
+                variant.role = reader.head(index).await.and_then(|head| head.head.role);
+            }
+        }
+    }
+    let projector = largest_projector(&roles).map_or(0, |p| p.total_size);
+    let judge =
+        budget_bytes.map(|budget_bytes| MemoryFit { budget_bytes }.loading().beside(projector));
     pick_variant(
         &contenders,
         reader.as_ref(),

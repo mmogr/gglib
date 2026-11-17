@@ -207,10 +207,17 @@ export function formatBudget(rec: Pick<RecommendationDto, 'budgetBytes' | 'budge
 }
 
 /**
- * The line under a recommendation, from its own figures: why this model,
- * then what it needs of that memory, as `gglib up`'s `needs` row says it.
+ * The line under a recommendation: why this model, then the size its
+ * download takes and the daemon's sentence for a load of it on this
+ * machine, the one the inspector says once it is down. A hub from before
+ * suggestions said one is answered from its figures, as `gglib up`'s
+ * `needs` row said it.
  */
 export function formatRecommendation(rec: RecommendationDto): string {
   const why = rec.rationale.charAt(0).toUpperCase() + rec.rationale.slice(1);
+  if (rec.quantization !== undefined && rec.fitSentence !== undefined) {
+    const fit = rec.fitSentence.charAt(0).toLowerCase() + rec.fitSentence.slice(1);
+    return `${why}. At ${rec.quantization}, ${fit}`;
+  }
   return `${why}. Needs ${formatMemorySize(rec.requiredBytes)} of ${formatBudget(rec)}.`;
 }

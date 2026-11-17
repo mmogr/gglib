@@ -8,21 +8,21 @@
 //! This is the same call `admit` makes — the same reserved budget, the same
 //! fallback to the undivided device — so an explanation cannot describe a fit
 //! that differs from the one a launch performs. It is deliberately *not* a
-//! second implementation: `fit_or_undivided` is the shared seam, and this
-//! module supplies the same two budgets to it.
+//! second implementation: gglib-core's `fit_on_device` is the one chain, which
+//! the size picker and the first-model suggestion ask too, and this module
+//! hands it the machine's memory.
 
 use std::path::Path;
 
 use gglib_core::cache_config::{CacheRamSetting, KvCacheType};
 use gglib_core::domain::{
     FitInputs, KvShape, LaunchPlan, RuntimeKind, SecondarySlotDecision, SlotFootprint, Unload,
-    UnloadReason, decide_secondary_slot_for, fit_context_explained,
+    UnloadReason, decide_secondary_slot_for, fit_on_device,
 };
 use gglib_core::ports::{LaunchOverrides, ModelLaunchSpec, ModelRuntimeError};
 use gglib_core::server_config::ServerConfigOptions;
 use gglib_core::utils::process::bounded::Failure;
 
-use super::context::fit_or_undivided;
 use super::launch::{LaunchRequest, LlamaResolutions, plan_llama, plan_sd};
 use super::{explain_args, prepare, vram};
 use crate::engine::NotWorking;
@@ -65,27 +65,8 @@ pub(super) fn explain_fit_against(
     k: KvCacheType,
     v: KvCacheType,
 ) -> (Option<u64>, FitInputs) {
-    // Captured through the seam rather than beside it. `fit_or_undivided`
-    // tries the reserved budget and falls back to the undivided device, so the
-    // *last* closure call is always the one that answered — and running the
-    // arithmetic a second time out here would be a copy of the fallback that
-    // no test could tell had drifted. `FitInputs` is `Copy`, so a `Cell` is
-    // enough to carry it back out of an `Fn`.
-    let captured = std::cell::Cell::new(None);
-    let undivided = memory.budget_bytes();
-    let fitted = fit_or_undivided(
-        |budget| {
-            let (rung, inputs) =
-                fit_context_explained(trained_ctx, weights_bytes, kv, k, v, budget);
-            captured.set(Some(inputs));
-            rung
-        },
-        undivided.map(vram::fit_budget_from),
-        undivided,
-    );
-    let mut inputs = captured
-        .into_inner()
-        .expect("fit_or_undivided calls the closure at least once");
+    let (fitted, mut inputs) =
+        fit_on_device(trained_ctx, weights_bytes, kv, k, v, memory.budget_bytes());
     inputs.system_ram_bytes = memory.system_ram_bytes();
     (fitted, inputs)
 }

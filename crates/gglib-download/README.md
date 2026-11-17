@@ -168,7 +168,9 @@ let manager: Arc<dyn DownloadManagerPort> = Arc::new(build_download_manager(deps
 // Queue a download. It answers the download's ID, and starts the runner.
 // - A named variant → looked up by its label
 // - None named → the largest quantized variant that fits `budget`, the
-//   device's memory; with no budget, the smallest
+//   load's budget (a GPU's memory, or with no GPU the share of RAM a
+//   load spends), each counted with the projector fetched beside it; with
+//   no budget, the smallest
 let id = Arc::clone(&manager)
     .queue_smart("user/model".to_string(), None, budget)
     .await?;

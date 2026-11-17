@@ -108,6 +108,7 @@ async fn app_over(manager: Arc<Recording>) -> Router {
         hf: Arc::clone(&state.hf_client),
         gguf_parser: Arc::new(gglib_core::ports::NoopGgufParser),
         models_directory: None,
+        core: None,
     }));
     gglib_axum::create_router(Arc::new(state), &cors, test_access())
 }

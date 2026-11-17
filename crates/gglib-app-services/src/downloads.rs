@@ -10,13 +10,14 @@ use gglib_core::ports::huggingface::read_heads;
 use gglib_core::ports::{
     DownloadManagerPort, GgufParserPort, HfClientPort, HfSearchOptions, HfSearchResult,
 };
+use gglib_core::services::AppCore;
 
 use gglib_download::download_pick;
 
 use crate::error::GuiError;
 use crate::hf_count::checked_parameters;
 use crate::hf_image_preview::image_look;
-use crate::hf_quantizations::{listed_pick, quantizations_response};
+use crate::hf_quantizations::{beside_bytes, listed_pick, name_no_context, quantizations_response};
 use crate::types::{
     HfModelSummary, HfPickResponse, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
     QueueDownloadResponse, ToolSupportResponse,
@@ -34,6 +35,9 @@ pub struct DownloadDeps {
     /// listing is read, as the download manager resolves it as each
     /// download starts.
     pub models_directory: Option<PathBuf>,
+    /// Where a listing reads the user's `default-context-size` from, which
+    /// outranks the fit when set. `None` reads none set.
+    pub core: Option<Arc<AppCore>>,
 }
 
 /// The memory a download that names no variant must fit.
@@ -56,6 +60,7 @@ pub struct DownloadOps {
     hf_client: Arc<dyn HfClientPort>,
     gguf_parser: Arc<dyn GgufParserPort>,
     models_directory: Option<PathBuf>,
+    core: Option<Arc<AppCore>>,
 }
 
 impl DownloadOps {
@@ -65,7 +70,14 @@ impl DownloadOps {
             hf_client: deps.hf,
             gguf_parser: deps.gguf_parser,
             models_directory: deps.models_directory,
+            core: deps.core,
         }
+    }
+
+    /// The user's `default-context-size`, when set and readable.
+    async fn default_context_size(&self) -> Option<u64> {
+        let core = self.core.as_ref()?;
+        core.settings().get().await.ok()?.default_context_size
     }
 
     // =========================================================================
@@ -225,11 +237,17 @@ impl DownloadOps {
         // the download it leads to agree.
         let budget_bytes = download_budget().await;
         let is_image = look.family.is_some();
-        let picked = listed_pick(&quants, is_image, budget_bytes).await;
+        let beside = beside_bytes(&infos, look.preview.as_ref());
+        let picked = listed_pick(&quants, is_image, beside, budget_bytes).await;
         let mut response =
             quantizations_response(model_id, quants, is_image, look.preview, budget_bytes);
         if let Some(variant) = picked.and_then(|i| response.quantizations.get_mut(i)) {
             variant.picked = true;
+        }
+        // A `default-context-size` outranks the fit: a load serves it, so the
+        // listing names no context of the fit's.
+        if self.default_context_size().await.is_some() {
+            name_no_context(&mut response);
         }
         Ok(response)
     }

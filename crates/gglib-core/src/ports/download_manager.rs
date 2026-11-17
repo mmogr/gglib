@@ -96,9 +96,9 @@ pub trait DownloadManagerPort: Send + Sync {
     /// * `repo_id` - `HuggingFace` repository ID (e.g., "unsloth/Llama-3-GGUF")
     /// * `quantization` - Optional variant label (e.g., "`Q4_K_M`", "`Q8_0`")
     /// * `budget_bytes` - The memory a variant must fit when none is named:
-    ///   the device's, the figure a launch fits its context against, or the
-    ///   system's RAM where the device's cannot be read. `None` when neither
-    ///   can be.
+    ///   the figure a launch fits its context against, a GPU's memory or
+    ///   with no GPU the share of RAM a load spends. `None` when a load has
+    ///   none (a GPU whose memory cannot be read).
     ///
     /// # Returns
     ///

@@ -44,6 +44,17 @@ pub enum VariantFit {
 }
 
 impl VariantFit {
+    /// The verdict with no context named: what a listing says where the
+    /// user's `default-context-size` outranks the fit, so a load serves
+    /// that and not the fit's context. Only a fit names one to drop.
+    #[must_use]
+    pub const fn without_context(self) -> Self {
+        match self {
+            Self::Fits { ctx: Some(_) } => Self::Fits { ctx: None },
+            other => other,
+        }
+    }
+
     /// The words a person reads beside the variant.
     #[must_use]
     pub fn word(self) -> String {

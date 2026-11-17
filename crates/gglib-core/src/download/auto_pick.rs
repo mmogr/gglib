@@ -17,12 +17,13 @@
 use async_trait::async_trait;
 
 use super::file_role::GgufFileRole;
-use crate::cache_config::{DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V};
+use crate::cache_config::{KvCacheType, launch_kv_types};
 use crate::domain::FileType;
 use crate::domain::SECOND_RUNG;
+use crate::domain::device_fit::device_fit_verdict;
 use crate::domain::gguf::{GgufMetadata, HeadMetadata};
 use crate::domain::kv_estimate::{KvShape, estimate_kv_shape};
-use crate::domain::phone_fit::{FitVerdict, MissingInput, fit_verdict};
+use crate::domain::phone_fit::{FitVerdict, MissingInput};
 use crate::domain::recommendation::{budget_covering, usable_share};
 use crate::domain::variant_fit::VariantFit;
 use crate::ports::huggingface::HELPER_FILES_REFUSAL;
@@ -88,6 +89,16 @@ pub trait FitJudge: Send + Sync {
 
 /// The fit a launch sizes its context by, against one machine's memory.
 ///
+/// The verdict is the load's own ([`device_fit_verdict`]): the budget less a
+/// second slot's room first, then the whole budget. A size is judged with
+/// what a load of it counts beside its weights ([`Self::beside_bytes`]: the
+/// projector a download fetches with it), at the KV cache types a launch
+/// uses when none is asked for ([`launch_kv_types`]), so the context a
+/// verdict names is the one a load of the same size serves, and a size it
+/// calls too big is one the load cannot fit. Where the user's
+/// `default-context-size` outranks the fit, a load serves that instead, and
+/// a listing names no context ([`VariantFit::without_context`]).
+///
 /// A chat model fits when the verdict is [`FitVerdict::Fits`]: a context
 /// above the lowest rung. [`FitVerdict::Tight`] counts only when that rung is
 /// the whole context the model was trained for. A model trained for fewer
@@ -96,15 +107,81 @@ pub trait FitJudge: Send + Sync {
 /// and the KV cache of its whole trained context do. Its trained
 /// context and KV shape come from its metadata, as a phone's fit reads them
 /// from a head, and a missing trained context or KV shape is
-/// [`Fit::CannotTell`]. An image model fits when its weights fit the share of
+/// [`Fit::CannotTell`]. An image model fits when its files and what is
+/// counted beside them (the companions a load of it loads) fit the share of
 /// the budget the fit spends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LoadFit {
+    /// The machine's memory as the load reads it, in bytes: a GPU's, or
+    /// with no GPU the share of RAM the load spends against
+    /// (`gglib_runtime::system::fit_memory`).
+    pub budget_bytes: u64,
+    /// What a load of any size of the repository counts beside its weights:
+    /// the projector a download fetches with it, or for an image model the
+    /// companions it draws with.
+    pub beside_bytes: u64,
+    /// The KV cache types a context's cache is sized at.
+    pub kv_types: (KvCacheType, KvCacheType),
+}
+
+/// A machine's memory a size is judged against, by [`LoadFit`]'s rule: of
+/// a size's weights alone, at the KV cache types a launch uses when none is
+/// asked for ([`Self::loading`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MemoryFit {
-    /// The machine's memory, in bytes.
+    /// The machine's memory as the load reads it, in bytes.
     pub budget_bytes: u64,
 }
 
 impl MemoryFit {
+    /// The [`LoadFit`] against this budget.
+    #[must_use]
+    pub fn loading(self) -> LoadFit {
+        LoadFit {
+            budget_bytes: self.budget_bytes,
+            beside_bytes: 0,
+            kv_types: launch_kv_types(),
+        }
+    }
+
+    /// [`LoadFit::judge`] of [`Self::loading`].
+    #[must_use]
+    pub fn judge(
+        &self,
+        metadata: &GgufMetadata,
+        image: bool,
+        weights_bytes: u64,
+    ) -> (Fit, VariantFit) {
+        self.loading().judge(metadata, image, weights_bytes)
+    }
+
+    /// [`LoadFit::files_only`] of [`Self::loading`].
+    #[must_use]
+    pub fn files_only(self, weights_bytes: u64) -> (Fit, VariantFit) {
+        self.loading().files_only(weights_bytes)
+    }
+}
+
+impl FitJudge for MemoryFit {
+    fn fit(&self, metadata: &GgufMetadata, image: bool, weights_bytes: u64) -> Fit {
+        self.loading().fit(metadata, image, weights_bytes)
+    }
+
+    fn weights_fit(&self, weights_bytes: u64) -> bool {
+        self.loading().weights_fit(weights_bytes)
+    }
+}
+
+impl LoadFit {
+    /// The same fit, counting `bytes` beside every size's weights.
+    #[must_use]
+    pub const fn beside(self, bytes: u64) -> Self {
+        Self {
+            beside_bytes: bytes,
+            ..self
+        }
+    }
+
     /// Whether `bytes` fit the share of the budget a fit spends.
     fn holds(self, bytes: u64) -> Fit {
         if bytes <= usable_share(self.budget_bytes) {
@@ -113,24 +190,24 @@ impl MemoryFit {
             Fit::DoesNotFit
         }
     }
-}
 
-impl MemoryFit {
-    /// Whether `weights_bytes` of weights and the KV cache of all `trained`
-    /// tokens, at the default KV types, fit the share of the budget a fit
-    /// spends.
-    fn whole_window(self, weights_bytes: u64, trained: u64, kv: KvShape) -> Fit {
-        self.holds(whole_window_bytes(weights_bytes, trained, kv))
+    /// What a load of `weights_bytes` of weights counts.
+    const fn loaded(self, weights_bytes: u64) -> u64 {
+        weights_bytes.saturating_add(self.beside_bytes)
     }
-}
 
-/// `weights_bytes` and the KV cache of `trained` tokens at the default types.
-fn whole_window_bytes(weights_bytes: u64, trained: u64, kv: KvShape) -> u64 {
-    let kv = kv.bytes(DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
-    weights_bytes.saturating_add(kv.at(trained))
-}
+    /// Whether `bytes` and the KV cache of all `trained` tokens fit the
+    /// share of the budget a fit spends.
+    fn whole_window(self, bytes: u64, trained: u64, kv: KvShape) -> Fit {
+        self.holds(self.whole_window_bytes(bytes, trained, kv))
+    }
 
-impl MemoryFit {
+    /// `bytes` and the KV cache of `trained` tokens at the fit's types.
+    fn whole_window_bytes(self, bytes: u64, trained: u64, kv: KvShape) -> u64 {
+        let (k, v) = self.kv_types;
+        bytes.saturating_add(kv.bytes(k, v).at(trained))
+    }
+
     /// The picker's answer for a variant, and the verdict it rests on, as a
     /// listing shows it: one computation, so the Fit column and the
     /// download it leads to agree.
@@ -145,12 +222,19 @@ impl MemoryFit {
         image: bool,
         weights_bytes: u64,
     ) -> (Fit, VariantFit) {
+        self.judge_loaded(metadata, image, self.loaded(weights_bytes))
+    }
+
+    /// [`Self::judge`] of `bytes`, all a load counts.
+    fn judge_loaded(&self, metadata: &GgufMetadata, image: bool, bytes: u64) -> (Fit, VariantFit) {
         if image {
-            return self.files_only(weights_bytes);
+            return self.files_loaded(bytes);
         }
         let trained = metadata.context_length;
         let kv = estimate_kv_shape(&metadata.metadata, metadata.architecture.as_deref());
-        let (verdict, _) = fit_verdict(trained, Some(weights_bytes), kv, Some(self.budget_bytes));
+        let (k, v) = self.kv_types;
+        let (verdict, _) =
+            device_fit_verdict(trained, Some(bytes), kv, k, v, Some(self.budget_bytes));
         match (verdict, trained, kv) {
             (FitVerdict::Fits { .. }, ..) => (Fit::Fits, verdict.into()),
             // The lowest rung is all the model was trained for.
@@ -162,10 +246,10 @@ impl MemoryFit {
             (FitVerdict::TooBig { .. }, Some(trained), Some(kv))
                 if trained < DEFAULT_CONTEXT_SIZE =>
             {
-                self.whole_window_judged(weights_bytes, trained, kv)
+                self.whole_window_judged(bytes, trained, kv)
             }
             (FitVerdict::Tight { .. }, Some(trained), Some(kv)) if trained < SECOND_RUNG => {
-                self.whole_window_judged(weights_bytes, trained, kv)
+                self.whole_window_judged(bytes, trained, kv)
             }
             (
                 FitVerdict::Unknown {
@@ -177,12 +261,18 @@ impl MemoryFit {
         }
     }
 
-    /// The files alone against the budget's usable share: an image model.
-    /// An image model's answer: its files alone, with no context to size.
-    /// Public because a listing judges an image model whose header holds no
-    /// chat metadata by this and nothing else, as [`Self::judge`] does.
+    /// An image model's answer: its files, `weights_bytes`, and what is
+    /// counted beside them, against the budget's usable share, with no
+    /// context to size. Public because a listing judges an image model
+    /// whose header holds no chat metadata by this and nothing else, as
+    /// [`Self::judge`] does.
     #[must_use]
-    pub fn files_only(self, bytes: u64) -> (Fit, VariantFit) {
+    pub fn files_only(self, weights_bytes: u64) -> (Fit, VariantFit) {
+        self.files_loaded(self.loaded(weights_bytes))
+    }
+
+    /// [`Self::files_only`] of `bytes`, all a load counts.
+    fn files_loaded(self, bytes: u64) -> (Fit, VariantFit) {
         let fit = self.holds(bytes);
         let verdict = if fit == Fit::Fits {
             VariantFit::Fits { ctx: None }
@@ -196,18 +286,13 @@ impl MemoryFit {
     }
 
     /// [`Self::whole_window`], with the verdict it amounts to.
-    fn whole_window_judged(
-        self,
-        weights_bytes: u64,
-        trained: u64,
-        kv: KvShape,
-    ) -> (Fit, VariantFit) {
-        let fit = self.whole_window(weights_bytes, trained, kv);
+    fn whole_window_judged(self, bytes: u64, trained: u64, kv: KvShape) -> (Fit, VariantFit) {
+        let fit = self.whole_window(bytes, trained, kv);
         let verdict = if fit == Fit::Fits {
             VariantFit::Fits { ctx: Some(trained) }
         } else {
             VariantFit::TooBig {
-                need_bytes: budget_covering(whole_window_bytes(weights_bytes, trained, kv)),
+                need_bytes: budget_covering(self.whole_window_bytes(bytes, trained, kv)),
                 have_bytes: self.budget_bytes,
             }
         };
@@ -215,13 +300,13 @@ impl MemoryFit {
     }
 }
 
-impl FitJudge for MemoryFit {
+impl FitJudge for LoadFit {
     fn fit(&self, metadata: &GgufMetadata, image: bool, weights_bytes: u64) -> Fit {
         self.judge(metadata, image, weights_bytes).0
     }
 
     fn weights_fit(&self, weights_bytes: u64) -> bool {
-        self.holds(weights_bytes) == Fit::Fits
+        self.holds(self.loaded(weights_bytes)) == Fit::Fits
     }
 }
 

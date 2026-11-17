@@ -14,6 +14,7 @@ pub mod defect_counts;
 pub mod defects;
 mod defects_agent;
 pub mod device_budget;
+pub mod device_fit;
 pub mod engine_pins;
 pub mod figures;
 mod file_type;
@@ -126,9 +127,11 @@ pub use launch_plan::{
 };
 
 // Re-export the first-run model recommendation at the domain level.
+pub use device_fit::{device_fit_verdict, fit_budget_from, fit_on_device, fit_or_undivided};
 pub use recommendation::BUDGET_UTILISATION;
 pub use recommendation::{
-    BudgetSource, PHONE_SHORTLIST, Recommendation, recommend, recommend_from,
+    BudgetSource, FitRule, Launching, PHONE_SHORTLIST, Recommendation, SizedAgainst, recommend,
+    recommend_from,
 };
 
 // Re-export a model's fit on a phone at the domain level for convenience
