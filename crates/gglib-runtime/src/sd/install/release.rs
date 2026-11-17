@@ -34,6 +34,18 @@ pub const PINNED_SD_RELEASE: &str = "master-1094-3bad892";
 /// whose builds ask for another version cannot merge without it.
 pub(crate) const PINNED_SD_LINUX_GLIBC: Glibc = Glibc(2, 43);
 
+/// The newest glibc the pinned release's Linux builds ask for: the oldest a
+/// system can have and run them.
+///
+/// It moves with the pin, in the same commit. Upstream builds each release on
+/// one Ubuntu image, and a build needs at least that image's glibc:
+/// `master-1025-8ee08e3` was built on Ubuntu 24.04 and asks for 2.38, and
+/// from `master-1044-f8ea2e1` they are built on Ubuntu 26.04 and ask for
+/// 2.43. CI reads the installed build and holds this to it
+/// (`the_floor_is_the_glibc_the_pinned_linux_build_asks_for`), so a pin
+/// whose builds ask for another version cannot merge without it.
+pub(crate) const PINNED_SD_LINUX_GLIBC: Glibc = Glibc(2, 38);
+
 /// Environment override for [`PINNED_SD_RELEASE`]: a release tag, or
 /// `latest` for upstream's newest. Unset or blank installs the pin.
 pub const SD_RELEASE_ENV: &str = "GGLIB_SD_RELEASE";
