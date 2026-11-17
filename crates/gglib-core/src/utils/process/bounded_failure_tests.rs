@@ -88,6 +88,79 @@ fn the_linux_loader_names_a_library_that_is_there_and_will_not_load() {
     }
 }
 
+fn newer(name: &str, version: &str) -> Failure {
+    Failure::NewerLibraryNeeded {
+        name: name.into(),
+        version: version.into(),
+    }
+}
+
+/// glibc's check of symbol versions: `print_missing_version` (elf/rtld.c)
+/// prints `<program>: <library>: <reason>`, the reason being `match_symbol`'s
+/// (elf/dl-version.c), and `version_check_doit` (elf/rtld.c) exits 1. This
+/// line is sd-server `master-1094-3bad892`, built on Ubuntu 26.04, on the
+/// `ubuntu-24.04` runner on 2026-11-17 (gglib#2073's CLI Check).
+#[test]
+fn the_linux_loader_names_a_library_older_than_the_program_needs() {
+    assert_eq!(
+        exited(
+            Some(1),
+            "/home/runner/work/_temp/engines/.sd/bin/sd-server: \
+             /lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.43' not found (required by \
+             /home/runner/work/_temp/engines/.sd/bin/libstable-diffusion.so)\n"
+        ),
+        newer("libm.so.6", "GLIBC_2.43")
+    );
+}
+
+/// The loader prints a line for each version it does not find (composed in
+/// its format, after the real line); the first is the one named.
+#[test]
+fn the_first_library_too_old_is_the_one_named() {
+    assert_eq!(
+        exited(
+            Some(1),
+            "./sd-server: /lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.43' not found \
+             (required by ./libstable-diffusion.so)\n\
+             ./sd-server: /lib/x86_64-linux-gnu/libstdc++.so.6: version `GLIBCXX_3.4.34' not \
+             found (required by ./libstable-diffusion.so)\n"
+        ),
+        newer("libm.so.6", "GLIBC_2.43")
+    );
+}
+
+/// A `weak version` the loader only warns of (composed in `match_symbol`'s
+/// format) is not why a program exited 1, and the words with any other
+/// status are not the loader's check, which exits 1.
+#[test]
+fn a_weak_version_or_another_status_is_not_a_library_too_old() {
+    assert_eq!(
+        exited(
+            Some(1),
+            "./sd-server: /lib/x86_64-linux-gnu/libm.so.6: weak version `GLIBC_2.43' not found \
+             (required by ./libstable-diffusion.so)\n"
+        ),
+        Failure::Failed { code: 1 }
+    );
+    assert_eq!(
+        exited(
+            Some(2),
+            "./sd-server: /lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.43' not found \
+             (required by ./libstable-diffusion.so)\n"
+        ),
+        Failure::Failed { code: 2 }
+    );
+}
+
+#[test]
+fn a_library_too_old_is_worded_with_its_name_and_the_version_asked_for() {
+    assert_eq!(
+        newer("libm.so.6", "GLIBC_2.43").to_string(),
+        "this system's libm.so.6 is older than it needs: it asks for GLIBC_2.43, so it was \
+         built for a newer system than this one"
+    );
+}
+
 /// dyld on macOS 27.2, from a program linked to `@rpath/libfoo.dylib` run
 /// with the library removed. dyld aborts it, so there is no exit code.
 #[test]

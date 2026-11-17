@@ -566,8 +566,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # ubuntu-26.04, where this workflow's other Linux jobs are on
+          # ubuntu-24.04: this leg installs and runs the pinned engines, and
+          # stable-diffusion.cpp's Linux builds are made on Ubuntu 26.04
+          # from master-1044-f8ea2e1 and need its glibc (#1864). What gglib
+          # ships is built on ubuntu-24.04 in release.yml, and `test` builds
+          # and tests the workspace there.
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-24.04
+            os: ubuntu-26.04
             timeout: 45
           - target: aarch64-apple-darwin
             os: macos-26
@@ -611,7 +617,10 @@ jobs:
       # must be one its `--help` lists, and every row of the two download
       # tables must match exactly one asset. `--version`, which gglib also
       # runs both servers with, is run here directly: sd-server's `--help`
-      # does not list it.
+      # does not list it. On Linux the newest glibc any file of the image
+      # engine's build asks for goes to them too, and they hold
+      # PINNED_SD_LINUX_GLIBC to it: gglib refuses that download on a system
+      # with an older glibc.
       - name: Install the pinned engines and the test models
         id: engines
         uses: ./.github/actions/pinned-engines
@@ -636,6 +645,14 @@ jobs:
             --json assets -q '.assets[].name' > "$assets/llama.txt"
           gh release view "${{ steps.engines.outputs.sd }}" -R leejet/stable-diffusion.cpp \
             --json assets -q '.assets[].name' > "$assets/sd.txt"
+          # Every file is read: each is loaded, and the newest version any
+          # of them names is what the system must have. A build that names
+          # none fails here, under pipefail, and not as an empty reading.
+          if [[ $RUNNER_OS == Linux ]]; then
+            grep -aoh 'GLIBC_[0-9][0-9.]*' "$ENGINES"/.sd/bin/* \
+              | sort -uV | tail -n 1 > "$help/sd-glibc.txt"
+            cat "$help/sd-glibc.txt"
+          fi
 
       - name: Check every flag gglib passes is one the pinned engines take
         env:

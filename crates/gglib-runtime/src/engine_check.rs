@@ -105,6 +105,17 @@ impl fmt::Display for NotWorking {
                 "{binary} cannot start: {failure}.\n\nBinary: {path}\n\
                  If it came with the download, run '{install_command} --force' to reinstall it."
             ),
+            // The download was built for a newer system, and the download
+            // is the same however often it is installed: a build from
+            // source here is what runs here. `--force` because the record
+            // may already say the pinned release, which `--build` alone
+            // leaves as it is.
+            Failure::NewerLibraryNeeded { .. } => write!(
+                f,
+                "{binary} cannot start: {failure}.\n\nBinary: {path}\n\
+                 Installing it again downloads the same build. Run \
+                 '{install_command} --build --force' to build it from source for this system."
+            ),
             Failure::Crashed { .. } | Failure::Failed { .. } => {
                 write!(f, "{binary} failed when asked `--version`: {failure}")?;
                 if let Some(said) = &self.said {
@@ -278,8 +289,8 @@ pub(crate) fn first_line(bytes: &[u8]) -> Option<String> {
 }
 
 /// Whether `failure` proves the binary cannot start, whatever it is asked:
-/// it is not there, not a program, missing or refused a library, or the
-/// system would not start it. A run that timed out, crashed or exited
+/// it is not there, not a program, missing or refused a library, needs a
+/// newer one than the system has, or the system would not start it. A run that timed out, crashed or exited
 /// non-zero on `--version` does not: a scanner or a loaded machine can slow
 /// the first, and a server may still load where its `--version` failed.
 fn cannot_start(failure: &Failure) -> bool {
@@ -289,6 +300,7 @@ fn cannot_start(failure: &Failure) -> bool {
             | Failure::NotExecutable
             | Failure::MissingLibrary { .. }
             | Failure::BadLibrary { .. }
+            | Failure::NewerLibraryNeeded { .. }
             | Failure::CouldNotStart { .. }
     )
 }

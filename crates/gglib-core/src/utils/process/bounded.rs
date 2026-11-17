@@ -139,6 +139,17 @@ pub enum Failure {
     /// [`Self::MissingLibrary`].
     #[error("{}", bad_words(name.as_deref()))]
     BadLibrary { name: Option<String> },
+    /// A library the system provides is older than the program needs:
+    /// `name` has no `version` of its symbols (`libm.so.6`, `GLIBC_2.43`).
+    /// The program was built for a newer system, and installing it again
+    /// brings the same build. Linux only: glibc's check of symbol versions.
+    /// Boxed strings, which are a pointer and a length: this is the largest
+    /// failure, and an error that carries one is held to a size.
+    #[error(
+        "this system's {name} is older than it needs: it asks for {version}, so it was built \
+         for a newer system than this one"
+    )]
+    NewerLibraryNeeded { name: Box<str>, version: Box<str> },
     /// It did not exit within its wait.
     #[error("it did not answer in time")]
     TimedOut,
@@ -169,6 +180,18 @@ const GLIBC_LOADER: &str = "error while loading shared libraries: ";
 /// short`) are a library that is there.
 const GLIBC_NOT_FOUND: &str = "cannot open shared object file";
 
+/// What glibc's loader writes between a library's path and the version of
+/// its symbols the program asks for, when the library has none of that
+/// version. The line is the program, the library, then
+/// ``version `GLIBC_2.43' not found (required by ./libfoo.so)``, each after
+/// a colon and a space (`match_symbol`, elf/dl-version.c, printed by
+/// `print_missing_version`, elf/rtld.c). `version_check_doit` (elf/rtld.c)
+/// then exits 1. A `weak version` it only warns of has `weak ` before it.
+const GLIBC_VERSION: &str = ": version `";
+
+/// What follows the version in that line.
+const GLIBC_VERSION_NOT_FOUND: &str = "' not found (required by ";
+
 /// What macOS's dyld writes before the library's path, after `dyld: ` or
 /// `dyld[<pid>]: `; it then aborts the program.
 const DYLD_NOT_LOADED: &str = "Library not loaded: ";
@@ -185,7 +208,8 @@ const DYLD_WRONG_ARCH: &str = "incompatible architecture";
 ///
 /// The one place that knows what each OS reports for a library that cannot
 /// be loaded: Windows' exit status, glibc's loader's words with exit 127,
-/// and dyld's words. The status is matched as a value, so every OS's report
+/// its words for a library too old with exit 1, and dyld's words. The
+/// status is matched as a value, so every OS's report
 /// is read on any OS. A run that exited 0 is not a failure and is not asked
 /// about: [`failure_of`] answers `None` for it.
 #[must_use]
@@ -237,6 +261,11 @@ fn exited(code: Option<i32>, stderr: &str) -> Failure {
             Failure::BadLibrary { name }
         };
     }
+    if code == Some(1)
+        && let Some(needed) = newer_library_needed(stderr)
+    {
+        return needed;
+    }
     if let Some(line) = line_after(stderr, DYLD_NOT_LOADED) {
         let path = line.trim();
         let name = Some(path.rsplit('/').next().unwrap_or(path).to_owned());
@@ -253,6 +282,23 @@ fn exited(code: Option<i32>, stderr: &str) -> Failure {
         Some(code) if code >= 0 => Failure::Failed { code },
         code => Failure::Crashed { code },
     }
+}
+
+/// The library and the version of the first line of `stderr` in which
+/// glibc's loader says a library has no such version ([`GLIBC_VERSION`]).
+fn newer_library_needed(stderr: &str) -> Option<Failure> {
+    let (before, after) = stderr
+        .lines()
+        .find_map(|line| line.split_once(GLIBC_VERSION))?;
+    let (version, _) = after.split_once(GLIBC_VERSION_NOT_FOUND)?;
+    // `<program>: <library's path>`: the library is what follows the last
+    // `: `, and its name what follows the last `/`.
+    let library = before.rsplit(": ").next().unwrap_or(before);
+    let name = library.rsplit('/').next().unwrap_or(library);
+    Some(Failure::NewerLibraryNeeded {
+        name: name.into(),
+        version: version.into(),
+    })
 }
 
 /// The rest of the first line of `text` that holds `marker`, after it.

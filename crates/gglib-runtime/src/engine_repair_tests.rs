@@ -104,7 +104,8 @@ fn the_runtime_is_never_offered_off_windows() {
 }
 
 /// A damaged binary is reinstalled; a named library, which may be the
-/// system's, a time-out and a refusal to start have no repair.
+/// system's, one the system has too old a copy of, a time-out and a
+/// refusal to start have no repair.
 #[test]
 fn other_failures_carry_a_reinstall_or_nothing() {
     let reinstall = [
@@ -124,6 +125,10 @@ fn other_failures_carry_a_reinstall_or_nothing() {
             name: Some("libvulkan.so.1".to_owned()),
         },
         Failure::BadLibrary { name: None },
+        Failure::NewerLibraryNeeded {
+            name: "libm.so.6".into(),
+            version: "GLIBC_2.43".into(),
+        },
         Failure::TimedOut,
         Failure::CouldNotStart {
             reason: "Access is denied.".to_owned(),
@@ -134,4 +139,18 @@ fn other_failures_carry_a_reinstall_or_nothing() {
             assert_eq!(fix_for(&failure, os, not_asked), None, "{failure:?} {os:?}");
         }
     }
+}
+
+/// clippy refuses a `Result` whose error is 128 bytes or more
+/// (`result_large_err`), and the engine check's error is returned by value.
+/// Only Windows' clippy sees it get there: a path is 32 bytes on Windows
+/// and 24 elsewhere. So the size it has on Windows is held here, on every
+/// OS, where a failure that grows shows before CI's Windows leg (#2078).
+#[test]
+fn the_checks_error_is_under_clippys_limit_with_a_windows_path() {
+    let a_windows_path = 32;
+    let on_windows = std::mem::size_of::<crate::engine::NotWorking>()
+        - std::mem::size_of::<std::path::PathBuf>()
+        + a_windows_path;
+    assert!(on_windows < 128, "{on_windows} bytes");
 }
