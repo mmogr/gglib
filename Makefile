@@ -6,6 +6,7 @@
         fmt lint doc doc-check readmes dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
         adr-readings record-upstream record-upstream-inproc bindings bindings-check \
+        engine-trial engine-trial-approve engine-trial-revert \
         ffi-binding ffi-binding-check ffi-xcframework ffi-xcframework-fast ffi-smoke \
         clean clean-gui clean-llama clean-all path-check \
         check-deps check-deps-bootstrap check-rust \
@@ -387,6 +388,9 @@ enforce: ## Run the architecture enforcement checks
 	@# release_smoke.py runs only in a release or a test run of release.yml,
 	@# so its per-OS table and its checks are held here, on every change.
 	@./scripts/release_smoke.py --self-test
+	@# engine_trial.py runs only on the owner's machine, when a pin pull request
+	@# is tried, so its readers and its refusals are held here, on every change.
+	@./scripts/engine_trial.py --self-test
 	@# ts-rs reads Rust types, not serde's behaviour, so two annotations stand
 	@# between the generated bindings and a new class of lie: i64 becomes a
 	@# `bigint` no `JSON.parse` can produce, and `skip_serializing_if` becomes a
@@ -434,6 +438,24 @@ record-upstream: ## Record contracts/upstream again from the pinned engines
 		exit 1; \
 	}
 	$(CARGO) test -p gglib-runtime --lib engine_contract -- --ignored
+
+# Try the engine a pin pull request proposes, on this machine: scripts/
+# engine_trial.py says how. `engine-trial` installs the candidate over the
+# engine the `gglib` on PATH uses; after using gglib, `engine-trial-approve`
+# says on the pull request that it works, which is what lets the bump merge,
+# and `engine-trial-revert` puts back what was installed before. Not this
+# checkout's build: the trial is of the gglib the owner uses.
+engine-trial: ## Install a pin pull request's engine over yours, to try it (PR=<number>)
+	@[ -n "$(PR)" ] || { echo "✗ name the pull request: make engine-trial PR=<number>"; exit 1; }
+	@./scripts/engine_trial.py start $(PR)
+
+engine-trial-approve: ## Say on a pin pull request that its engine works here (PR=<number>)
+	@[ -n "$(PR)" ] || { echo "✗ name the pull request: make engine-trial-approve PR=<number>"; exit 1; }
+	@./scripts/engine_trial.py approve $(PR)
+
+engine-trial-revert: ## Put back the engine that was installed before a trial (PR=<number>)
+	@[ -n "$(PR)" ] || { echo "✗ name the pull request: make engine-trial-revert PR=<number>"; exit 1; }
+	@./scripts/engine_trial.py revert $(PR)
 
 # Record contracts/upstream/llama-inproc again: gglib-engine-llama's shim over
 # its decoder on llama.h, in the test process, asked what the pinned
