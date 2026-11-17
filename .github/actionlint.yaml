@@ -1,0 +1,8 @@
+# actionlint's own list of GitHub-hosted runners ends at ubuntu-24.04 in
+# 1.7.12, the newest release, so it reports ubuntu-26.04 as an unknown label.
+# The jobs that install and run the pinned engines are on that image (#1864).
+# Listing it here is how actionlint is told a label exists; drop the entry
+# once a release knows the image.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

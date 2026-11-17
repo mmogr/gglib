@@ -52,7 +52,10 @@ defaults:
 jobs:
   record:
     name: Record a new ${{ matrix.product }} pin
-    runs-on: ubuntu-24.04
+    # ubuntu-26.04, as ci.yml's CLI Check leg on Linux is and for its reason:
+    # the candidate engines are installed and run here, and
+    # stable-diffusion.cpp's Linux builds need that image's glibc (#1864).
+    runs-on: ubuntu-26.04
     # A mostly cold build (below), the 20-minute recorder and tier 3's
     # 30 minutes fit inside this.
     timeout-minutes: 120
