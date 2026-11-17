@@ -213,7 +213,7 @@ comment).
   `gglib-test-proc`. A higher count means the rule is being excused
   rather than followed, and the exceptions are reviewed against decision 1.
 - **Windows called from a second place.**
-  `rg -l 'windows_sys' crates src-tauri -g '*.rs'` reads one file,
+  `rg -l 'windows_sys::' crates src-tauri -g '*.rs'` reads one file,
   `crates/gglib-core/src/utils/process/host.rs`. Another file means
   decision 4 no longer holds.
 - **The fault returns.** `detached_spawn` failing on the Windows leg of

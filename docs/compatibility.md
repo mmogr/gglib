@@ -30,5 +30,5 @@ These can change in any release:
 ## Platforms
 
 - **macOS (Apple silicon) and Linux:** built and tested.
-- **Windows:** experimental. It's built and published, but its first test found that a new install doesn't reach a working chat without help. [#1959](https://github.com/mmogr/gglib/issues/1959) tracks the work.
+- **Windows 11 (x64):** built and tested with no GPU, from the installer to a working chat. A GPU, drawing images and pairing a second device aren't tested there yet. [#1959](https://github.com/mmogr/gglib/issues/1959) lists what was found and fixed.
 - **macOS builds aren't signed or notarized yet.** [Install](../README.md#pre-built-binaries-macos-linux-windows) says how to open them.
