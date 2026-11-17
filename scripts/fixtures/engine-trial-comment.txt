@@ -1,0 +1,18 @@
+/tried sd master-1094-3bad892
+
+```json
+{
+  "backend": "Metal",
+  "binary": "stable-diffusion.cpp version unknown, commit 3bad892",
+  "engine": "sd",
+  "gglib": "0.38.0-rc.1",
+  "installed_at": "2026-11-17T09:30:00Z",
+  "machine": "macOS 27.2 arm64",
+  "platform": "macOS universal (Metal)",
+  "release": "master-1094-3bad892",
+  "used": {
+    "pictures": 1,
+    "replies": 3
+  }
+}
+```
