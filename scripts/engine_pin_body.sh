@@ -18,8 +18,10 @@
 # the tier-3 probes (contracts/upstream/llama/tier3/), what upstream did near
 # each gglib feature contracts/upstream/overlaps.json names
 # (engine_pin_overlaps.sh), and the upstream commits in the range that touch a
-# file an ADR in docs/adr/ cites, read with `gh api`. A stable-diffusion.cpp
-# body adds the real picture to take, and has no tier 3; its commit list also
+# file an ADR in docs/adr/ cites, read with `gh api`. Every body has the
+# trial's box: the engine tried on the owner's machine, which the Engine trial
+# workflow ticks when it records the owner's `/tried` comment. A
+# stable-diffusion.cpp body has no tier 3; its commit list also
 # covers sd-server's folder, examples/server/, less its frontend, which no ADR
 # cites by file. Nothing in it fails: a part that cannot be read says so.
 #
@@ -340,9 +342,9 @@ inproc_failed
 if [ "$RECORDER" = ok ]; then
   readings_section
 fi
-if [ "$ENGINE" = sd ]; then
-  printf -- '- [ ] Take a real picture on %s before merging, with ADR 0018'"'"'s render-beside-a-chat pair.\n\n' "$TICK$CANDIDATE$TICK"
-fi
+# The one step CI cannot do. engine-trial.yml ticks this line by its first
+# words, `- [ ] Try `, for the reader; `Test (Rust)` reads the record.
+printf -- '- [ ] Try %s on your own machine before merging: `make engine-trial PR=<this number>`, use gglib, then `make engine-trial-approve PR=<this number>`. `Test (Rust)` is red until the trial is recorded.\n\n' "$TICK$CANDIDATE$TICK"
 if [ "$RECORDER" = ok ]; then
   recorded_line
 fi

@@ -47,7 +47,7 @@ command -v jq >/dev/null || { echo "check_adr_readings.sh needs jq" >&2; exit 2;
 MANUAL_ONLY=(
   "ADR 0002: the measured table (3-4B models, N=30). Rerun scripts/experiments/lazy_grammar_conformance.py when an auto_grammar reading flips."
   "ADR 0016: an image in a tool message needs a model that can describe it. The Engine pins workflow's tier 3 records one at each llama.cpp bump, in contracts/upstream/llama/tier3/."
-  "ADR 0018: a real picture, and the render-beside-a-chat pair. Taken by hand at a stable-diffusion.cpp bump."
+  "ADR 0018: a real picture beside a chat. The owner's trial of a stable-diffusion.cpp bump is one, drawn in a chat on their machine (make engine-trial)."
 )
 
 # check <observed.json> <approvals.json> <adr folder>: print one ::error line
