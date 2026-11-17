@@ -2981,6 +2981,7 @@ dependencies = [
 name = "gglib-test-http"
 version = "0.38.0-rc.1"
 dependencies = [
+ "socket2",
  "tokio",
 ]
 

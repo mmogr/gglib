@@ -25,7 +25,8 @@ in the workspace.
 ## Architecture
 
 A leaf, taken only from `[dev-dependencies]`. It depends on no `gglib-*` crate
-and on nothing but tokio's `net` and `io-util`: it reads bytes and knows no
+and on nothing but tokio's `net` and `io-util`, and `socket2` for the one
+socket `std` cannot make (bound, then connected): it reads bytes and knows no
 HTTP library. Crates that may not depend on hyper or axum directly,
 dev-dependencies included (`gglib-cli`, `gglib-app-services`, `gglib-runtime`,
 `gglib-download` and `gglib-hf` among them), can use it in their tests. That
@@ -50,6 +51,7 @@ becoming a way round it.
 │  lib.rs       accept · incoming · Incoming::request   (tokio)     │
 │  blocking.rs  the same three over std::net                         │
 │  request.rs   Request · the byte rules both readers share          │
+│  refusing.rs  RefusingPort · a held port that refuses              │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -63,6 +65,12 @@ becoming a way round it.
   The head is read a byte at a time up to its blank line, then exactly the
   body (`content-length`, or decoded chunks and their trailers), so nothing
   after the request is consumed and a test can go on reading the stream.
+- [`src/refusing.rs`](src/refusing.rs): `RefusingPort`, for a test of a
+  server that is not there. It binds a socket to a loopback port and
+  connects it to a listener of its own: in use, the system hands the port to
+  no fake server that asks for any port; with no listener on it, every
+  connection to it is refused. A port named in the test, or one bound and let go, can be handed
+  to another test's fake server, which then answers.
 
 ## Usage
 
@@ -74,4 +82,12 @@ let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
 let (request, mut stream) = accept(&listener).await?;
 assert_eq!(request.line(), "POST /v1/chat/completions HTTP/1.1");
 stream.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\n{}").await?;
+```
+
+```rust,ignore
+use gglib_test_http::RefusingPort;
+
+let closed = RefusingPort::hold()?;
+let refused = client.get(format!("http://127.0.0.1:{}/health", closed.port())).send().await;
+assert!(refused.is_err());
 ```

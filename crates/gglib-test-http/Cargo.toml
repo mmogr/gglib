@@ -19,6 +19,7 @@ path = "src/lib.rs"
 # deep would not see either arriving through here.
 [dependencies]
 tokio = { workspace = true, features = ["net", "io-util"] }
+socket2 = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt", "time"] }
