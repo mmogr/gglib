@@ -18,16 +18,17 @@ fn a_connection_to_a_held_port_is_refused() {
     assert_eq!(refused.kind(), ErrorKind::ConnectionRefused, "{refused}");
 }
 
-/// Every one is refused, not most: on Linux a connection to a port held
-/// only as an outgoing connection's own end connected to itself 2 times in
-/// 200,000. This many would seldom catch that; the 200,000 that did were run
-/// by hand (the module's docs), and this keeps watch at a cost of seconds.
-/// Windows takes about two seconds to say a connection is refused, so it
-/// asks twice.
+/// More than one is refused. The claim that every one is was measured by
+/// hand, 200,000 connections on a Mac and on Linux (the module's docs): on
+/// Linux a port held only as an outgoing connection's own end let 2 of
+/// them connect to themselves. A run that long does not belong in a test:
+/// 100,000 sockets in one ran a CI Mac out of buffers ("No buffer space
+/// available"). Windows takes about two seconds to say a connection is
+/// refused, so it asks twice.
 #[test]
-fn every_connection_to_a_held_port_is_refused() {
+fn connection_after_connection_to_a_held_port_is_refused() {
     let held = RefusingPort::hold().unwrap();
-    let asks = if cfg!(windows) { 2 } else { 20_000 };
+    let asks = if cfg!(windows) { 2 } else { 500 };
 
     for _ in 0..asks {
         let refused = TcpStream::connect((Ipv4Addr::LOCALHOST, held.port()));
@@ -36,15 +37,16 @@ fn every_connection_to_a_held_port_is_refused() {
 }
 
 /// A fake server asks for port 0 and takes what the system gives, with the
-/// address reusable (as `std` asks on Unix) or not. A port bound and let go
-/// came back 12 times in 200,000 asks on a Mac and 36 times on Linux, so a
-/// held port that could be given would be given here.
+/// address reusable (as `std` asks on Unix) or not. None of these is given
+/// the held port. That none ever is was measured by hand over 200,000 asks,
+/// where a port bound and let go came back 12 times on a Mac and 36 times
+/// on Linux; this many only shows the two kinds of ask both work.
 #[test]
 fn a_held_port_is_handed_to_nobody_who_asks_for_any() {
     let held = RefusingPort::hold().unwrap();
     let any = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
 
-    for _ in 0..50_000 {
+    for _ in 0..500 {
         let listener = TcpListener::bind(any).unwrap();
         assert_ne!(listener.local_addr().unwrap().port(), held.port());
 
