@@ -2,7 +2,7 @@
 
 use super::*;
 use futures_util::StreamExt;
-use gglib_test_http::blocking;
+use gglib_test_http::{RefusingPort, blocking};
 use std::io::Write;
 use std::iter;
 use std::net::TcpListener;
@@ -10,8 +10,9 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_health_checker_http_unreachable() {
-    // Check a port that's definitely not in use
-    let status = ServerHealthChecker::check_http(65432, RuntimeKind::Llama).await;
+    // A port held for this test, where every connection is refused.
+    let closed = RefusingPort::hold().unwrap();
+    let status = ServerHealthChecker::check_http(closed.port(), RuntimeKind::Llama).await;
     assert!(matches!(status, ServerHealthStatus::Unreachable { .. }));
 }
 
@@ -33,8 +34,9 @@ fn test_process_check_without_pid() {
 
 #[tokio::test]
 async fn test_monitor_cancellation() {
-    // Create a monitor for an unused port (will be unreachable)
-    let handle = ProcessHandle::new(1, "test".to_string(), None, 65433, 0);
+    // Create a monitor for a port that refuses (will be unreachable)
+    let closed = RefusingPort::hold().unwrap();
+    let handle = ProcessHandle::new(1, "test".to_string(), None, closed.port(), 0);
     let cancel_token = CancellationToken::new();
 
     let monitor = ServerHealthMonitor::new(handle, Duration::from_millis(50), cancel_token.clone());
@@ -62,8 +64,9 @@ async fn test_monitor_cancellation() {
 
 #[tokio::test]
 async fn test_monitor_emits_initial_status() {
-    // Create a monitor for an unused port
-    let handle = ProcessHandle::new(1, "test".to_string(), None, 65434, 0);
+    // Create a monitor for a port that refuses
+    let closed = RefusingPort::hold().unwrap();
+    let handle = ProcessHandle::new(1, "test".to_string(), None, closed.port(), 0);
     let cancel_token = CancellationToken::new();
 
     let monitor = ServerHealthMonitor::new(handle, Duration::from_millis(10), cancel_token.clone());
@@ -162,12 +165,6 @@ fn silent() -> u16 {
     port
 }
 
-/// A port nothing listens on: bound to learn a free one, then released.
-fn refusing() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind to find a free port");
-    listener.local_addr().expect("its address").port()
-}
-
 #[tokio::test]
 async fn a_200_from_health_is_healthy() {
     let port = answering("200 OK");
@@ -192,7 +189,8 @@ async fn a_503_from_health_is_unreachable() {
 
 #[tokio::test]
 async fn a_refused_connection_is_unreachable() {
-    let port = refusing();
+    let closed = RefusingPort::hold().unwrap();
+    let port = closed.port();
 
     assert!(!crate::process::check_http_health(port, RuntimeKind::Llama).await);
     assert_eq!(

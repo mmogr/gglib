@@ -154,6 +154,8 @@ sysinfo = "0.37"
 
 # Testing
 tempfile = "3.10"
+# A test's held port: bind a socket and then connect it, which std cannot do
+socket2 = "0.6"
 
 # Sibling crates. Bare paths with no features: a member names the features it
 # wants, and the test-only ones (`test-utils`, `test-support`) under

@@ -7,6 +7,7 @@ use crate::process::RuntimeBinaries;
 use async_trait::async_trait;
 use gglib_core::domain::{CacheRamHealth, ModelSamplingDefaults};
 use gglib_core::ports::ModelSummary;
+use gglib_test_http::RefusingPort;
 use tokio::time::Instant;
 
 #[derive(Debug)]
@@ -28,10 +29,9 @@ impl ModelCatalogPort for StubCatalog {
     }
 }
 
-/// A port nothing listens on, so a health check there fails.
-fn dead_port() -> u16 {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.local_addr().unwrap().port()
+/// A port held for the test and refusing, so a health check there fails.
+fn dead_port() -> RefusingPort {
+    RefusingPort::hold().unwrap()
 }
 
 /// A set whose primary holds `qwen` (model 1) at 4096 tokens on `port`.
@@ -81,7 +81,8 @@ pub(super) fn granted(set: &ResidentSet) {
 
 #[tokio::test]
 async fn a_request_at_another_context_recycles_the_model() {
-    let set = set_with_resident(dead_port());
+    let dead = dead_port();
+    let set = set_with_resident(dead.port());
 
     granted(&set);
     let recycled = set
@@ -95,7 +96,8 @@ async fn a_request_at_another_context_recycles_the_model() {
 
 #[tokio::test]
 async fn a_failed_health_check_recycles_the_model() {
-    let set = set_with_resident(dead_port());
+    let dead = dead_port();
+    let set = set_with_resident(dead.port());
 
     granted(&set);
     let recycled = set

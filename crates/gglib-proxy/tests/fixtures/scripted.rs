@@ -12,9 +12,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
+use gglib_test_http::RefusingPort;
 use reqwest::{Client, Response};
 use serde_json::json;
-use tokio::net::TcpListener;
 
 use gglib_core::ports::{
     Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunningTarget,
@@ -84,11 +84,11 @@ impl ModelRuntimePort for ScriptedRuntime {
     }
 }
 
-/// A port bound and dropped at once: nothing is listening on it, which is
-/// what an admission naming a server that has since died looks like.
-pub(crate) async fn dead_port() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
-    listener.local_addr().unwrap().port()
+/// A port held and refusing: nothing is listening on it, which is what an
+/// admission naming a server that has since died looks like. Held, not bound
+/// and let go, so the system cannot hand it to a mock upstream meanwhile.
+pub(crate) fn dead_port() -> RefusingPort {
+    RefusingPort::hold().expect("a loopback port")
 }
 
 /// A proxy over `runtime` whose catalog holds [`MODEL`], with the disk slot

@@ -12,11 +12,11 @@
 //! machine's own.
 
 use gglib_core::utils::process::cmd;
-use std::net::TcpListener;
 use std::path::Path;
 use std::process::Output;
 
 use gglib_core::RemotePairing;
+use gglib_test_http::RefusingPort;
 
 #[path = "support/data_dir.rs"]
 mod data_dir;
@@ -41,21 +41,17 @@ fn seeded(paired: bool) -> tempfile::TempDir {
     root
 }
 
-/// A loopback port nothing listens on once this returns.
-fn closed_port() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
-    listener.local_addr().expect("its address").port()
-}
-
 /// `gglib config <args>` with `root` as its data directory, and a models
 /// directory inside it.
 fn settings(root: &Path, args: &[&str]) -> (Output, String, String) {
+    // No daemon: its port is one held here, where every connection is refused.
+    let closed = RefusingPort::hold().expect("a loopback port");
     let out = cmd(env!("CARGO_BIN_EXE_gglib"))
         .arg("config")
         .args(args)
         .env("GGLIB_DATA_DIR", root)
         .env("GGLIB_MODELS_DIR", root.join("models"))
-        .env("GGLIB_DAEMON_PORT", closed_port().to_string())
+        .env("GGLIB_DAEMON_PORT", closed.port().to_string())
         .env("RUST_LOG", "trace")
         .output()
         .expect("running `gglib config`");

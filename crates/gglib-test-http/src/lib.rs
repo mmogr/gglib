@@ -21,6 +21,9 @@
 //! test about the connection itself; the [`Incoming`] it returns gives no
 //! stream until [`Incoming::request`] has read one. [`blocking`] is the same
 //! for `std::net`.
+//!
+//! [`RefusingPort`] is for the opposite test, of a server that is not there:
+//! a loopback port held for the test, on which every connection is refused.
 
 use std::io;
 
@@ -28,8 +31,10 @@ use tokio::io::AsyncReadExt as _;
 use tokio::net::{TcpListener, TcpStream};
 
 pub mod blocking;
+mod refusing;
 mod request;
 
+pub use refusing::RefusingPort;
 pub use request::Request;
 use request::{Body, chunk_size, invalid, parse_head, push_head_byte, push_line_byte, room_for};
 

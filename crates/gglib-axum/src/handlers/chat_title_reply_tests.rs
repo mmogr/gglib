@@ -233,13 +233,9 @@ async fn a_reply_that_is_not_json_is_a_500() {
 
 #[tokio::test]
 async fn a_port_nothing_listens_on_is_a_503() {
-    // Bound, read and closed: a port that was free a moment ago.
-    let port = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("a loopback port")
-        .local_addr()
-        .expect("its address")
-        .port();
+    // Held for the test: every connection to it is refused.
+    let closed = gglib_test_http::RefusingPort::hold().expect("a loopback port");
+    let port = closed.port();
 
     let refused = ask(port, &json!({})).await.expect_err("nothing there");
 
