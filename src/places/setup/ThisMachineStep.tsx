@@ -19,6 +19,7 @@
  */
 
 import { useState, type FC } from 'react';
+import { PathText } from '../../components/primitives';
 import { MODELS_DIR_WORDS } from '../../components/status/words';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -84,7 +85,7 @@ export const ThisMachineStep: FC<ThisMachineStepProps> = ({ status, rec, folder,
           name="Models folder"
           state={
             <>
-              <code className="min-w-0 break-all font-mono text-text">{folder.path}</code>
+              <PathText path={folder.path} className="text-text" />
               {note && <span>{note}</span>}
             </>
           }
