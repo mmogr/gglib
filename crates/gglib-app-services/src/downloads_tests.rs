@@ -12,6 +12,7 @@ fn make_ops(mgr: MockDownloadManager) -> DownloadOps {
         hf: Arc::new(MockHfClient),
         gguf_parser: Arc::new(gglib_core::ports::NoopGgufParser),
         models_directory: None,
+        core: None,
     })
 }
 
@@ -117,25 +118,6 @@ fn the_queue_answer_is_the_id_alone() {
     assert_eq!(json, serde_json::json!({ "id": "owner/repo:Q8_0" }));
     let back: QueueDownloadResponse = serde_json::from_value(json).unwrap();
     assert_eq!(back, answer);
-}
-
-/// The device's memory is the budget when it can be read, and the system's
-/// RAM is not read.
-#[test]
-fn the_device_memory_is_the_download_budget() {
-    let budget = super::device_or_ram(Some(24 << 30), || panic!("RAM was read"));
-    assert_eq!(budget, Some(24 << 30));
-}
-
-/// A machine whose device memory cannot be read runs from its RAM; with
-/// neither, there is no budget and the smallest variant is taken.
-#[test]
-fn without_device_memory_the_system_ram_is_the_budget() {
-    assert_eq!(
-        super::device_or_ram(None, || Some(64 << 30)),
-        Some(64 << 30)
-    );
-    assert_eq!(super::device_or_ram(None, || None), None);
 }
 
 /// A Hub repo's tool answer is core's guess from its template and repo id,

@@ -32,7 +32,7 @@ import { useToolSupportCache } from '../../../hooks/useToolSupportCache';
 import { queueDownload } from '../../../services/downloadsEvents';
 import { useModelLibrary } from '../../../services/modelRegistry';
 import { useThisMachine } from '../../../services/hostRegistry';
-import { getRecommendedModel } from '../../../services/transport/api/setup';
+import { getRecommendedModel, getSetupStatus } from '../../../services/transport/api/setup';
 import type { HfModelKind, HfModelSummary } from '../../../types';
 import type { RecommendationDto } from '../../../types/setup';
 import { formatError } from '../../../utils/errors';
@@ -104,12 +104,23 @@ function dismissedRepo(): string | null {
  */
 function useSuggestion(asked: boolean) {
   const [answer, setAnswer] = useState<RecommendationDto | null | undefined>(undefined);
+  // Why nothing is suggested when it is not that nothing fits, the daemon's
+  // words, read only when nothing is.
+  const [noneReason, setNoneReason] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(dismissedRepo);
   useEffect(() => {
     if (!asked) return;
     let live = true;
     getRecommendedModel()
-      .then((rec) => live && setAnswer(rec))
+      .then(async (rec) => {
+        if (rec === null) {
+          const reason = await getSetupStatus()
+            .then((status) => status.noSuggestionReason ?? null)
+            .catch(() => null);
+          if (live) setNoneReason(reason);
+        }
+        if (live) setAnswer(rec);
+      })
       .catch(() => live && setAnswer(undefined));
     return () => {
       live = false;
@@ -123,19 +134,20 @@ function useSuggestion(asked: boolean) {
       // A viewer without storage dismisses it until the library is left.
     }
   };
-  return { answer: answer && answer.repo === dismissed ? undefined : answer, dismiss };
+  return { answer: answer && answer.repo === dismissed ? undefined : answer, noneReason, dismiss };
 }
 
 /** The suggestion for this machine, or that nothing on the shortlist fits. */
-const Suggestion: FC<{ answer: RecommendationDto | null; queueFull: boolean; onDismiss: (repo: string) => void }> = ({
+const Suggestion: FC<{ answer: RecommendationDto | null; noneReason: string | null; queueFull: boolean; onDismiss: (repo: string) => void }> = ({
   answer,
+  noneReason,
   queueFull,
   onDismiss,
 }) => {
   const { models } = useModelLibrary();
   const queue = useQueue();
   const machine = useThisMachine();
-  if (answer === null) return <Note>Nothing gglib would suggest fits. Search for a smaller model below.</Note>;
+  if (answer === null) return <Note>{noneReason ?? "Nothing gglib would suggest fits. Search for a smaller model below."}</Note>;
   return (
     <section aria-label={`Suggested for ${machine.phrase}`}>
       <Note>{`Suggested for ${machine.phrase}`}</Note>
@@ -148,7 +160,7 @@ const Suggestion: FC<{ answer: RecommendationDto | null; queueFull: boolean; onD
               size="sm"
               variant={models.length === 0 ? 'primary' : 'secondary'}
               disabled={queueFull}
-              onClick={() => void queue(answer.repo)}
+              onClick={() => void queue(answer.repo, answer.quantization)}
             >
               Download
             </Button>
@@ -246,7 +258,7 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
   let body: ReactNode;
   switch (shown.kind) {
     case 'suggestion':
-      body = <Suggestion answer={suggestion.answer ?? null} queueFull={queueFull} onDismiss={suggestion.dismiss} />;
+      body = <Suggestion answer={suggestion.answer ?? null} noneReason={suggestion.noneReason} queueFull={queueFull} onDismiss={suggestion.dismiss} />;
       break;
     case 'open':
       body = <Note>{openError}</Note>;

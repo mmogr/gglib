@@ -216,16 +216,27 @@ describe('setup', () => {
     expect(within(first).queryByRole('button', { name: 'Get it' })).not.toBeInTheDocument();
   });
 
+  it("says the daemon's reason on First model when the GPU's memory could not be read", async () => {
+    api.getRecommendedModel.mockResolvedValue(null);
+    const reason = "gglib could not read this GPU's memory, so it cannot size a model to it and suggests none: choose one yourself.";
+    const { user } = start({ ...setupStatus(), noSuggestionReason: reason });
+    await reach(user, 'First model');
+    const first = await step('First model');
+    expect(first).toHaveTextContent(reason);
+    expect(first).not.toHaveTextContent('Nothing gglib would suggest fits.');
+  });
+
   it("offers the suggestion in the route's words, and Get it follows the download in its row's words", async () => {
     const { user } = start();
     await reach(user, 'First model');
     const region = await step('First model');
 
     expect(region).toHaveTextContent(REC.repo);
-    expect(region).toHaveTextContent('Strong tool calling at 8B. Needs 6.5 GiB of 43.2 GiB unified memory.');
+    expect(region).toHaveTextContent('Strong tool calling at 8B. At Q4_K_M, fits this machine with 32K context, of 40K trained.');
     await user.click(within(region).getByRole('button', { name: 'Get it' }));
 
-    expect(transport.queueDownload).toHaveBeenCalledWith({ modelId: REC.repo, quantization: undefined });
+    // The size the sentence is about is the size Get it asks for.
+    expect(transport.queueDownload).toHaveBeenCalledWith({ modelId: REC.repo, quantization: 'Q4_K_M' });
     act(() => takeQueueSnapshot(queueSnapshot({ revision: 5, active: ROW })));
     expect(await within(region).findByText('1.25 GiB / 5.00 GiB · 52.0 MB/s · ETA 1m 12s')).toBeInTheDocument();
     expect(within(region).getByRole('progressbar', { name: 'Qwen3-8B downloaded' })).toHaveAttribute('aria-valuenow', '25');

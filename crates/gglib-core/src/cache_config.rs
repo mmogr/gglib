@@ -142,6 +142,32 @@ pub const DEFAULT_CACHE_TYPE_K: KvCacheType = KvCacheType::Q8_0;
 /// module docs on the Flash Attention requirement for quantized V.
 pub const DEFAULT_CACHE_TYPE_V: KvCacheType = KvCacheType::Q8_0;
 
+/// Whether `GGLIB_DISABLE_KV_QUANT` asks for `f16`.
+///
+/// On every axis a launch
+/// is not told a type for. The one reading of the switch: a launch's types
+/// (`gglib_runtime::llama::args::resolve_kv_cache_types`) and the size
+/// picker's ([`launch_kv_types`]) both take it from here.
+#[must_use]
+pub fn kv_quant_disabled_via_env() -> bool {
+    crate::debug_switches::enabled("GGLIB_DISABLE_KV_QUANT")
+}
+
+/// The KV cache types a launch uses when none is asked for.
+///
+/// The defaults,
+/// or `f16` on both axes under `GGLIB_DISABLE_KV_QUANT`. What the size
+/// picker and the first-model suggestion size a context's cache at, so the
+/// context they name is the one a launch serves.
+#[must_use]
+pub fn launch_kv_types() -> (KvCacheType, KvCacheType) {
+    if kv_quant_disabled_via_env() {
+        (KvCacheType::F16, KvCacheType::F16)
+    } else {
+        (DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

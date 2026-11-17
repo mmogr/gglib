@@ -261,6 +261,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         // The daemon's download manager is handed none either: both resolve
         // the directory as they are asked.
         models_directory: None,
+        core: Some(Arc::clone(&core)),
     }));
 
     let settings = Arc::new(SettingsOps::new(SettingsDeps {

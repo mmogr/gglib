@@ -164,11 +164,26 @@ pub(crate) struct RecommendationDto {
     pub repo: String,
     /// Why this model, in the user's terms.
     pub rationale: String,
-    /// Weights plus KV cache at the candidate's context, at the quantization
-    /// the runtime actually launches with.
+    /// The quantization a download of it asks for: the size `required_bytes`
+    /// and `fit_sentence` are about. Absent from a hub from before a
+    /// suggestion named one, whose download took the largest size that fit.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantization: Option<String>,
+    /// What a load of that size on this machine says of its fit, in the
+    /// load's own words: "Fits this machine's 7.9 GiB of RAM (no GPU) with
+    /// 32K context, of 32K trained." The inspector says the same once the
+    /// model is downloaded. Absent from a hub from before suggestions said
+    /// it.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit_sentence: Option<String>,
+    /// Weights plus KV cache at the candidate's context, at the KV cache
+    /// types the runtime launches with.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub required_bytes: u64,
-    /// The memory figure it was sized against.
+    /// The machine's memory it was sized from: a GPU's, or with no GPU its
+    /// whole RAM, of which a load spends a share (`fit_sentence` says).
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub budget_bytes: u64,
     /// Where that figure came from: `"vram" | "unifiedMemory" | "systemRam"`.
@@ -176,6 +191,7 @@ pub(crate) struct RecommendationDto {
     /// That source in the words `gglib up` prints it in: "VRAM", "unified
     /// memory", "system RAM".
     pub budget_label: String,
+    /// What the budget a load spends against leaves after `required_bytes`.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub headroom_bytes: u64,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
@@ -189,8 +205,10 @@ impl From<gglib_core::domain::recommendation::Recommendation> for Recommendation
         Self {
             repo: rec.candidate.repo.to_string(),
             rationale: rec.candidate.rationale.to_string(),
+            quantization: rec.candidate.quantization.map(str::to_owned),
+            fit_sentence: Some(rec.fit.sentence.clone()),
             required_bytes: rec.candidate.required_bytes(),
-            budget_bytes: rec.budget_bytes,
+            budget_bytes: rec.fit.system_ram_bytes.unwrap_or(rec.budget_bytes),
             budget_source: match rec.budget_source {
                 BudgetSource::Vram => "vram",
                 BudgetSource::UnifiedMemory => "unifiedMemory",
@@ -282,8 +300,9 @@ mod tests {
 
     #[test]
     fn recommendation_names_its_budget_as_the_cli_prints_it() {
-        use gglib_core::domain::recommendation::{BudgetSource, recommend};
+        use gglib_core::domain::recommendation::BudgetSource;
         use gglib_core::utils::system::SystemMemoryInfo;
+        use gglib_runtime::system::recommend_on;
 
         let machines = [
             (
@@ -302,12 +321,39 @@ mod tests {
                 is_unified_memory: unified,
                 has_nvidia_gpu: gpu.is_some() && !unified,
             };
-            let rec = recommend(&mem).expect("48 GiB fits the shortlist");
+            let rec = recommend_on(gpu.is_some(), &mem).expect("48 GiB fits the shortlist");
             assert_eq!(rec.budget_source, source);
 
             let json = serde_json::to_value(RecommendationDto::from(rec)).unwrap();
             assert_eq!(json["budgetSource"], key);
             assert_eq!(json["budgetLabel"], source.label());
+            assert_eq!(json["budgetBytes"], gpu.unwrap_or(64_u64 << 30));
         }
+    }
+
+    /// The suggestion names the size its download takes, and says the
+    /// load's sentence for it; with no GPU the budget shown is the machine's
+    /// whole RAM, which the sentence names.
+    #[test]
+    fn a_recommendation_names_its_size_and_says_the_loads_sentence() {
+        use gglib_core::utils::system::SystemMemoryInfo;
+        use gglib_runtime::system::recommend_on;
+
+        let ram: u64 = (79 << 30) / 10;
+        let mem = SystemMemoryInfo {
+            total_ram_bytes: ram,
+            gpu_memory_bytes: None,
+            is_unified_memory: false,
+            has_nvidia_gpu: false,
+        };
+        let rec = recommend_on(false, &mem).expect("7.9 GiB fits the shortlist");
+        let json = serde_json::to_value(RecommendationDto::from(rec)).unwrap();
+        assert_eq!(json["quantization"], "Q4_K_M");
+        assert_eq!(
+            json["fitSentence"],
+            "Fits this machine's 7.9 GiB of RAM (no GPU) with 32K context, of 32K trained."
+        );
+        assert_eq!(json["budgetBytes"], ram);
+        assert_eq!(json["budgetLabel"], "system RAM");
     }
 }

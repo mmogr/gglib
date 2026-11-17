@@ -1,16 +1,10 @@
 //! How large a context this machine can actually serve.
 //!
-//! `gglib up` picks a model by asking what fits in VRAM at 32k; this is the
-//! launch-time half of that arithmetic, so the context a launch serves comes
-//! from the machine too.
-//!
-//! `up`'s shortlist asks a different question — "does this model fit *at*
-//! 32k?" — so the two are not one calculation and cannot be made one cheaply:
-//! they are answered against different budgets, and the shortlist runs before
-//! the model is downloaded, when its real KV geometry is not yet readable. So
-//! `up`'s banner reports 32k as the bar the model had to clear, and says the
-//! served context is sized at launch, which is true and knowable; naming a
-//! rung there would claim a number the launch has not computed.
+//! A desktop load asks it through
+//! [`fit_on_device`](crate::domain::device_fit::fit_on_device), which tries
+//! the budget less a second slot's room and then the whole budget; the size
+//! picker and `gglib up`'s suggestion ask the same, so the context they name
+//! is the one a load serves. A phone's load asks it directly.
 //!
 //! ## Why it snaps to rungs
 //!

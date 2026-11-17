@@ -37,4 +37,12 @@ total RAM a unified-memory GPU gets, since the model then runs from RAM; and
 no budget, a refusal, for a GPU whose memory cannot be read. A pure function
 of what was detected, so each case is tested on every OS.
 
+`suggest.rs` answers, from the same detection and against the load's own
+budget, what setup suggests for this machine (`recommend_here()`) and the
+memory a download that names no size, and the size picker, judge a size
+against (`download_budget()`). A GPU whose memory cannot be read has no
+budget, so it is suggested nothing and a download takes the smallest size.
+Each is a pure function of what was detected (`recommend_on`,
+`download_budget_on`) too.
+
 <!-- module-docs:end -->

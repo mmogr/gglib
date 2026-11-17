@@ -13,12 +13,27 @@ export type RecommendationDto = { repo: string,
  */
 rationale: string, 
 /**
- * Weights plus KV cache at the candidate's context, at the quantization
- * the runtime actually launches with.
+ * The quantization a download of it asks for: the size `required_bytes`
+ * and `fit_sentence` are about. Absent from a hub from before a
+ * suggestion named one, whose download took the largest size that fit.
+ */
+quantization?: string, 
+/**
+ * What a load of that size on this machine says of its fit, in the
+ * load's own words: "Fits this machine's 7.9 GiB of RAM (no GPU) with
+ * 32K context, of 32K trained." The inspector says the same once the
+ * model is downloaded. Absent from a hub from before suggestions said
+ * it.
+ */
+fitSentence?: string, 
+/**
+ * Weights plus KV cache at the candidate's context, at the KV cache
+ * types the runtime launches with.
  */
 requiredBytes: number, 
 /**
- * The memory figure it was sized against.
+ * The machine's memory it was sized from: a GPU's, or with no GPU its
+ * whole RAM, of which a load spends a share (`fit_sentence` says).
  */
 budgetBytes: number, 
 /**
@@ -29,4 +44,8 @@ budgetSource: string,
  * That source in the words `gglib up` prints it in: "VRAM", "unified
  * memory", "system RAM".
  */
-budgetLabel: string, headroomBytes: number, context: number, };
+budgetLabel: string, 
+/**
+ * What the budget a load spends against leaves after `required_bytes`.
+ */
+headroomBytes: number, context: number, };

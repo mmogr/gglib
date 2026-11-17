@@ -126,15 +126,19 @@ infrastructure concerns (database, filesystem, etc.).
   seconds, a count and a count of tokens in the words every surface says
   them (`rate_words`, `seconds_words`, `count_words`, `tokens_words`: "1
   token", "2,100 tokens")
-- `context_fit` - How large a context this machine can serve (`fit_context`),
-  the launch-time half of `gglib up`'s fit arithmetic
+- `context_fit` - How large a context a budget can serve (`fit_context`)
+- `device_fit` - The context a desktop load fits a model to: the budget less
+  a second slot's room (`fit_budget_from`), falling back to the whole budget
+  (`fit_on_device`), and that as a verdict (`device_fit_verdict`). The one
+  rule a launch, the size picker and `gglib up`'s suggestion fit by
 - `fit_sentence` - A context fit in words (`ContextFit::new` composes them):
   the fit sentence, the Context note and the figures' rows, served on
   `ContextFit` and printed by `gglib model explain`
 - `revision` - The revision a model's files came from, a commit sha or a
   ref under its `rev:` mark, told apart once for every reader (`Revision`)
 - `recommendation` - Picking a first model that fits the machine
-  (`recommend`, `Recommendation`)
+  (`recommend`, `Recommendation`), by the rule its load fits a context by,
+  and saying it in the load's sentence (`Recommendation::fit`)
 - `residency` - Whether a second model may stay resident in VRAM beside the
   first (`decide_secondary_slot`, `SecondarySlotDecision`)
 - `state_words` - The word every surface uses for a state (`EndpointState`,

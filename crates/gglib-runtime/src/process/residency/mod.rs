@@ -916,3 +916,6 @@ mod serve_tests;
 #[cfg(test)]
 #[path = "stop_model_tests.rs"]
 mod stop_model_tests;
+#[cfg(test)]
+#[path = "suggestion_fit_tests.rs"]
+mod suggestion_fit_tests;

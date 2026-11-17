@@ -267,6 +267,7 @@ async fn the_listing_served_carries_the_image_preview() {
         hf: Arc::new(hub("flux1-schnell-q8_0.gguf")),
         gguf_parser: Arc::new(HeadParser),
         models_directory: Some(models.path().to_path_buf()),
+        core: None,
     });
 
     let listed = ops.get_model_quantizations(REPO).await.unwrap();
@@ -295,6 +296,7 @@ async fn a_listing_without_the_companions_still_judges_an_image_model_by_its_fil
         hf: Arc::new(unlisted),
         gguf_parser: Arc::new(HeadParser),
         models_directory: None,
+        core: None,
     });
 
     let listed = ops.get_model_quantizations(REPO).await.unwrap();

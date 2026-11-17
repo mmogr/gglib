@@ -9,8 +9,7 @@ use std::sync::Arc;
 use anyhow::{Result, anyhow, bail};
 use gglib_app_services::download_budget;
 use gglib_core::SettingsUpdate;
-use gglib_core::domain::{Model, Recommendation, format_gib, recommend};
-use gglib_core::utils::system::SystemMemoryInfo;
+use gglib_core::domain::{Model, Recommendation, SizedAgainst, format_gib};
 
 use super::{require_tty, row, sgr, step};
 use crate::bootstrap::CliContext;
@@ -20,12 +19,7 @@ use crate::presentation::style::{BOLD, RESET, SUCCESS};
 use crate::utils::input;
 
 /// Resolve the model `up` will serve, downloading it if it isn't here yet.
-pub(super) async fn run(
-    ctx: &CliContext,
-    memory: Option<&SystemMemoryInfo>,
-    requested: Option<&str>,
-    yes: bool,
-) -> Result<Model> {
+pub(super) async fn run(ctx: &CliContext, requested: Option<&str>, yes: bool) -> Result<Model> {
     step(3, "Model");
 
     if let Some(identifier) = requested {
@@ -43,7 +37,7 @@ pub(super) async fn run(
         return Ok(model);
     }
 
-    download_recommended(ctx, memory, yes).await
+    download_recommended(ctx, yes).await
 }
 
 /// Make the model `up` serves the default when no default is set, and say
@@ -78,28 +72,29 @@ async fn most_recent(ctx: &CliContext) -> Result<Option<Model>> {
     Ok(models.pop())
 }
 
-/// Nothing installed: recommend, explain, confirm, download.
-async fn download_recommended(
-    ctx: &CliContext,
-    memory: Option<&SystemMemoryInfo>,
-    yes: bool,
-) -> Result<Model> {
-    let Some(memory) = memory else {
-        bail!(
-            "Could not read this system's memory, so there is no safe way to pick a model.\n\
-             Download one yourself and re-run:\n  \
-             gglib model download <huggingface-repo>"
-        );
-    };
+/// Why nothing was suggested, and what to do: the load's budget it was
+/// sized against, or that the load has none.
+fn nothing_suggested(sized: Option<SizedAgainst>) -> String {
+    let why = sized.map_or_else(
+        || gglib_runtime::system::UNREADABLE_GPU.to_owned(),
+        |sized| {
+            format!(
+                "No model in gglib's shortlist is served 8K of context or more in the {} a load \
+                 sizes against.",
+                sized.words()
+            )
+        },
+    );
+    format!("{why}\nDownload one yourself and re-run:\n  gglib model download <huggingface-repo>")
+}
 
-    let Some(rec) = recommend(memory) else {
-        bail!(
-            "No model in gglib's shortlist fits {} of {}.\n\
-             Pick something smaller yourself and re-run:\n  \
-             gglib model download <huggingface-repo>",
-            format_gib(budget_of(memory)),
-            source_label(memory),
-        );
+/// Nothing installed: recommend, explain, confirm, download.
+async fn download_recommended(ctx: &CliContext, yes: bool) -> Result<Model> {
+    // Sized as a load sizes a context: against the same reading of this
+    // machine, by the same rule, with the user's `default-context-size`.
+    let default_ctx = ctx.app.settings().get().await?.default_context_size;
+    let Some(rec) = gglib_runtime::system::recommend_here(default_ctx) else {
+        bail!(nothing_suggested(gglib_runtime::system::sized_against()));
     };
 
     print_recommendation(&rec);
@@ -129,55 +124,41 @@ async fn download_recommended(
     find_downloaded(ctx, &repo).await
 }
 
-/// The note beside `size`: the shortlist is checked at `Q4_K_M`, and the
-/// download takes the largest quantization that fits, which may be larger.
-const SIZE_NOTE: &str = "at Q4_K_M; the download takes the largest quant that fits";
-
-/// What the `context` row says, since it cannot say a number.
-const SERVED_CONTEXT: &str = "sized at launch";
-
-/// And where that size comes from, so "sized at launch" is not merely a shrug.
-const SERVED_CONTEXT_NOTE: &str = "to this machine's memory, said once it loads";
-
-/// The note beside `needs`, naming what `context` was used *for*.
+/// The rows under a recommendation, as label, value and note: the size its
+/// download takes, and the load's own fit of that size on this machine.
 ///
-/// "to clear", not "at": the shortlist tested this model against that context
-/// to decide whether to offer it, which is not the same as serving it there.
-fn needs_note(context: u64) -> String {
-    format!("to clear {context} context")
+/// The fit is the one a load makes (the same rule and the same budget), so
+/// the context named is the one a load serves when nothing else is asked
+/// for, and `gglib model explain` says the same sentence once it is down.
+fn recommendation_rows(rec: &Recommendation) -> Vec<(&'static str, String, Option<String>)> {
+    let c = rec.candidate;
+    let mut rows = vec![(
+        "size",
+        format_gib(c.weights_bytes),
+        c.quantization
+            .map(|q| format!("{q}, the size it downloads")),
+    )];
+    if let Some(note) = &rec.fit.note {
+        rows.push(("memory", note.clone(), None));
+    }
+    rows.push(("context", rec.fit.sentence.clone(), None));
+    rows
 }
 
 /// State the choice and the arithmetic behind it.
 ///
-/// The size and headroom are the part that earns trust: a bare model name is a
-/// guess, whereas "18.9 GiB of 24.0 GiB VRAM" is a claim the user can check.
-///
-/// `c.context` is the bar this model had to clear to be shortlisted, not a
-/// promise about the launch. The two are different questions — the shortlist
-/// asks "does this fit *at* 32k", `fit_context` asks "what is the largest rung
-/// this fits" — and they are answered against different budgets, so predicting
-/// one from the other here would be a new false claim on the surface ADR 0009
-/// opens by condemning for making one. `up` sends `None` and the daemon
-/// decides; the note says so rather than naming a number.
+/// The size and the memory are the part that earns trust: a bare model name
+/// is a guess, whereas "5.29 GiB of 5.33 GiB usable" is a claim the user can
+/// check.
 fn print_recommendation(rec: &Recommendation) {
     let c = rec.candidate;
     println!();
     println!("  {}{}{}", sgr(BOLD), c.repo, sgr(RESET));
     println!("  {}", c.rationale);
     println!();
-    row("size", &format_gib(c.weights_bytes), Some(SIZE_NOTE));
-    row(
-        "needs",
-        &format!(
-            "{} of {} {}",
-            format_gib(c.required_bytes()),
-            format_gib(rec.budget_bytes),
-            rec.budget_source.label(),
-        ),
-        Some(&needs_note(c.context)),
-    );
-    row("spare", &format_gib(rec.headroom_bytes), None);
-    row("context", SERVED_CONTEXT, Some(SERVED_CONTEXT_NOTE));
+    for (label, value, note) in recommendation_rows(rec) {
+        row(label, &value, note.as_deref());
+    }
 }
 
 /// Ask, once it is established there is somebody to ask.
@@ -244,23 +225,10 @@ async fn find_downloaded(ctx: &CliContext, repo: &str) -> Result<Model> {
         })
 }
 
-/// The memory figure a recommendation would have been sized against, for the
-/// message that explains why there wasn't one.
-fn budget_of(mem: &SystemMemoryInfo) -> u64 {
-    mem.gpu_memory_bytes.unwrap_or(mem.total_ram_bytes)
-}
-
-fn source_label(mem: &SystemMemoryInfo) -> &'static str {
-    match mem.gpu_memory_bytes {
-        Some(_) if mem.is_unified_memory => "unified memory",
-        Some(_) => "VRAM",
-        None => "system RAM",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gglib_core::utils::system::SystemMemoryInfo;
 
     const GB: u64 = 1_073_741_824;
 
@@ -304,54 +272,59 @@ mod tests {
         assert_eq!(settings.default_model_id, Some(served));
     }
 
-    fn mem(vram: Option<u64>, apple: bool) -> SystemMemoryInfo {
+    const fn no_gpu(total_ram_bytes: u64) -> SystemMemoryInfo {
         SystemMemoryInfo {
-            total_ram_bytes: 32 * GB,
-            gpu_memory_bytes: vram,
-            is_unified_memory: apple,
-            has_nvidia_gpu: vram.is_some() && !apple,
+            total_ram_bytes,
+            gpu_memory_bytes: None,
+            is_unified_memory: false,
+            has_nvidia_gpu: false,
         }
     }
 
-    /// The "nothing fits" message quotes a budget, and quoting the wrong one
-    /// would send the user looking at the wrong number.
+    /// The "nothing suggested" message quotes the budget the decision was
+    /// made against, the load's, and with none says why and what to do.
     #[test]
-    fn budget_prefers_vram_and_falls_back_to_ram() {
-        assert_eq!(budget_of(&mem(Some(8 * GB), false)), 8 * GB);
-        assert_eq!(budget_of(&mem(None, false)), 32 * GB);
-    }
-
-    /// Annotating `needs` with "at 32768 context" would read as the context
-    /// the launch will serve. It is not. That number is the bar the model had
-    /// to clear to be shortlisted, tested against a different budget from the
-    /// one `fit_context` uses — and `up` sends `None`, so the daemon decides.
-    /// ADR 0009 opens by condemning exactly this surface for showing a number
-    /// unrelated to the one served.
-    #[test]
-    fn the_needs_note_does_not_promise_a_served_context() {
-        let note = needs_note(32_768);
-        assert!(note.contains("32768"), "the bar is still stated: {note}");
-        assert!(
-            !note.starts_with("at "),
-            "must not read as the served context: {note}"
+    fn nothing_suggested_names_the_loads_budget_or_why_there_is_none() {
+        let small = gglib_runtime::system::sized_against_on(false, &no_gpu(2 * GB));
+        assert_eq!(
+            nothing_suggested(small).lines().next(),
+            Some(
+                "No model in gglib's shortlist is served 8K of context or more in the 1.5 GiB \
+                 of this machine's 2.0 GiB of RAM (no GPU) a load sizes against."
+            )
         );
-    }
-
-    /// And the row that does speak for the launch names no number at all,
-    /// because none is knowable here.
-    #[test]
-    fn the_context_row_names_no_number() {
+        let unread = nothing_suggested(None);
         assert!(
-            !SERVED_CONTEXT.chars().any(|c| c.is_ascii_digit()),
-            "a number here would be a guess: {SERVED_CONTEXT}"
+            unread.starts_with(gglib_runtime::system::UNREADABLE_GPU),
+            "{unread}"
         );
-        assert!(!SERVED_CONTEXT_NOTE.chars().any(|c| c.is_ascii_digit()));
+        assert!(unread.ends_with("<huggingface-repo>"), "{unread}");
     }
 
+    /// The rows name the size the download takes and say the load's own
+    /// fit of it: the figures and the sentence a load of it says, not a
+    /// second reckoning (ADR 0009 opens by condemning a number unrelated to
+    /// the one served).
     #[test]
-    fn source_label_names_the_pool_the_budget_came_from() {
-        assert_eq!(source_label(&mem(Some(8 * GB), false)), "VRAM");
-        assert_eq!(source_label(&mem(Some(8 * GB), true)), "unified memory");
-        assert_eq!(source_label(&mem(None, false)), "system RAM");
+    fn the_rows_say_the_size_downloaded_and_the_loads_fit_of_it() {
+        let vm = no_gpu(79 * GB / 10);
+        let rec = gglib_runtime::system::recommend_on(false, &vm).expect("suggested");
+        let rows = recommendation_rows(&rec);
+        assert_eq!(
+            rows,
+            [
+                (
+                    "size",
+                    format_gib(rec.candidate.weights_bytes),
+                    Some("Q4_K_M, the size it downloads".to_owned())
+                ),
+                (
+                    "memory",
+                    rec.fit.note.clone().expect("a fit says its memory"),
+                    None
+                ),
+                ("context", rec.fit.sentence.clone(), None),
+            ]
+        );
     }
 }

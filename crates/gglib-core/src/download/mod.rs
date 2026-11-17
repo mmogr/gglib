@@ -14,8 +14,8 @@ pub(crate) mod types;
 
 // Re-export commonly used types
 pub use auto_pick::{
-    Contender, Fit, FitJudge, HeadFacts, MemoryFit, NoWeights, Pick, PickReason, VariantReader,
-    pick_variant,
+    Contender, Fit, FitJudge, HeadFacts, LoadFit, MemoryFit, NoWeights, Pick, PickReason,
+    VariantReader, pick_variant,
 };
 pub use completion::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, QueueRunSummary,

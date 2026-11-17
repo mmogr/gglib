@@ -13,6 +13,7 @@ import {
   formatSize,
   formatNumber,
   formatParamCount,
+  formatRecommendation,
   getHuggingFaceUrl,
   getHuggingFaceModelUrl,
 } from '../../../src/utils/format';
@@ -274,5 +275,34 @@ describe('getHuggingFaceModelUrl', () => {
   it('handles various model ID formats', () => {
     expect(getHuggingFaceModelUrl('user/model')).toBe('https://huggingface.co/user/model');
     expect(getHuggingFaceModelUrl('org/model-name-v1')).toBe('https://huggingface.co/org/model-name-v1');
+  });
+});
+
+describe('formatRecommendation', () => {
+  const rec = {
+    repo: 'bartowski/Qwen2.5-Coder-7B-Instruct-GGUF',
+    rationale: 'dependable tool calling from a mid-sized model',
+    requiredBytes: 5_681_315_040,
+    budgetBytes: Math.round(7.9 * 2 ** 30),
+    budgetSource: 'systemRam',
+    budgetLabel: 'system RAM',
+    headroomBytes: 0,
+    context: 32768,
+  };
+
+  it("says the size Get it downloads and the daemon's sentence for a load of it", () => {
+    expect(
+      formatRecommendation({
+        ...rec,
+        quantization: 'Q4_K_M',
+        fitSentence: "Fits this machine's 7.9 GiB of RAM (no GPU) with 32K context, of 32K trained.",
+      }),
+    ).toBe(
+      "Dependable tool calling from a mid-sized model. At Q4_K_M, fits this machine's 7.9 GiB of RAM (no GPU) with 32K context, of 32K trained.",
+    );
+  });
+
+  it('words a suggestion from an older hub by its figures', () => {
+    expect(formatRecommendation(rec)).toBe('Dependable tool calling from a mid-sized model. Needs 5.3 GiB of 7.9 GiB system RAM.');
   });
 });

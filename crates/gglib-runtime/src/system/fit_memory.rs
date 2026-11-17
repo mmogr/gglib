@@ -62,7 +62,7 @@ impl FitMemory {
 /// Whether `gpu` found a GPU an engine runs on: Metal, an NVIDIA card, or a
 /// Vulkan device that is a GPU (`vulkan_devices`), not a software
 /// rasteriser.
-pub(crate) const fn a_gpu_is_present(gpu: &GpuInfo) -> bool {
+pub const fn a_gpu_is_present(gpu: &GpuInfo) -> bool {
     gpu.has_metal || gpu.has_nvidia_gpu || gpu.has_vulkan
 }
 

@@ -113,7 +113,7 @@ pub fn fit_verdict(
 /// Read from [`FitInputs`] rather than the arguments, because the fit treats a
 /// zero weights figure or a zero-cost KV shape as missing and the verdict must
 /// agree with it.
-fn verdict(fitted: Option<u64>, inputs: &FitInputs) -> FitVerdict {
+pub(crate) fn verdict(fitted: Option<u64>, inputs: &FitInputs) -> FitVerdict {
     if let Some(ctx) = fitted {
         return if ctx > LOWEST_RUNG {
             FitVerdict::Fits { ctx }

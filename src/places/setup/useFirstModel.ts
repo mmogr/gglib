@@ -88,7 +88,7 @@ export function useFirstModel(rec: RecommendationDto | null, prepare: () => Prom
     try {
       // The queue attaches a download already under way and answers its id,
       // so a second Get it follows the first.
-      setDownloadId(await queueDownload(rec.repo));
+      setDownloadId(await queueDownload(rec.repo, rec.quantization));
       if (asked.current === mine) setChoice('get');
     } catch (err) {
       if (asked.current === mine) setQueueError(formatError(err));

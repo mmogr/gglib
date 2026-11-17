@@ -6,8 +6,8 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 
 use super::{
-    Contender, Fit, FitJudge, HeadFacts, MemoryFit, NoWeights, Pick, PickReason, VariantReader,
-    pick_variant,
+    Contender, Fit, FitJudge, HeadFacts, LoadFit, MemoryFit, NoWeights, Pick, PickReason,
+    VariantReader, pick_variant,
 };
 use crate::cache_config::{DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V};
 use crate::domain::FileType;
@@ -727,5 +727,44 @@ fn each_verdict_says_what_the_picker_found() {
                 have_bytes: 16 * GIB,
             }
         )
+    );
+}
+
+/// A size is judged at the KV cache types a launch uses, and with what a
+/// load counts beside its weights: at `f16` the same size serves less
+/// context than at the default `q8_0`, and a projector counted beside it
+/// less again.
+#[test]
+fn a_size_is_judged_at_the_launchs_kv_types_and_with_what_is_loaded_beside_it() {
+    use crate::cache_config::KvCacheType;
+    let model = qwen3_4b();
+    let q8 = LoadFit {
+        kv_types: (KvCacheType::Q8_0, KvCacheType::Q8_0),
+        ..MemoryFit {
+            budget_bytes: 8 * GIB,
+        }
+        .loading()
+    };
+    let f16 = LoadFit {
+        kv_types: (KvCacheType::F16, KvCacheType::F16),
+        ..q8
+    };
+    let ctx = |fit: LoadFit| match fit.judge(&model, false, QWEN3_4B_Q4_K_M).1 {
+        VariantFit::Fits { ctx: Some(ctx) } => ctx,
+        other => panic!("{other:?}"),
+    };
+    assert!(ctx(f16) < ctx(q8), "{} vs {}", ctx(f16), ctx(q8));
+    assert!(ctx(q8.beside(2 * GIB)) < ctx(q8));
+    assert_eq!(
+        MemoryFit {
+            budget_bytes: 8 * GIB
+        }
+        .judge(&model, false, QWEN3_4B_Q4_K_M),
+        MemoryFit {
+            budget_bytes: 8 * GIB
+        }
+        .loading()
+        .judge(&model, false, QWEN3_4B_Q4_K_M),
+        "a budget alone is the loading fit of weights alone"
     );
 }

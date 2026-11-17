@@ -176,6 +176,7 @@ const Steps: FC<StepsProps> = ({ status, rec, onDone }) => {
       return (
         <FirstModelStep
           rec={rec}
+          noneReason={status.noSuggestionReason ?? null}
           first={first}
           preparing={fast.fast === 'setting-up'}
           alreadyDone={had.model === true}

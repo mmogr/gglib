@@ -1,4 +1,4 @@
-//! The context a launch resolves to, and the fit's fallback.
+//! The context a launch resolves to.
 
 use super::*;
 use gglib_core::domain::ServerConfig;
@@ -191,35 +191,4 @@ fn resolve_launch_opts_never_inherits_a_stale_fitted_ctx_from_the_template() {
 
     assert_eq!(opts.fitted_ctx, Some(16_384));
     assert_eq!(resolved_ctx, 16_384);
-}
-
-/// The fallback: when the co-resident reservation leaves too little to fit at
-/// all, the model is sized against the undivided device rather than dropping
-/// to the built-in floor.
-///
-/// That machine is precisely the one where a full-ceiling secondary could
-/// never have loaded, so the reservation buys nothing and costs everything.
-#[test]
-fn a_budget_too_small_to_fit_falls_back_to_the_undivided_device() {
-    // Stands in for `fit_context`: refuses the smaller budget, fits the larger.
-    let fit = |budget: Option<u64>| budget.filter(|&b| b >= 6_000).map(|_| 32_768);
-
-    assert_eq!(
-        fit_or_undivided(fit, Some(4_000), Some(6_000)),
-        Some(32_768),
-        "a reservation that refuses must fall through to the undivided device"
-    );
-}
-
-/// The reserved budget wins whenever it fits — the fallback is an escape
-/// hatch, not a preference.
-#[test]
-fn the_reserved_budget_is_used_whenever_it_fits() {
-    let fit = |budget: Option<u64>| budget.map(|b| b / 1000);
-
-    assert_eq!(
-        fit_or_undivided(fit, Some(6_000), Some(24_000)),
-        Some(6),
-        "the undivided device must not be consulted when the reservation fits"
-    );
 }

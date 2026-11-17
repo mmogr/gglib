@@ -65,10 +65,10 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     );
 
     // Steps 1-2: what this machine is, and llama.cpp on it.
-    let memory = probe::run(ctx, args.yes).await?;
+    probe::run(ctx, args.yes).await?;
 
     // Step 3: the model. Either already here, or chosen, confirmed, downloaded.
-    let model = choose::run(ctx, memory.as_ref(), args.model.as_deref(), args.yes).await?;
+    let model = choose::run(ctx, args.model.as_deref(), args.yes).await?;
     // A convenience: a settings write that fails is no reason to stop `up`.
     match choose::adopt_as_default(ctx, model.id).await {
         Ok(true) => row("default", &model.name, Some("gglib q uses it")),
@@ -271,7 +271,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let ctx = crate::bootstrap::test_context(dir.path()).await;
 
-        let missed = choose::run(&ctx, None, Some("__no_such_model__"), true)
+        let missed = choose::run(&ctx, Some("__no_such_model__"), true)
             .await
             .expect_err("no such model")
             .to_string();

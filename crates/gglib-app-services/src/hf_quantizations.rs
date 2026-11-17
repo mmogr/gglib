@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use gglib_core::domain::{GgufMetadata, HeadMetadata, MissingInput, VariantFit};
 use gglib_core::download::{
-    Contender, FitJudge, GgufFileRole, HeadFacts, MemoryFit, VariantReader, pick_variant,
+    Contender, FitJudge, GgufFileRole, HeadFacts, LoadFit, MemoryFit, VariantReader, pick_variant,
 };
 use gglib_core::ports::HfQuantInfo;
 use gglib_core::ports::huggingface::largest_projector;
@@ -12,11 +12,12 @@ use crate::types::{HfImagePreview, HfProjector, HfQuantization, HfQuantizationsR
 
 /// The listing of `model_id`: each variant with its role, the projector a
 /// download fetches with it, and whether it fits this machine, judged as
-/// the picker judges it: its weights alone (the projector counted by
-/// neither), with the head its role was read from, against `budget_bytes`,
-/// the budget the picker uses (`download_budget`), and by its files alone
-/// when `is_image`. A model with no head read, or a machine whose memory
-/// could not be read, says what is missing rather than guessing.
+/// the picker judges it and a load counts it: its weights and what is loaded
+/// beside them ([`beside_bytes`]), with the head its role was read from,
+/// against `budget_bytes`, the budget the picker uses (`download_budget`),
+/// and by its files alone when `is_image`. A model with no head read, or a
+/// machine whose memory could not be read, says what is missing rather than
+/// guessing.
 pub(crate) fn quantizations_response(
     model_id: &str,
     quants: Vec<(HfQuantInfo, Option<HeadMetadata>)>,
@@ -29,6 +30,7 @@ pub(crate) fn quantizations_response(
         file_path: p.file_paths.first().cloned().unwrap_or_default(),
         size_bytes: p.total_size,
     });
+    let beside = beside_bytes(&infos, image.as_ref());
     HfQuantizationsResponse {
         image,
         model_id: model_id.to_string(),
@@ -37,8 +39,9 @@ pub(crate) fn quantizations_response(
             .map(|(q, head)| {
                 let is_model = q.role.is_none_or(GgufFileRole::is_weights);
                 let projector = is_model.then(|| projector.clone()).flatten();
-                let fit = is_model
-                    .then(|| variant_fit(head.as_ref(), is_image, q.total_size, budget_bytes));
+                let fit = is_model.then(|| {
+                    variant_fit(head.as_ref(), is_image, q.total_size, budget_bytes, beside)
+                });
                 HfQuantization {
                     file_path: q.file_paths.first().cloned().unwrap_or_default(),
                     size_bytes: q.total_size,
@@ -93,10 +96,12 @@ impl VariantReader for ListedHeads<'_> {
 /// `general.file_type` (llama-quantize appends it past the first 64 KiB),
 /// where the download reads further and would choose differently. The
 /// listing then asks the download's own picker
-/// ([`gglib_download::download_pick`]).
+/// ([`gglib_download::download_pick`]). Each size is judged with `beside`
+/// counted beside its weights, what a load counts ([`beside_bytes`]).
 pub(crate) async fn listed_pick(
     quants: &[(HfQuantInfo, Option<HeadMetadata>)],
     is_image: bool,
+    beside: u64,
     budget_bytes: Option<u64>,
 ) -> Option<usize> {
     let untold = |(q, head): &(HfQuantInfo, Option<HeadMetadata>)| {
@@ -119,7 +124,7 @@ pub(crate) async fn listed_pick(
         heads: quants.iter().map(|(_, head)| head.as_ref()).collect(),
         is_image,
     };
-    let judge = budget_bytes.map(|budget_bytes| MemoryFit { budget_bytes });
+    let judge = budget_bytes.map(|budget_bytes| load_fit(budget_bytes, beside));
     pick_variant(
         &contenders,
         &reader,
@@ -130,20 +135,52 @@ pub(crate) async fn listed_pick(
     .map(|pick| pick.index)
 }
 
+/// What a load of any size of a repository counts beside its weights: the
+/// companions an image model draws with (`image`, its preview), else the
+/// projector a download fetches with each size, which a load counts
+/// (`resident_bytes`). An image family's compute margin is not counted: a
+/// load reserves it only to decide whether a model may stay beside another.
+pub(crate) fn beside_bytes(infos: &[HfQuantInfo], image: Option<&HfImagePreview>) -> u64 {
+    image.map_or_else(
+        || largest_projector(infos).map_or(0, |p| p.total_size),
+        |preview| preview.companions.iter().map(|c| c.size_bytes).sum(),
+    )
+}
+
+/// The listing with no context of the fit's named: what it says where the
+/// user's `default-context-size` outranks the fit, so a load serves that.
+/// Whether each size fits is unchanged; only the number goes.
+pub(crate) fn name_no_context(response: &mut HfQuantizationsResponse) {
+    for variant in &mut response.quantizations {
+        if let Some(fit) = variant.fit.map(VariantFit::without_context) {
+            variant.fit = Some(fit);
+            variant.fit_word = Some(fit.word());
+        }
+    }
+}
+
+/// The picker's judge against `budget_bytes`, counting `beside` beside
+/// every size's weights.
+fn load_fit(budget_bytes: u64, beside: u64) -> LoadFit {
+    MemoryFit { budget_bytes }.loading().beside(beside)
+}
+
 /// Whether a model whose weights take `weights_bytes` fits in
-/// `budget_bytes`, judged as the picker judges it.
+/// `budget_bytes` with `beside` loaded beside them, judged as the picker
+/// judges it.
 fn variant_fit(
     head: Option<&HeadMetadata>,
     is_image: bool,
     weights_bytes: u64,
     budget_bytes: Option<u64>,
+    beside: u64,
 ) -> VariantFit {
     let Some(budget_bytes) = budget_bytes else {
         return VariantFit::Unknown {
             missing: MissingInput::Budget,
         };
     };
-    let fit = MemoryFit { budget_bytes };
+    let fit = load_fit(budget_bytes, beside);
     // An image model is judged by its files alone, header or no header: its
     // header holds no trained context to miss.
     if is_image {
@@ -389,44 +426,113 @@ mod tests {
         }
     }
 
-    /// A model's fit is the picker's judgement of its weights alone, the
-    /// one `gglib model download <repo>` picks by: the projector fetched
-    /// beside them, however large, counts for neither.
+    /// A model's fit counts the projector a download fetches with it, as a
+    /// load counts it: a size that fits alone at one context fits with its
+    /// projector at less, or not at all, and the listing says the latter.
+    /// The size itself is still the weights alone.
     #[test]
-    fn a_models_fit_is_the_pickers_judgement_of_its_weights_alone() {
+    fn a_models_fit_counts_the_projector_fetched_with_it() {
         let weights = 2_497_281_312;
         let budget = 8_u64 << 30;
-        let listed = quantizations_response(
+        for projector_bytes in [3_u64 << 30, 6 << 30] {
+            let listed = quantizations_response(
+                "o/r",
+                vec![
+                    (quant("Q4_K_M", 1, weights), Some(shaped_head(true))),
+                    (
+                        projector("mmproj-F16.gguf", projector_bytes),
+                        Some(shaped_head(false)),
+                    ),
+                ],
+                false,
+                None,
+                Some(budget),
+            );
+            let alone = MemoryFit {
+                budget_bytes: budget,
+            };
+            let with_projector = alone.loading().beside(projector_bytes).judge(
+                &shaped_head(true).metadata,
+                false,
+                weights,
+            );
+            assert_eq!(listed.quantizations[0].fit, Some(with_projector.1));
+            assert_ne!(
+                with_projector.1,
+                alone.judge(&shaped_head(true).metadata, false, weights).1,
+                "{projector_bytes}: the projector must count"
+            );
+            assert_eq!(listed.quantizations[0].size_bytes, weights);
+        }
+    }
+
+    /// With a `default-context-size` set a load serves that, so the listing
+    /// names no context of the fit's; what fits and what does not is kept.
+    #[test]
+    fn a_set_default_context_size_names_no_context() {
+        let mut listed = quantizations_response(
             "o/r",
             vec![
-                (quant("Q4_K_M", 1, weights), Some(shaped_head(true))),
-                (
-                    projector("mmproj-F16.gguf", 6 << 30),
-                    Some(shaped_head(false)),
-                ),
+                (quant("Q4_K_M", 1, 2_497_281_312), Some(shaped_head(true))),
+                (quant("F32", 1, 64 << 30), Some(shaped_head(true))),
             ],
             false,
             None,
-            Some(budget),
+            Some(8 << 30),
         );
-
-        let picker = MemoryFit {
-            budget_bytes: budget,
-        }
-        .judge(&shaped_head(true).metadata, false, weights);
         assert!(matches!(
             listed.quantizations[0].fit,
             Some(VariantFit::Fits { ctx: Some(_) })
         ));
-        assert_eq!(listed.quantizations[0].fit, Some(picker.1));
+        let too_big = listed.quantizations[1].fit;
+        name_no_context(&mut listed);
         assert_eq!(
-            listed.quantizations[0]
-                .projector
-                .as_ref()
-                .map(|p| p.size_bytes),
-            Some(6 << 30),
-            "the projector is still named"
+            listed.quantizations[0].fit,
+            Some(VariantFit::Fits { ctx: None })
         );
+        assert_eq!(listed.quantizations[0].fit_word.as_deref(), Some("fits"));
+        assert_eq!(listed.quantizations[1].fit, too_big);
+    }
+
+    /// Beside an image model's weights a load counts every companion it
+    /// draws with, present or not; beside a chat model's, the projector a
+    /// download fetches.
+    #[test]
+    fn what_is_counted_beside_the_weights() {
+        let companion = |size_bytes, present| crate::types::HfCompanion {
+            role: gglib_core::domain::ComponentRole::Vae,
+            repo: "o/vae".to_owned(),
+            file_path: "vae.safetensors".to_owned(),
+            size_bytes,
+            present,
+        };
+        let preview = HfImagePreview {
+            family: gglib_core::domain::ImageFamily::Flux1,
+            companions: vec![companion(300, true), companion(700, false)],
+            fetch_bytes: 700,
+        };
+        let infos = vec![quant("Q8_0", 1, 8_000), projector("mmproj-F16.gguf", 900)];
+        assert_eq!(beside_bytes(&infos, Some(&preview)), 1_000);
+        assert_eq!(beside_bytes(&infos, None), 900);
+        assert_eq!(beside_bytes(&infos[..1], None), 0);
+    }
+
+    /// The listing's pick judges each size with the projector it is
+    /// fetched with: one that fits only alone is passed over.
+    #[tokio::test]
+    async fn the_pick_counts_the_projector_fetched_with_it() {
+        let typed = |file_type: u32| {
+            let mut head = shaped_head(true);
+            head.metadata.file_type = Some(gglib_core::domain::FileType(file_type));
+            Some(head)
+        };
+        let listed = vec![
+            (quant("Q4_K_M", 1, 4 << 30), typed(15)),
+            (quant("Q8_0", 1, 7 << 30), typed(7)),
+        ];
+        let budget = Some(10_u64 << 30);
+        assert_eq!(listed_pick(&listed, false, 0, budget).await, Some(1));
+        assert_eq!(listed_pick(&listed, false, 2 << 30, budget).await, Some(0));
     }
 
     /// The listing marks the variant the download would take: the largest
@@ -448,8 +554,11 @@ mod tests {
             (quant("BF16", 1, 8 << 30), typed(32)),
             (quant("F32", 1, 64 << 30), typed(0)),
         ];
-        assert_eq!(listed_pick(&listed, false, Some(32 << 30)).await, Some(1));
-        assert_eq!(listed_pick(&listed, false, None).await, Some(0));
+        assert_eq!(
+            listed_pick(&listed, false, 0, Some(32 << 30)).await,
+            Some(1)
+        );
+        assert_eq!(listed_pick(&listed, false, 0, None).await, Some(0));
 
         // As real repositories ship them: the quantized heads stop before
         // their type. The listing's heads cannot tell, and mark nothing; the
@@ -466,7 +575,7 @@ mod tests {
             (quant("Q8_0", 1, 7 << 30), untyped()),
             (quant("BF16", 1, 8 << 30), untyped()),
         ];
-        assert_eq!(listed_pick(&shipped, false, Some(32 << 30)).await, None);
+        assert_eq!(listed_pick(&shipped, false, 0, Some(32 << 30)).await, None);
         let typed_past_the_head =
             |path: &str, file_type: u8| (path.to_owned(), vec![file_type; 70 << 10]);
         let hub = FakeHub {
@@ -495,7 +604,7 @@ mod tests {
         let mut helper = quant("MTP", 1, 1 << 30);
         helper.role = Some(GgufFileRole::Sidecar);
         assert_eq!(
-            listed_pick(&[(helper, None)], false, Some(32 << 30)).await,
+            listed_pick(&[(helper, None)], false, 0, Some(32 << 30)).await,
             None
         );
     }
@@ -551,6 +660,7 @@ mod tests {
             hf: Arc::new(MockHfClient),
             gguf_parser: Arc::new(gglib_core::ports::huggingface::fake_hub::RoleParser),
             models_directory: None,
+            core: None,
         });
 
         let listed = ops.get_model_quantizations("o/r").await.unwrap();

@@ -28,6 +28,7 @@ pub(super) fn listing_ops(ctx: &CliContext, models_directory: Option<PathBuf>) -
         hf: Arc::clone(&ctx.hf_client),
         gguf_parser: Arc::clone(&ctx.gguf_parser),
         models_directory,
+        core: Some(Arc::clone(&ctx.app)),
     })
 }
 

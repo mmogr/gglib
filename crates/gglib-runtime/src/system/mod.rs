@@ -3,6 +3,7 @@ mod deps;
 mod fit_memory;
 pub(crate) mod gpu;
 mod host;
+mod suggest;
 pub(crate) mod vulkan_devices;
 
 use gglib_core::host::HostOs;
@@ -12,10 +13,15 @@ use gglib_core::utils::system::{
     dependency_report, needs_on, parse_os_release,
 };
 
-pub use fit_memory::FitMemory;
 pub(crate) use fit_memory::fit_memory_of;
+pub use fit_memory::{FitMemory, a_gpu_is_present};
 use gpu::{detect_gpu_info, get_system_memory_info};
 pub use host::{free_disk_bytes, host_facts, this_machine_name};
+pub use suggest::{
+    UNREADABLE_GPU, download_budget, download_budget_on, launching, no_suggestion_reason,
+    no_suggestion_reason_on, recommend_here, recommend_on, recommend_with, sized_against,
+    sized_against_on,
+};
 
 /// Default implementation of `SystemProbePort`.
 ///
@@ -275,13 +281,28 @@ impl SystemProbePort for DefaultSystemProbe {
 /// from the admission path. Warm it at startup — see `warm_device_memory`.
 #[must_use]
 pub fn fit_memory() -> FitMemory {
-    static MEMORY: std::sync::OnceLock<FitMemory> = std::sync::OnceLock::new();
-    *MEMORY.get_or_init(|| {
+    let machine = detected();
+    fit_memory_of(machine.gpu_present, &machine.memory)
+}
+
+/// What was detected of this machine: whether it has a GPU an engine runs
+/// on, and its memory.
+struct Detected {
+    gpu_present: bool,
+    memory: SystemMemoryInfo,
+}
+
+/// [`Detected`], probed once and kept: every answer sized to this machine
+/// ([`fit_memory()`], [`download_budget`], [`recommend_here`]) reads the one
+/// detection.
+fn detected() -> &'static Detected {
+    static MACHINE: std::sync::OnceLock<Detected> = std::sync::OnceLock::new();
+    MACHINE.get_or_init(|| {
         let gpu = detect_gpu_info();
-        fit_memory_of(
-            fit_memory::a_gpu_is_present(&gpu),
-            &gpu::memory_info_for(&gpu),
-        )
+        Detected {
+            gpu_present: fit_memory::a_gpu_is_present(&gpu),
+            memory: gpu::memory_info_for(&gpu),
+        }
     })
 }
 
