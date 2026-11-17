@@ -143,11 +143,13 @@ pub enum Failure {
     /// `name` has no `version` of its symbols (`libm.so.6`, `GLIBC_2.43`).
     /// The program was built for a newer system, and installing it again
     /// brings the same build. Linux only: glibc's check of symbol versions.
+    /// Boxed strings, which are a pointer and a length: this is the largest
+    /// failure, and an error that carries one is held to a size.
     #[error(
         "this system's {name} is older than it needs: it asks for {version}, so it was built \
          for a newer system than this one"
     )]
-    NewerLibraryNeeded { name: String, version: String },
+    NewerLibraryNeeded { name: Box<str>, version: Box<str> },
     /// It did not exit within its wait.
     #[error("it did not answer in time")]
     TimedOut,
@@ -294,8 +296,8 @@ fn newer_library_needed(stderr: &str) -> Option<Failure> {
     let library = before.rsplit(": ").next().unwrap_or(before);
     let name = library.rsplit('/').next().unwrap_or(library);
     Some(Failure::NewerLibraryNeeded {
-        name: name.to_owned(),
-        version: version.to_owned(),
+        name: name.into(),
+        version: version.into(),
     })
 }
 
