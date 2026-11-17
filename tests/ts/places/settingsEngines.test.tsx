@@ -382,6 +382,38 @@ describe.each(KINDS)('the %s row', (kind) => {
     expect(await screen.findByText(`Failed to install ${e.product}: no asset`)).toBeInTheDocument();
   });
 
+  it("says an install whose engine cannot start once, in its status's words, with Repair, and nothing of it once Repair has made it work", async () => {
+    // The install puts the files there and its Verify finds the engine
+    // cannot start for want of Microsoft's runtime: the install completes,
+    // and the status says why and offers the repair.
+    const reason = `${e.server} cannot start: a library it needs is missing. Windows does not say which; on a new machine it is most likely the Microsoft Visual C++ Redistributable (x64).`;
+    fake.statuses[kind] = [status(kind, 'missing'), status(kind, 'atPin', { broken: reason, fix: RUNTIME_FIX })];
+    fake.repair = async () => {
+      fake.statuses = { llama: [status('llama', 'atPin')], stable_diffusion: [status('stable_diffusion', 'atPin')] };
+      return { outcome: 'installed', works: true, says: `${RUNTIME_SAYS} ${e.server} works now.` };
+    };
+    renderApp('/settings/engines');
+    const r = await row(e.product);
+    await userEvent.click(await r.findByRole('button', { name: 'Install' }));
+    fake.streams[kind][0].onEvent({ type: 'completed', version: e.pin });
+
+    expect(await r.findByText(RUNTIME_FIX.offer)).toBeInTheDocument();
+    expect(r.getByText('Installed, not working')).toBeInTheDocument();
+    expect(r.getByText(reason)).toBeInTheDocument();
+    const section = await screen.findByRole('region', { name: e.product });
+    expect(section.textContent?.split(`${e.server} cannot start`)).toHaveLength(2);
+    expect(section).not.toHaveTextContent(/internal error|Failed to install/);
+    expect(r.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+
+    await userEvent.click(r.getByRole('button', { name: 'Repair' }));
+
+    expect(await r.findByText(`${RUNTIME_SAYS} ${e.server} works now.`)).toBeInTheDocument();
+    await waitFor(() => expect(r.queryByText('Installed, not working')).not.toBeInTheDocument());
+    expect(r.getByText('Installed')).toBeInTheDocument();
+    expect(section).not.toHaveTextContent(/cannot start|internal error|Failed to install/);
+    expect(r.queryByRole('button', { name: 'Repair' })).not.toBeInTheDocument();
+  });
+
   it('ends an install whose stream closed with no result, with a reason (SU-1)', async () => {
     fake.statuses[kind] = [status(kind, 'missing')];
     renderApp('/settings/engines');

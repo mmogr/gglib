@@ -8,7 +8,10 @@
  * not, then each is read again. The installs are the daemon's stream in
  * both builds (SU-1), the one the Settings engine card and the Library
  * banner read, and a stream that closes without a result ends with a
- * reason. stable-diffusion.cpp's failure is only a warning (SU-2). Where
+ * reason. stable-diffusion.cpp's failure is only a warning (SU-2), and an
+ * install's failure is forgotten once its engine is read working. An
+ * install whose engine is there but cannot run completes: its status says
+ * why, with the repair, and no failure is held for it. Where
  * the install is a source build, llama.cpp is read again every few seconds
  * until a terminal has built it (`recheck` reads it at once). An engine that
  * does not work for a reason gglib can repair is repaired on request
@@ -36,7 +39,10 @@ export interface EngineView {
   status: EngineStatus | null;
   /** The install's last event while it runs; `null` when none runs. */
   installing: LlamaProgressEvent | 'starting' | null;
-  /** Why the last install did not finish, in the daemon's words or the stream's end. */
+  /**
+   * Why the last install did not finish, in the daemon's words or the
+   * stream's end; null again once the engine is read working.
+   */
   error: string | null;
   /** Whether the daemon's repair of it runs. */
   repairing: boolean;
@@ -109,7 +115,11 @@ export function useEngines(): SetupEngines {
       try {
         const found = await Promise.all(kinds.map((kind) => getEngineStatus(kind)));
         const byKind = Object.fromEntries(kinds.map((kind, i) => [kind, found[i]]));
-        for (const kind of kinds) patch(kind, { status: byKind[kind] });
+        // An engine read working has nothing left of an install that failed for it.
+        for (const kind of kinds) {
+          const status = byKind[kind];
+          patch(kind, working(status) ? { status, error: null } : { status });
+        }
         if (live.current) setReadError(null);
         return byKind;
       } catch (err) {

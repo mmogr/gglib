@@ -11,7 +11,8 @@ use async_trait::async_trait;
 use gglib_core::ports::{
     Admission, LaunchOverrides, ModelRuntimeError, ProcessHandle, RunningTarget,
 };
-use gglib_runtime::engine::{Fix, FixOffer, PinStanding, PinState};
+use gglib_core::utils::process::bounded::Failure;
+use gglib_runtime::engine::{Fix, FixOffer, PinStanding, PinState, validate_engine_at};
 use gglib_runtime::llama::{LlamaBuildInfo, LlamaPrebuiltInfo, LlamaRuntimeInfo, LlamaStatus};
 use gglib_runtime::sd::PINNED_SD_RELEASE;
 
@@ -232,6 +233,67 @@ fn an_engine_without_the_visual_cpp_runtime_offers_it() {
         "Waiting for Windows' permission to install the Microsoft Visual C++ Redistributable \
          (x64); if no question appears, look for a flashing shield on the taskbar."
     );
+}
+
+/// An install whose files are in place but whose engine its Verify finds
+/// cannot run (a Windows machine without Microsoft's runtime) did install:
+/// it is not a failed install, and not an internal error, since the
+/// engine's status says why it does not work and offers the repair. A
+/// folder where the binary should be is the check's `NotExecutable` on every
+/// OS, with no program run.
+#[test]
+fn an_installed_engine_that_cannot_run_is_not_a_failed_install() {
+    let place = tempfile::tempdir().unwrap();
+    for kind in [RuntimeKind::Llama, RuntimeKind::StableDiffusion] {
+        let not_working = validate_engine_at(kind, place.path()).unwrap_err();
+        assert_eq!(not_working.failure, Failure::NotExecutable);
+
+        let ended = install_ended(
+            kind,
+            Err(anyhow::Error::from(not_working).context("verifying the install")),
+        );
+
+        assert!(
+            matches!(ended, InstallEnded::NotWorking(_)),
+            "{kind:?}: {ended:?}"
+        );
+    }
+}
+
+/// A genuine failure is still the install's, in its words: nothing put
+/// there (a release with no asset for this machine), or a Verify that found
+/// no binary where the install should have put it.
+#[test]
+fn an_install_that_put_nothing_there_failed() {
+    let place = tempfile::tempdir().unwrap();
+    let not_found =
+        validate_engine_at(RuntimeKind::Llama, &place.path().join("llama-server")).unwrap_err();
+    assert_eq!(not_found.failure, Failure::NotFound);
+
+    let InstallEnded::Failed(e) = install_ended(RuntimeKind::Llama, Err(not_found.into())) else {
+        panic!("an install with no binary failed");
+    };
+    assert!(
+        e.to_string()
+            .starts_with("internal error: Failed to install llama.cpp: llama-server not found at"),
+        "{e}"
+    );
+
+    let InstallEnded::Failed(e) = install_ended(
+        RuntimeKind::StableDiffusion,
+        Err(anyhow::anyhow!("no asset")),
+    ) else {
+        panic!("an install with no asset failed");
+    };
+    assert_eq!(
+        e.to_string(),
+        "internal error: Failed to install stable-diffusion.cpp: no asset"
+    );
+
+    assert!(matches!(
+        install_ended(RuntimeKind::Llama, Ok(())),
+        InstallEnded::Completed
+    ));
 }
 
 /// The repair route makes the runtime's install and nothing else: a
