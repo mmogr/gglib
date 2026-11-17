@@ -25,7 +25,9 @@
 # with `jq -S --indent 2`, the form it is kept in, and the commit subject is
 # printed: `chore(contracts): approve <key> at <value>`, with the keys and
 # values only; the note stays out of it, so nothing a person wrote can link,
-# mention or close anything from a subject.
+# mention or close anything from a subject. A value that is a list is named
+# by its length, `a list of 266`, as check_adr_readings.sh names it; the file
+# still holds every item.
 #
 # approve-reading.yml runs it on the pull request's files with main's copy of
 # this script, so a branch cut before the script existed is approved like any
@@ -116,7 +118,8 @@ approve() {
     else
       jq -S --indent 2 --arg k "$key" --arg n "$note" --slurpfile o "$observed" \
         '.[$k] = {approved: $o[0][$k].value, note: $n}' "$tmp" >"$tmp.next"
-      subjects+=("approve $key at $(jq -c --arg k "$key" '.[$k].value' "$observed")")
+      subjects+=("approve $key at $(jq -r --arg k "$key" \
+        '.[$k].value | if type == "array" then "a list of \(length)" else tojson end' "$observed")")
     fi
     mv "$tmp.next" "$tmp"
   done
@@ -134,6 +137,7 @@ selftest() {
   jq -n '{ moved: {value: 261, adr: "0012", criterion: "c", how_read: "h", if_moved: "m"},
            flag: {value: true, adr: "0002", criterion: "c", how_read: "h", if_moved: "m"},
            same: {value: 0.8, adr: "0003", criterion: "c", how_read: "h", if_moved: "m"},
+           options: {value: ["--a", "--b", "--c"], adr: "0012", criterion: "c", how_read: "h", if_moved: "m"},
            dead: {value: 2},
            plain: {value: 6} }' >"$dir/observed.json"
   # `dead` is a reading that lost its ADR; `gone` one the recording no longer has.
@@ -146,14 +150,15 @@ selftest() {
     'Looks fine to me.' \
     $'/approve moved keeping, because the tunnel reaches the daemon\r' \
     '  /approve flag first reading, b2' \
+    '/approve options first reading, b2' \
     '/approve gone remove' \
     '/approve dead remove' >"$dir/good.txt"
   if ! out=$(approve "$dir/observed.json" "$dir/approvals.json" "$dir/good.txt" 2>&1); then
     echo "❌ self-test: a good comment was refused: $out"; status=1
   fi
-  [ "$out" = "chore(contracts): approve moved at 261, approve flag at true, remove gone, remove dead" ] \
+  [ "$out" = "chore(contracts): approve moved at 261, approve flag at true, approve options at a list of 3, remove gone, remove dead" ] \
     || { echo "❌ self-test: subject was: $out"; status=1; }
-  [ "$(jq -c . "$dir/approvals.json")" = '{"flag":{"approved":true,"note":"first reading, b2"},"moved":{"approved":261,"note":"keeping, because the tunnel reaches the daemon"},"same":{"approved":0.8,"note":"first reading, b1"}}' ] \
+  [ "$(jq -c . "$dir/approvals.json")" = '{"flag":{"approved":true,"note":"first reading, b2"},"moved":{"approved":261,"note":"keeping, because the tunnel reaches the daemon"},"options":{"approved":["--a","--b","--c"],"note":"first reading, b2"},"same":{"approved":0.8,"note":"first reading, b1"}}' ] \
     || { echo "❌ self-test: approvals.json was not written as expected:"; cat "$dir/approvals.json"; status=1; }
 
   local before='{"moved":{"approved":258,"note":"first reading, b1"},"same":{"approved":0.8,"note":"first reading, b1"}}'

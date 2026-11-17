@@ -7,6 +7,12 @@
   "reasoning_split": {
     "value": true
   },
+  "thinking_off_as_gglib_sends_it": {
+    "value": true
+  },
+  "thinking_off_by_budget_alone": {
+    "value": true
+  },
   "tool_call_native": {
     "value": true
   },

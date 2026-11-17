@@ -5,10 +5,12 @@
 use gglib_core::utils::system::GpuInfo;
 
 use super::release::{
-    CPU_WARNING, SD_RELEASE, SdAsset, sd_download_dir, sd_platform_asset, sd_wanted,
+    CPU_WARNING, PINNED_SD_LINUX_GLIBC, SD_RELEASE, SdAsset, glibc_too_old, sd_download_dir,
+    sd_platform_asset, sd_wanted,
 };
 use super::{PINNED_SD_RELEASE, SD_RELEASE_ENV};
 use crate::binary_install::{AssetChoice, ReleaseSelector, selector_from_override};
+use crate::system::glibc::Glibc;
 use crate::system::vulkan_devices::{fixtures, vulkan_gpu_present};
 
 /// Every asset of the pinned release, as GitHub lists them.
@@ -188,6 +190,70 @@ fn each_platform_matches_exactly_one_asset_of_the_pinned_release() {
     assert_eq!(not_matched_once(&assets), []);
 }
 
+/// What is wrong with `floor` against `reading`, the newest
+/// `GLIBC_<version>` the installed Linux build names, as CI saved it: a
+/// reading that is missing, one that is no version, or another version.
+fn floor_against(floor: Glibc, reading: std::io::Result<String>) -> Result<(), String> {
+    let said = reading.map_err(|e| format!("no reading of the installed Linux build: {e}"))?;
+    let asks = Glibc::parse(&said).ok_or_else(|| format!("{said:?} is no glibc version"))?;
+    if asks == floor {
+        return Ok(());
+    }
+    Err(format!(
+        "{PINNED_SD_RELEASE}'s Linux build asks for glibc {asks} and PINNED_SD_LINUX_GLIBC is \
+         {floor}: it, and the README's line on which Linux the image download needs, move \
+         with the pin"
+    ))
+}
+
+/// The floor is what the pinned Linux build asks for, read from the build
+/// itself. CI's Linux leg installs it and saves the newest `GLIBC_<version>`
+/// any of its files names as `sd-glibc.txt` in `GGLIB_ENGINE_HELP_DIR`. A
+/// floor below it lets a download through that cannot start; one above it
+/// refuses a download that runs. Only Linux installs a Linux build, so only
+/// there is a reading expected, and there a missing one fails.
+#[test]
+#[ignore = "reads what the installed pinned Linux build asks of glibc; CI sets GGLIB_ENGINE_HELP_DIR"]
+fn the_floor_is_the_glibc_the_pinned_linux_build_asks_for() {
+    if !cfg!(target_os = "linux") {
+        return;
+    }
+    let dir = std::env::var_os("GGLIB_ENGINE_HELP_DIR")
+        .map(std::path::PathBuf::from)
+        .expect("GGLIB_ENGINE_HELP_DIR names the folder CI saved the reading in");
+    let reading = std::fs::read_to_string(dir.join("sd-glibc.txt"));
+    assert_eq!(floor_against(PINNED_SD_LINUX_GLIBC, reading), Ok(()));
+}
+
+/// The check above fails on a reading that is missing or is no version, and
+/// on a floor either side of what the build asks for; it passes on the one
+/// version. Run everywhere, since the check itself runs only on CI's Linux
+/// leg.
+#[test]
+fn a_floor_is_held_to_the_reading_and_a_missing_reading_fails() {
+    let floor = Glibc(2, 43);
+    let reads = |text: &str| Ok(text.to_owned());
+    assert_eq!(floor_against(floor, reads("GLIBC_2.43\n")), Ok(()));
+    for (reading, wrong) in [
+        (
+            reads("GLIBC_2.38\n"),
+            "asks for glibc 2.38 and PINNED_SD_LINUX_GLIBC is 2.43",
+        ),
+        (
+            reads("GLIBC_2.45\n"),
+            "asks for glibc 2.45 and PINNED_SD_LINUX_GLIBC is 2.43",
+        ),
+        (reads(""), "\"\" is no glibc version"),
+        (
+            Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
+            "no reading of the installed Linux build",
+        ),
+    ] {
+        let found = floor_against(floor, reading).expect_err(wrong);
+        assert!(found.contains(wrong), "{found}");
+    }
+}
+
 #[test]
 fn the_release_refuses_a_second_match_rather_than_taking_the_first() {
     assert_eq!(SD_RELEASE.choice, AssetChoice::ExactlyOne);
@@ -281,6 +347,100 @@ fn a_platform_with_no_asset_says_so() {
     assert_eq!(
         sd_platform_asset("freebsd", "x86_64", &none),
         Err("stable-diffusion.cpp publishes no pre-built build for freebsd".to_owned())
+    );
+}
+
+fn the_pin() -> ReleaseSelector {
+    ReleaseSelector::Tag(PINNED_SD_RELEASE.to_owned())
+}
+
+/// The floor a test compares against: what the builds made on Ubuntu 26.04
+/// ask for, whatever the pin asks for today.
+const NEEDS: Glibc = Glibc(2, 43);
+
+/// Ubuntu 24.04 has glibc 2.39 and Debian 13 has 2.41: the pinned Linux
+/// build is not downloaded there, and the reason names both versions. It is
+/// the sentence every surface puts its own words around ("…; building
+/// sd-server from source instead.").
+#[test]
+fn the_linux_download_is_refused_where_glibc_is_older_than_it_needs() {
+    for (has, said) in [(Glibc(2, 39), "2.39"), (Glibc(2, 41), "2.41")] {
+        assert_eq!(
+            glibc_too_old("linux", &the_pin(), NEEDS, || Some(has)),
+            Some(format!(
+                "stable-diffusion.cpp's pre-built Linux build needs glibc 2.43 or newer, and \
+                 this system has glibc {said}"
+            ))
+        );
+    }
+}
+
+#[test]
+fn the_linux_download_is_taken_where_glibc_is_what_it_needs_or_newer() {
+    for has in [Glibc(2, 43), Glibc(2, 44), Glibc(3, 0)] {
+        assert_eq!(
+            glibc_too_old("linux", &the_pin(), NEEDS, || Some(has)),
+            None,
+            "{has}"
+        );
+    }
+}
+
+/// A glibc that cannot be read refuses nothing: the install's own check
+/// says why a server cannot start.
+#[test]
+fn an_unread_glibc_refuses_nothing() {
+    assert_eq!(glibc_too_old("linux", &the_pin(), NEEDS, || None), None);
+}
+
+/// The floor is the pin's. A release an override names may have been built
+/// against another glibc, so nothing is said of it, and the system is not
+/// even asked.
+#[test]
+fn a_release_an_override_names_is_not_held_to_the_pins_floor() {
+    for selector in [
+        ReleaseSelector::Tag("master-1043-3be2378".to_owned()),
+        ReleaseSelector::Latest,
+    ] {
+        assert_eq!(
+            glibc_too_old("linux", &selector, NEEDS, || panic!("not asked")),
+            None,
+            "{selector:?}"
+        );
+    }
+}
+
+/// macOS and Windows have no glibc, and are not asked for one.
+#[test]
+fn only_linux_is_held_to_a_glibc() {
+    for os in ["macos", "windows"] {
+        assert_eq!(
+            glibc_too_old(os, &the_pin(), NEEDS, || panic!("not asked")),
+            None,
+            "{os}"
+        );
+    }
+}
+
+/// The pin's own floor refuses a system older than it and no other: the
+/// constant is the one the refusal is given.
+#[test]
+fn the_pins_floor_is_a_glibc_this_decade_shipped() {
+    assert!(
+        PINNED_SD_LINUX_GLIBC >= Glibc(2, 31),
+        "{PINNED_SD_LINUX_GLIBC}"
+    );
+    assert!(
+        PINNED_SD_LINUX_GLIBC < Glibc(3, 0),
+        "{PINNED_SD_LINUX_GLIBC}"
+    );
+    let older = Glibc(PINNED_SD_LINUX_GLIBC.0, PINNED_SD_LINUX_GLIBC.1 - 1);
+    assert!(glibc_too_old("linux", &the_pin(), PINNED_SD_LINUX_GLIBC, || Some(older)).is_some());
+    assert_eq!(
+        glibc_too_old("linux", &the_pin(), PINNED_SD_LINUX_GLIBC, || Some(
+            PINNED_SD_LINUX_GLIBC
+        )),
+        None
     );
 }
 

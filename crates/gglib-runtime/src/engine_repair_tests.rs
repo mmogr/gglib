@@ -104,7 +104,8 @@ fn the_runtime_is_never_offered_off_windows() {
 }
 
 /// A damaged binary is reinstalled; a named library, which may be the
-/// system's, a time-out and a refusal to start have no repair.
+/// system's, one the system has too old a copy of, a time-out and a
+/// refusal to start have no repair.
 #[test]
 fn other_failures_carry_a_reinstall_or_nothing() {
     let reinstall = [
@@ -124,6 +125,10 @@ fn other_failures_carry_a_reinstall_or_nothing() {
             name: Some("libvulkan.so.1".to_owned()),
         },
         Failure::BadLibrary { name: None },
+        Failure::NewerLibraryNeeded {
+            name: "libm.so.6".to_owned(),
+            version: "GLIBC_2.43".to_owned(),
+        },
         Failure::TimedOut,
         Failure::CouldNotStart {
             reason: "Access is denied.".to_owned(),

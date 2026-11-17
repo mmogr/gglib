@@ -148,7 +148,8 @@ pub(crate) fn fix_for(
             Some(Fix::Reinstall)
         }
         // A named library may be the system's, which a reinstall does not
-        // bring; a time-out or a refusal to start is not the download's.
+        // bring, and one the system has too old a copy of is; a time-out or
+        // a refusal to start is not the download's.
         _ => None,
     }
 }

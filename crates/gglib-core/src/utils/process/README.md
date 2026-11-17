@@ -22,8 +22,8 @@ The Windows-specific flag is applied here and nowhere else.
 - [`bounded`]: running a program that should answer and exit, with a time
   limit, and why a run failed (`failure_kind`): the one place that reads
   each OS's report of a library that cannot be loaded (Windows' exit
-  status, glibc's loader, macOS's dyld), as values, so all three are
-  tested on any OS.
+  status, glibc's loader, macOS's dyld), and glibc's of one older than the
+  program needs, as values, so all three are tested on any OS.
   `run_bounded_silent` is the same for a program whose output is never
   read, with nothing on its pipes.
 - [`detached`]: starting the service, so it outlives the command that

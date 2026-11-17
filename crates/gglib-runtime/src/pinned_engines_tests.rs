@@ -18,7 +18,9 @@
 //! `GGLIB_ENGINE_ASSETS_DIR`, and runs this crate's ignored tests:
 //! `cargo test -p gglib-runtime --lib -- --ignored`. The asset checks sit
 //! beside each engine's platform table and read their list through
-//! [`pinned_release_assets`].
+//! [`pinned_release_assets`]. On Linux CI also saves, beside the `--help`s,
+//! the newest glibc stable-diffusion.cpp's installed build asks for, which
+//! the check beside that engine's platform table holds its floor to.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;

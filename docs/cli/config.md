@@ -166,6 +166,11 @@ Binary version: version: 0.8.0-dev (build 11960, commit 8642541b2)
   source build of the pinned tag, where no release fits, over a source
   build of a release already there, or when `--build` asks for one. A
   source build is never replaced by a CPU-only download without `--force`.
+- On Linux the image runtime's pre-built release needs the glibc it was
+  built against. Where the system's is older, `sd install` says which
+  version it needs and which the system has, downloads nothing, and builds
+  the pinned tag from source instead. The desktop app does not build from
+  source: it says to run `gglib config sd install` in a terminal.
 - `--force` installs the pin whatever is there, taking the download over a
   source build unless `--build` is given too.
 - A source build asks before it starts; `-y` / `--yes` answers it, and with
