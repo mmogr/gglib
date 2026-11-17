@@ -262,18 +262,19 @@ fn report_memory(status: &SetupStatus) {
 
 /// Name the acceleration backend from what the GPU probe found.
 ///
-/// An NVIDIA card without the CUDA toolkit is called out rather than reported
-/// as plain "NVIDIA": it is the difference between a fast install and one
-/// that takes the Vulkan download, or a CPU build.
+/// An NVIDIA card is named with what it has, never as plain "NVIDIA": the
+/// CUDA toolkit is what a source build needs, and the driver is what a
+/// downloaded CUDA build runs on. A card with neither has no working driver.
 fn backend_label(gpu: &GpuInfoDto) -> String {
     if gpu.has_metal {
         return "Metal".to_string();
     }
     if gpu.has_nvidia {
-        return gpu.cuda_version.as_ref().map_or_else(
-            || "NVIDIA GPU, no CUDA toolkit".to_string(),
-            |v| format!("CUDA {v}"),
-        );
+        return match (&gpu.cuda_version, &gpu.nvidia_driver) {
+            (Some(toolkit), _) => format!("CUDA {toolkit}"),
+            (None, Some(driver)) => format!("NVIDIA GPU, driver {driver}, no CUDA toolkit"),
+            (None, None) => "NVIDIA GPU, no driver answering".to_string(),
+        };
     }
     if gpu.has_vulkan {
         return "Vulkan".to_string();
@@ -291,6 +292,7 @@ mod tests {
             has_nvidia: false,
             has_vulkan: false,
             cuda_version: None,
+            nvidia_driver: None,
             vulkan_headers_installed: false,
             vulkan_glslc_installed: false,
             vulkan_spirv_headers_installed: false,
@@ -317,15 +319,26 @@ mod tests {
         assert_eq!(backend_label(&g), "CUDA 12.4");
     }
 
-    /// The distinction that decides whether the install is a download or a
-    /// 30-minute build, so it must not be flattened to "NVIDIA".
+    /// The driver decides whether Windows downloads the CUDA build, and the
+    /// toolkit whether a source build can be a CUDA one, so neither is
+    /// flattened to "NVIDIA".
     #[test]
-    fn an_nvidia_card_without_the_toolkit_says_so() {
-        let g = GpuInfoDto {
+    fn an_nvidia_card_without_the_toolkit_says_what_it_has() {
+        let with_a_driver = GpuInfoDto {
+            has_nvidia: true,
+            nvidia_driver: Some("617.42".to_string()),
+            ..gpu()
+        };
+        assert_eq!(
+            backend_label(&with_a_driver),
+            "NVIDIA GPU, driver 617.42, no CUDA toolkit"
+        );
+
+        let without = GpuInfoDto {
             has_nvidia: true,
             ..gpu()
         };
-        assert_eq!(backend_label(&g), "NVIDIA GPU, no CUDA toolkit");
+        assert_eq!(backend_label(&without), "NVIDIA GPU, no driver answering");
     }
 
     #[test]
