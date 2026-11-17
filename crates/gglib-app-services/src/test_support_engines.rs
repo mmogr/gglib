@@ -5,7 +5,9 @@
 //! passed in (`sd_status`, `pin_state`, `engine::uninstall`), so every test
 //! in this binary that writes a stand-in engine, or reads a status that runs
 //! one, meets the same files. Windows will not rewrite a file while a status
-//! is running it (#2045). Such a test holds [`Engines`] for its whole body.
+//! is running it (#2045), and a test that reads an engine's state twice and
+//! compares the two would see a write land between them. Such a test holds
+//! [`Engines`] for its whole body.
 
 use std::path::PathBuf;
 

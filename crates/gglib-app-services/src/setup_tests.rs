@@ -97,6 +97,9 @@ async fn the_setup_status_sends_the_directory_and_the_memory_the_settings_routes
 /// `gglib config llama status` and the Settings card do.
 #[tokio::test]
 async fn the_setup_status_says_where_llama_stands_as_the_engine_does() {
+    // Both reads are of llama-server under this binary's data root, which
+    // another test may write between them.
+    let _engines = crate::test_support_engines::Engines::hold().await;
     let (setup, _) = both_surfaces(MockSystemProbePort::default().total_ram_bytes).await;
 
     let status = serde_json::to_value(setup.get_status().await.expect("status")).expect("json");
@@ -107,6 +110,28 @@ async fn the_setup_status_says_where_llama_stands_as_the_engine_does() {
         status["llamaPin"],
         serde_json::to_value(engine).expect("json")
     );
+}
+
+/// The test above reads llama.cpp's standing twice, and another test may
+/// write the stand-in llama-server between the two, so it holds the
+/// engines: run while they are held, it waits for them.
+#[test]
+fn the_test_that_reads_llama_s_standing_twice_waits_for_the_engines() {
+    let held = crate::test_support_engines::Engines::hold_blocking();
+    let reader = std::thread::spawn(the_setup_status_says_where_llama_stands_as_the_engine_does);
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+    while !reader.is_finished() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let waited = !reader.is_finished();
+    drop(held);
+
+    assert!(
+        waited,
+        "it read llama's standing while another test held the engines"
+    );
+    reader.join().expect("it passes once the engines are free");
 }
 
 /// An accelerator set up in this test binary's own data root is On in the
