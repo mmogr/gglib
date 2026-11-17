@@ -118,6 +118,18 @@ pub(crate) async fn start_gglib(state: tauri::State<'_, AppState>) -> Result<(),
     started
 }
 
+/// Whether the daemon answers its health probe: what the main window and the
+/// tray panel poll to tell a daemon that is there from one that is gone.
+///
+/// Asked through the app and not by the page's own `fetch`, which queues
+/// behind the page's other requests to the daemon (`Daemon::answers`). The
+/// page asks only once it knows the daemon's address, so no launch is in
+/// flight by then.
+#[tauri::command]
+pub(crate) async fn daemon_answers(state: tauri::State<'_, AppState>) -> Result<bool, String> {
+    Ok(state.daemon.answers().await)
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};

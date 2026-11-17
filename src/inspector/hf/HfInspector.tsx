@@ -40,17 +40,24 @@ export interface HfPickState {
 
 type Listing = { quants: HfQuantization[]; image: HfImagePreview | null } | { error: string };
 
-/** One read of `repo`, its answer held only while it is still the repo asked. */
-function useRead<T>(read: () => Promise<T>, onError: (err: unknown) => T | null, seed: T | null = null): T | null {
+/**
+ * One read of `repo`, its answer held only while it is still the repo asked.
+ * A read still out when the repo changes is stopped (`signal`): a Hub read
+ * can take minutes, and each one out holds one of the page's six connections
+ * to the daemon.
+ */
+function useRead<T>(read: (signal: AbortSignal) => Promise<T>, onError: (err: unknown) => T | null, seed: T | null = null): T | null {
   const [answer, setAnswer] = useState<T | null>(seed);
   useEffect(() => {
     if (seed !== null) return;
     let live = true;
-    read()
+    const gone = new AbortController();
+    read(gone.signal)
       .then((value) => live && setAnswer(value))
       .catch((err: unknown) => live && setAnswer(onError(err)));
     return () => {
       live = false;
+      gone.abort();
     };
     // The inspector is keyed by the repo, so these are read once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -65,13 +72,13 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
   const { snapshot } = useDownloads();
   const handed = (location.state as Partial<HfPickState> | null)?.hf;
   const summary = useRead<HfModelSummary | { error: string }>(
-    () => getTransport().getHfModelSummary(repo),
+    (signal) => getTransport().getHfModelSummary(repo, signal),
     (err) => ({ error: formatError(err) }),
     handed?.id === repo ? handed : null,
   );
   const listing = useRead<Listing>(
-    async () => {
-      const response = await getTransport().getHfQuantizations(repo);
+    async (signal) => {
+      const response = await getTransport().getHfQuantizations(repo, signal);
       // A projector is fetched with a model, never on its own, so it is not a row.
       const quants = response.quantizations.filter((q) => q.role !== 'Projector').sort((a, b) => a.size_bytes - b.size_bytes);
       return { quants, image: response.image ?? null };
@@ -80,9 +87,9 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
   );
   // Asked beside the listing, which shows at once: the download's own pick,
   // which reads further than the listing's heads. A failure marks nothing.
-  const pick = useRead<HfPickResponse | null>(() => getTransport().getHfPick(repo), () => null);
+  const pick = useRead<HfPickResponse | null>((signal) => getTransport().getHfPick(repo, signal), () => null);
   // Optional: a failed reading says nothing about tools.
-  const tools = useRead<ToolSupportResponse>(() => getTransport().getHfToolSupport(repo), () => null);
+  const tools = useRead<ToolSupportResponse>((signal) => getTransport().getHfToolSupport(repo, signal), () => null);
   const [picked, setPicked] = useState<string | null>(null);
 
   const listed = listing && 'quants' in listing ? listing.quants : [];

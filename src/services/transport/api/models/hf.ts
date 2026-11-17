@@ -20,7 +20,9 @@ import type {
  *
  * The reads below are answered from the Hub, which can take minutes where a
  * read of the daemon's own takes moments: they are held to the Hub's limit
- * (`HUB_READ_LIMIT_MS`) rather than 30 s.
+ * (`HUB_READ_LIMIT_MS`) rather than 30 s. Each takes a `signal`, since a read
+ * nobody is waiting for still holds one of the page's connections to the
+ * daemon until it ends.
  */
 export async function browseHfModels(params: HfSearchRequest): Promise<HfSearchResponse> {
   return post<HfSearchResponse>('/api/models/hf/search', params);
@@ -36,18 +38,18 @@ export async function browseHfModels(params: HfSearchRequest): Promise<HfSearchR
  * wildcard route (/hf/model/*model_id) that captures the full path
  * including the slash.
  */
-export async function getHfModelSummary(modelId: HfModelId): Promise<HfModelSummary> {
+export async function getHfModelSummary(modelId: HfModelId, signal?: AbortSignal): Promise<HfModelSummary> {
   // Don't encode the modelId - the wildcard route expects the raw path
-  return get<HfModelSummary>(`/api/models/hf/model/${modelId}`, { timeoutMs: HUB_READ_LIMIT_MS });
+  return get<HfModelSummary>(`/api/models/hf/model/${modelId}`, { timeoutMs: HUB_READ_LIMIT_MS, signal });
 }
 
 /**
  * Get available quantizations for a HuggingFace model.
  */
-export async function getHfQuantizations(modelId: HfModelId): Promise<HfQuantizationsResponse> {
+export async function getHfQuantizations(modelId: HfModelId, signal?: AbortSignal): Promise<HfQuantizationsResponse> {
   return get<HfQuantizationsResponse>(
     `/api/models/hf/quantizations/${encodeURIComponent(modelId)}`,
-    { timeoutMs: HUB_READ_LIMIT_MS },
+    { timeoutMs: HUB_READ_LIMIT_MS, signal },
   );
 }
 
@@ -56,16 +58,16 @@ export async function getHfQuantizations(modelId: HfModelId): Promise<HfQuantiza
  * asked for, as the download picks it. Slower than the listing: it reads
  * the headers the listing's heads stop short of.
  */
-export async function getHfPick(modelId: HfModelId): Promise<HfPickResponse> {
-  return get<HfPickResponse>(`/api/models/hf/pick/${encodeURIComponent(modelId)}`, { timeoutMs: HUB_READ_LIMIT_MS });
+export async function getHfPick(modelId: HfModelId, signal?: AbortSignal): Promise<HfPickResponse> {
+  return get<HfPickResponse>(`/api/models/hf/pick/${encodeURIComponent(modelId)}`, { timeoutMs: HUB_READ_LIMIT_MS, signal });
 }
 
 /**
  * Get tool support information for a HuggingFace model.
  */
-export async function getHfToolSupport(modelId: HfModelId): Promise<ToolSupportResponse> {
+export async function getHfToolSupport(modelId: HfModelId, signal?: AbortSignal): Promise<ToolSupportResponse> {
   return get<ToolSupportResponse>(
     `/api/models/hf/tool-support/${encodeURIComponent(modelId)}`,
-    { timeoutMs: HUB_READ_LIMIT_MS },
+    { timeoutMs: HUB_READ_LIMIT_MS, signal },
   );
 }

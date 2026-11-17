@@ -64,7 +64,11 @@ export interface HttpClient {
  * What a JSON call may say beside its body: that its answer is a secret, and
  * its own time limit (`timeLimit.ts` says the defaults).
  */
-type CallOptions = ReadOptions & Pick<TimeLimitOptions, 'timeoutMs'>;
+type CallOptions = ReadOptions &
+  Pick<TimeLimitOptions, 'timeoutMs'> & {
+    /** Stops the request when the caller no longer wants its answer, freeing its connection. */
+    signal?: AbortSignal;
+  };
 
 /**
  * Request options for HTTP client.
@@ -149,7 +153,7 @@ function buildClient(config: HttpClientConfig): HttpClient {
     options?: RequestOptions,
     isRetry = false
   ): Promise<T> {
-    const { method = 'GET', body, sensitive, timeoutMs } = options || {};
+    const { method = 'GET', body, sensitive, timeoutMs, signal } = options || {};
     const hasBody = body !== undefined;
     // Include Content-Type header for POST/PUT/DELETE requests (even if body is undefined)
     // Backend may expect application/json header to parse Json<Option<T>> types
@@ -163,6 +167,7 @@ function buildClient(config: HttpClientConfig): HttpClient {
           method,
           headers: getHeaders(shouldIncludeContentType),
           body: hasBody ? JSON.stringify(body) : undefined,
+          ...(signal ? { signal } : {}),
         },
         limitFor(method, { timeoutMs }),
         async (response) => {
@@ -297,6 +302,22 @@ export async function del<T>(path: string, body?: unknown, options?: CallOptions
 export async function healthUrl(): Promise<string> {
   await getClient();
   return `${apiBaseUrl}/health`;
+}
+
+/**
+ * The desktop app's own answer to whether the daemon is there
+ * (`daemon_answers`), asked once the daemon's address is known; `null` in a
+ * browser, where the page asks `/health` itself.
+ *
+ * The WebView keeps six connections to the daemon, and a `fetch` of
+ * `/health` waits for one of them: with six slow reads out (a Hub read may
+ * take minutes) the probe ran out of time in that queue, and a healthy
+ * daemon was called gone. The app asks over a connection of its own.
+ */
+export async function appHealthProbe(): Promise<boolean | null> {
+  if (!isDesktop()) return null;
+  await getClient();
+  return (await window.__TAURI_INTERNALS__!.invoke('daemon_answers')) === true;
 }
 
 /**
