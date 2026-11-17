@@ -90,8 +90,8 @@ fn the_linux_loader_names_a_library_that_is_there_and_will_not_load() {
 
 fn newer(name: &str, version: &str) -> Failure {
     Failure::NewerLibraryNeeded {
-        name: name.to_owned(),
-        version: version.to_owned(),
+        name: name.into(),
+        version: version.into(),
     }
 }
 
