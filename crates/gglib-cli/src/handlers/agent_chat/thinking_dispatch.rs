@@ -26,6 +26,8 @@ use crate::presentation::style;
 pub(super) struct RenderContext {
     /// Buffered content tokens (Rich mode only).
     pub buf: String,
+    /// Raw mode: text was written since the last break ([`end_text`]).
+    pub unbroken: bool,
     /// Whether we are currently inside a thinking banner.
     pub in_thinking: bool,
     /// Active spinner (Rich mode only, created on first content token).
@@ -42,6 +44,7 @@ impl RenderContext {
     pub(super) fn new(rich: bool, stderr_tty: bool, quiet: bool) -> Self {
         Self {
             buf: String::new(),
+            unbroken: false,
             in_thinking: false,
             spinner: None,
             rich,
@@ -66,9 +69,21 @@ pub(super) fn emit_reasoning(ctx: &mut RenderContext, text: &str) {
     suspend_eprint(ctx.spinner.as_ref(), text);
 }
 
+/// What a reply writes to stdout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Said<'a> {
+    /// Rich mode: a finished block of Markdown, rendered whole.
+    Block(&'a str),
+    /// Raw mode: text as it arrives, written as it is.
+    Raw(&'a str),
+}
+
+/// Where a reply's [`Said`] goes: stdout, or a test's record of it.
+pub(super) type Out<'a> = &'a mut (dyn FnMut(Said<'_>) + Send);
+
 /// Emit a content chunk: close any open "Thinking" banner, then either
-/// buffer the text (Rich mode) or write directly to stdout (Raw mode).
-pub(super) fn emit_content(ctx: &mut RenderContext, text: &str) {
+/// buffer the text (Rich mode) or write it to `out` as it is (Raw mode).
+pub(super) fn emit_content(ctx: &mut RenderContext, text: &str, out: Out<'_>) {
     close_thinking(ctx);
     if ctx.rich {
         ctx.buf.push_str(text);
@@ -79,8 +94,28 @@ pub(super) fn emit_content(ctx: &mut RenderContext, text: &str) {
             sp.set_message(format!("Receiving\u{2026} ({} bytes)", ctx.buf.len()));
         }
     } else {
-        print!("{text}");
-        let _ = io::stdout().flush();
+        out(Said::Raw(text));
+        ctx.unbroken = true;
+    }
+}
+
+/// End the text of a message that goes on to call a tool, so the tool's
+/// lines have the terminal to themselves and the reply after it stands
+/// apart. Rich mode stops the spinner and hands `out` what was buffered, as
+/// a block; Raw mode ends the line and leaves one blank. With no text since
+/// the last end it does nothing.
+pub(super) fn end_text(ctx: &mut RenderContext, out: Out<'_>) {
+    if let Some(sp) = ctx.spinner.take() {
+        sp.finish_and_clear();
+    }
+    if ctx.rich {
+        let text = std::mem::take(&mut ctx.buf);
+        if !text.trim().is_empty() {
+            out(Said::Block(&text));
+        }
+    } else if ctx.unbroken {
+        out(Said::Raw("\n\n"));
+        ctx.unbroken = false;
     }
 }
 
