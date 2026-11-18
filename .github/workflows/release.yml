@@ -1125,10 +1125,12 @@ jobs:
           ref: ${{ needs.meta.outputs.sha }}
           persist-credentials: false
 
+      # apt-packages.yml installs these two through the action whenever the
+      # action changes, since this job runs only for a stable release.
       - name: Install apt-ftparchive and createrepo_c
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y apt-utils createrepo-c
+        uses: ./.github/actions/apt-packages
+        with:
+          packages: apt-utils createrepo-c
 
       - name: Collect .deb and .rpm packages
         uses: actions/download-artifact@v8
