@@ -4,7 +4,7 @@
 [![Release candidate](https://img.shields.io/github/v/release/mmogr/gglib?include_prereleases&filter=*-rc*&label=release%20candidate&logo=github&color=orange)](https://github.com/mmogr/gglib/releases)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue)](LICENSE)
 
-[![Homebrew](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmmogr%2Fhomebrew-tap%2Fmain%2FFormula%2Fgglib.rb&search=version%20%22%28%5B%5E%22%5D%2B%29%22&replace=%241&label=Homebrew&logo=homebrew&color=FBB040)](https://github.com/mmogr/homebrew-tap)
+[![Homebrew](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmmogr%2Fhomebrew-tap%2Fmain%2FCasks%2Fgglib.rb&search=version%20%22%28%5B%5E%22%5D%2B%29%22&replace=%241&label=Homebrew&logo=homebrew&color=FBB040)](https://github.com/mmogr/homebrew-tap)
 [![AUR](https://img.shields.io/aur/version/gglib-bin?label=AUR&logo=archlinux)](https://aur.archlinux.org/packages/gglib-bin)
 [![apt · dnf · pacman](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fmmogr.github.io%2Fgglib%2Fapt%2Fdists%2Fstable%2Fmain%2Fbinary-amd64%2FPackages&search=Version%3A%20%28%5CS%2B%29&replace=%241&label=apt%20%C2%B7%20dnf%20%C2%B7%20pacman&logo=linux&logoColor=white&color=A81D33)](#linux-debian-ubuntu-arch-fedora)
 
@@ -248,8 +248,8 @@ What each release changed is in [the releases](https://github.com/mmogr/gglib/re
 ### Homebrew (macOS on Apple silicon, Linux)
 
 ```bash
-brew install mmogr/tap/gglib
-brew install --cask mmogr/tap/gglib-gui   # the desktop app, macOS only
+brew install mmogr/tap/gglib       # macOS: the desktop app and the gglib command
+brew install mmogr/tap/gglib-cli   # the gglib command alone, on macOS or Linux
 ```
 
 ### Linux (Debian, Ubuntu, Arch, Fedora)
