@@ -478,6 +478,36 @@ jobs:
             ts-test-results.json
           retention-days: 30
 
+  # The image `test-browser` runs in: Playwright's own, at the Playwright
+  # version package-lock.json locks. Playwright runs only the browser builds
+  # its own version pins, so the image must be that version exactly. Read
+  # here rather than written in the workflow, so a Dependabot bump of
+  # `playwright` moves the image with it. `noble` is Ubuntu 24.04, the
+  # runners' own.
+  playwright-image:
+    name: Playwright Image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: package-lock.json
+          sparse-checkout-cone-mode: false
+
+      - name: Read the locked Playwright version
+        id: image
+        run: |
+          version=$(jq -r '.packages["node_modules/playwright"].version' package-lock.json)
+          if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error title=no Playwright version::package-lock.json locks playwright at '$version', not a version x.y.z that names an image."
+            exit 1
+          fi
+          echo "image=mcr.microsoft.com/playwright:v$version-noble" >> "$GITHUB_OUTPUT"
+          echo "mcr.microsoft.com/playwright:v$version-noble"
+
   # tests/ts/browser/ in Chromium and WebKit, through Playwright: what jsdom
   # cannot answer, such as a DOM call's return value in a real engine. The
   # engines are the ones the locked Playwright version pins, so a run reads
@@ -1258,7 +1288,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     if: always()
-    needs: [scope, boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, test-browser, clippy, clippy-cross-os, test-cross-os, fmt, cli-cross-os, ios-check, ffi-apple, phone-llama]
+    needs: [scope, boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, playwright-image, test-browser, clippy, clippy-cross-os, test-cross-os, fmt, cli-cross-os, ios-check, ffi-apple, phone-llama]
     steps:
       - name: Check every job did what its scope says
         env:
