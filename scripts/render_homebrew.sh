@@ -4,9 +4,10 @@
 #
 #   scripts/render_homebrew.sh <version> <SHA256SUMS> <out-dir>
 #
-# Writes <out-dir>/Formula/gglib.rb and <out-dir>/Casks/gglib-gui.rb from the
-# templates under packaging/homebrew, laid out as the mmogr/homebrew-tap tap
-# expects, with every checksum taken from the release's own SHA256SUMS.
+# Writes <out-dir>/Casks/gglib.rb (the desktop app with the command) and
+# <out-dir>/Formula/gglib-cli.rb (the command alone) from the templates under
+# packaging/homebrew, laid out as the mmogr/homebrew-tap tap expects, with
+# every checksum taken from the release's own SHA256SUMS.
 set -euo pipefail
 
 if [ "$#" -ne 3 ]; then
