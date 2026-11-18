@@ -43,9 +43,27 @@ them per model, per profile or per request.
 
 ## Quick Start
 
+Each of these installs the desktop app and the `gglib` command together.
+
+**macOS** (Apple silicon)
+
 ```bash
-brew install mmogr/tap/gglib        # macOS (Apple silicon) and Linux
-curl -fsSL https://mmogr.github.io/gglib/install.sh | sh   # Debian, Ubuntu, Arch, Fedora
+brew install mmogr/tap/gglib
+```
+
+**Linux** (Debian, Ubuntu, Arch, Fedora)
+
+```bash
+curl -fsSL https://mmogr.github.io/gglib/install.sh | sh
+```
+
+**Windows**
+
+Download and run the installer from the [Releases page](https://github.com/mmogr/gglib/releases/latest).
+
+**Then, on any of them:**
+
+```bash
 gglib up
 ```
 
