@@ -1213,7 +1213,8 @@ jobs:
       - name: The decoder over llama.h, linted for the Mac, the iPhone and its simulator
         run: make engine-llama-clippy
 
-  # Main's Rust caches, down to the newest entry per job and toolchain.
+  # Main's Rust caches, down to the newest entry per job and toolchain, and
+  # its system-packages entries, down to the newest per package list.
   # rust-cache keys an entry
   # `v0-rust-<shared-key>-<os>-<arch>-<env hash>-<lockfile hash>` and
   # restores by everything before the lockfile hash, so once a newer entry
@@ -1225,11 +1226,18 @@ jobs:
   # different toolchains serve the pool at once during a rollout, and each
   # restores only its own lineage.
   #
+  # The apt-packages action keys an entry
+  # `apt-packages-v1-<release>-<arch>-<packages hash>-<system hash>`, the
+  # same two hashes at the end, and a run without its own entry restores the
+  # newest for its packages. Each new runner image leaves a generation of
+  # these behind. The newest two stay: the system hash is not in the group,
+  # so during a rollout each of the two images keeps an entry of its own.
+  #
   # After the jobs that save on most pushes, so their new entries are
   # counted; an entry the macOS jobs save later is pruned by the next push.
   # main only, since only main saves.
   cache-prune:
-    name: Prune the Rust caches
+    name: Prune the caches
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -1244,16 +1252,18 @@ jobs:
       # main's run red: the release pull request and the badges follow only
       # a green one. A delete that loses a race with another run's prune is
       # a warning.
-      - name: Delete every entry but the newest per job and toolchain
+      - name: Delete every entry but the newest per job and toolchain, and the newest two per package list
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh cache list --ref refs/heads/main --json id,key,createdAt --limit 500 \
-            | jq -r '[.[] | select(.key | test("^v0-rust-.+-[0-9a-f]{8}-[0-9a-f]{8}$"))]
+            | jq -r '[.[] | select(.key | test("^(v0-rust|apt-packages)-.+-[0-9a-f]{8}-[0-9a-f]{8}$"))]
                      | group_by(.key | sub("-[0-9a-f]{8}$"; ""))
-                     | .[] | sort_by(.createdAt) | .[:-1][] | "\(.id) \(.key)"' \
+                     | .[] | sort_by(.createdAt)
+                     | (if .[0].key | startswith("apt-packages-") then .[:-2] else .[:-1] end)[]
+                     | "\(.id) \(.key)"' \
             > "$RUNNER_TEMP/stale.txt"
           echo "$(wc -l < "$RUNNER_TEMP/stale.txt") stale entries"
           while read -r id key; do

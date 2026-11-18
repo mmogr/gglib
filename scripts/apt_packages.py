@@ -96,8 +96,9 @@ def cache_key(os_id: str, version: str, arch: str, installed: str, names: Sequen
 
     The key ends in two hashes of eight digits, the packages and then the
     system, as a Rust cache's key ends in two. `ci.yml`'s `cache-prune`
-    reads that shape and keeps the newest entry per key less its last hash,
-    so one entry per package list stays on main."""
+    reads that shape and keeps the newest two entries per key less its last
+    hash, so main holds two per package list: one for each runner image
+    while GitHub moves from one to the next."""
     release = f"apt-packages-{KEY_VERSION}-{os_id}{version}-{arch}-"
     packages = release + hashlib.sha256("\n".join(names).encode()).hexdigest()[:8] + "-"
     return packages + hashlib.sha256(installed.encode()).hexdigest()[:8], packages, release
