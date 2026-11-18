@@ -38,6 +38,10 @@ CLI": both are clients of a single daemon, and the daemon is the product.
 - `gglib gui` (`crates/gglib-cli/src/handlers/gui.rs`) launches whichever GUI
   artifact sits beside the running executable.
 
+  > **Amended 2026-11-18.** On macOS it first opens the bundle the command
+  > runs from (Homebrew links it out of `gglib.app`), and last `gglib.app` in
+  > `/Applications` or `~/Applications`.
+
 It is also not a *source* split. `Makefile` builds both binaries in a single
 `cargo build --release -p gglib-cli -p gglib-app` invocation, with shared
 dependency compilation, under a comment explaining that this is deliberately

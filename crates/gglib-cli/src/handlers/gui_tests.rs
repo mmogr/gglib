@@ -61,7 +61,7 @@ fn each_system_launches_its_own_artifact_from_an_install_and_from_a_checkout() {
             run("target/release/gglib-gui.exe"),
         ),
     ] {
-        let sibling = sibling_artifact(os, root).expect("the app is beside the binary");
+        let sibling = installed_app(os, root, &[]).expect("the app is beside the binary");
         let built = repo_artifact(os, root);
 
         assert_eq!(line(&launch_command(os, &sibling)), installed, "{os:?}");
@@ -77,8 +77,67 @@ fn an_install_without_the_app_has_nothing_to_launch() {
     made(dir.path(), "gglib");
 
     for os in [Os::Mac, Os::Linux, Os::Windows] {
-        assert_eq!(sibling_artifact(os, dir.path()), None, "{os:?}");
+        assert_eq!(installed_app(os, dir.path(), &[]), None, "{os:?}");
     }
+}
+
+/// Homebrew links the command out of the app, so the binary runs from the
+/// bundle's `Contents/MacOS`: that bundle is the app, wherever it was put,
+/// ahead of any other copy.
+#[test]
+fn a_mac_binary_inside_a_bundle_opens_that_bundle() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let exe_dir = dir.path().join("Somewhere/gglib.app/Contents/MacOS");
+    let elsewhere = dir.path().join("Applications");
+    made(&elsewhere, "gglib.app");
+
+    assert_eq!(
+        installed_app(Os::Mac, &exe_dir, &[elsewhere]),
+        Some(dir.path().join("Somewhere/gglib.app"))
+    );
+    assert_eq!(enclosing_bundle(&dir.path().join("Contents/MacOS")), None);
+    assert_eq!(
+        enclosing_bundle(&dir.path().join("gglib.app/Contents/Resources")),
+        None
+    );
+    assert_eq!(enclosing_bundle(&dir.path().join("bin")), None);
+}
+
+/// A Mac binary with no app beside it opens the app in the first folder that
+/// has one; the app beside it wins over those, and an older app's name is
+/// never opened.
+#[test]
+fn a_mac_install_opens_the_app_beside_it_then_the_one_in_applications() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let bin = dir.path().join("bin");
+    std::fs::create_dir_all(&bin).expect("bin");
+    let system = dir.path().join("Applications");
+    let own = dir.path().join("home/Applications");
+    made(&system, "GGLib GUI.app");
+    let in_own = made(&own, "gglib.app");
+    let roots = [system.clone(), own];
+
+    assert_eq!(installed_app(Os::Mac, &bin, &roots), Some(in_own));
+
+    let in_system = made(&system, "gglib.app");
+    assert_eq!(installed_app(Os::Mac, &bin, &roots), Some(in_system));
+
+    let beside = made(&bin, "gglib.app");
+    assert_eq!(installed_app(Os::Mac, &bin, &roots), Some(beside));
+}
+
+/// An app whose version differs from the command's is named before it
+/// opens; the same version, or none to read, says nothing.
+#[test]
+fn a_mac_app_of_another_version_is_named_before_it_opens() {
+    let app = Path::new("/Applications/gglib.app");
+
+    assert_eq!(
+        version_note(app, Some("0.21.0"), "0.37.0").as_deref(),
+        Some("Opening gglib 0.21.0 at /Applications/gglib.app; this command is 0.37.0.")
+    );
+    assert_eq!(version_note(app, Some("0.37.0"), "0.37.0"), None);
+    assert_eq!(version_note(app, None, "0.37.0"), None);
 }
 
 #[test]
@@ -86,7 +145,7 @@ fn a_linux_install_launches_the_appimage_beside_the_binary() {
     let dir = tempfile::tempdir().expect("tempdir");
     let appimage = made(dir.path(), "gglib-gui_0.2.4_amd64.AppImage");
 
-    assert_eq!(sibling_artifact(Os::Linux, dir.path()), Some(appimage));
+    assert_eq!(installed_app(Os::Linux, dir.path(), &[]), Some(appimage));
 }
 
 #[test]
