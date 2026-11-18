@@ -7,6 +7,7 @@ pub(crate) mod images;
 mod markdown;
 mod memory_jogger;
 pub(crate) mod persistence;
+mod pictures;
 mod progress_line;
 pub(crate) mod renderer;
 pub(crate) mod repl;
@@ -15,6 +16,8 @@ pub(crate) mod resume_settings;
 mod thinking_dispatch;
 mod tool_format;
 pub(crate) mod turn;
+
+use std::io::{self, IsTerminal as _};
 
 use anyhow::{Result, bail};
 
@@ -270,9 +273,14 @@ async fn resume_conversation(
     if db_messages.is_empty() {
         println!("Conversation #{conv_id} has no messages — starting fresh.");
     } else {
+        // The jogger goes to stdout; its markers are links on a terminal.
+        let pictures =
+            pictures::Pictures::for_stream(ctx.app.attachments(), io::stdout().is_terminal());
+        let shown = memory_jogger::shown_images(&db_messages);
+        let links = pictures.links(&shown).await;
         print!(
             "{}",
-            memory_jogger::memory_jogger(&db_messages, &conv.title)
+            memory_jogger::memory_jogger(&db_messages, &conv.title, &links)
         );
     }
 

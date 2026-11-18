@@ -8,15 +8,17 @@
 use gglib_core::domain::agent::ToolResult;
 
 use super::images;
+use super::pictures::Links;
 use crate::presentation::tables::truncate_string;
 
 /// Format a tool result with a tool-specific summary instead of a generic
 /// truncation.  Builtin filesystem tools get richer output; everything else
 /// falls back to the standard 80-char preview. A marker for each image the
-/// tool made follows, with the start of its id, so it can be saved.
-pub(super) fn format_tool_result(tool_name: &str, result: &ToolResult) -> String {
+/// tool made follows, with the start of its id, so it can be saved, and as
+/// a link when `links` has one for it.
+pub(super) fn format_tool_result(tool_name: &str, result: &ToolResult, links: &Links) -> String {
     let summary = summary(tool_name, result);
-    format!("{summary}{}", images::markers(&result.images))
+    format!("{summary}{}", images::markers(&result.images, links))
 }
 
 /// The words of a result, without its images.
@@ -106,7 +108,10 @@ mod tests {
     #[test]
     fn a_result_without_images_has_no_marker() {
         let result = ToolResult::text("c1", "done", true);
-        assert_eq!(format_tool_result("server__tool", &result), "done");
+        assert_eq!(
+            format_tool_result("server__tool", &result, &Links::default()),
+            "done"
+        );
     }
 
     /// Each image a tool made is named after the summary, with the start of
@@ -122,7 +127,7 @@ mod tests {
             height: 1024,
         }];
         assert_eq!(
-            format_tool_result("server__draw", &result),
+            format_tool_result("server__draw", &result, &Links::default()),
             "[image 1024x1024 PNG stored] [image 1024x1024 3f9a2c1e]"
         );
     }

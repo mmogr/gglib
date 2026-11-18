@@ -31,6 +31,7 @@ use gglib_core::domain::agent::{AgentEvent, TurnUsage};
 
 use crate::presentation::style::{BOLD, DANGER, DIM, RESET, SUCCESS, WARNING};
 
+use super::pictures::Links;
 use super::progress_line::{progress_line, show};
 use super::tool_format::format_tool_result;
 
@@ -83,26 +84,6 @@ pub(crate) fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_t
             }
         }
 
-        AgentEvent::ToolCallComplete {
-            tool_name,
-            display_name,
-            duration_display,
-            result,
-            ..
-        } => {
-            if !quiet {
-                let (icon, icon_color) = if result.success {
-                    ("✓", SUCCESS)
-                } else {
-                    ("✗", DANGER)
-                };
-                let summary = format_tool_result(tool_name, result);
-                eprintln!(
-                    "  {icon_color}{icon}{RESET}  {BOLD}{display_name}{RESET}  {DIM}{duration_display}{RESET}  {summary}"
-                );
-            }
-        }
-
         AgentEvent::IterationComplete {
             iteration,
             tool_calls,
@@ -149,13 +130,40 @@ pub(crate) fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_t
         AgentEvent::PromptProgress { .. }
         | AgentEvent::TurnUsage(_)
         | AgentEvent::ToolPreview { .. }
-        | AgentEvent::ToolCallWriting(_) => {
+        | AgentEvent::ToolCallWriting(_)
+        | AgentEvent::ToolCallComplete { .. } => {
             // Pre-fill progress, a tool's preview frame and how far a call
             // has been written: not shown in the CLI. A turn's usage is
             // shown once its reply is, as its figure line (`figure_line`,
-            // printed by the drain).
+            // printed by the drain). A finished tool's line is the drain's
+            // too, which finds the links of its images first (`tool_line`).
         }
     }
+}
+
+/// A finished tool's line: how it went, how long it took and what it
+/// answered, each image it made a marker that `links` may make a link.
+/// `None` for any other event.
+pub(crate) fn tool_line(event: &AgentEvent, links: &Links) -> Option<String> {
+    let AgentEvent::ToolCallComplete {
+        tool_name,
+        display_name,
+        duration_display,
+        result,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    let (icon, icon_color) = if result.success {
+        ("✓", SUCCESS)
+    } else {
+        ("✗", DANGER)
+    };
+    let summary = format_tool_result(tool_name, result, links);
+    Some(format!(
+        "  {icon_color}{icon}{RESET}  {BOLD}{display_name}{RESET}  {DIM}{duration_display}{RESET}  {summary}"
+    ))
 }
 
 /// A reply's figure line as the session prints it after the reply, dim, on

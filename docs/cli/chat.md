@@ -268,6 +268,12 @@ start of its id: `[image 1024x1024 3f9a2c1e]`. A tool's images end its line
 in the live turn, and `--continue` shows the last turn's. `gglib attachment
 save <id> [path]` writes one to a file, as stored.
 
+On a terminal that opens links, a marker is one: Cmd-click or Ctrl-click it
+to open the image. The link points at a copy of the image in gglib's data
+folder, readable only by you, and a copy not shown for a week is removed
+when a chat starts. There is no link over SSH, inside tmux or screen, or
+when the output is not a terminal; the marker is then plain text.
+
 ```bash
 gglib attachment save 3f9a2c1e
 gglib attachment save 3f9a2c1e ~/Pictures/dot.png --force

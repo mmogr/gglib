@@ -19,6 +19,7 @@ use gglib_core::domain::runs::{RunInfo, RunStatus, new_run_id};
 use tokio::sync::mpsc;
 
 use super::drain::drain_event_stream;
+use super::pictures::Pictures;
 use crate::daemon_client::DaemonHandle;
 use crate::daemon_client::runs::RunItem;
 
@@ -31,18 +32,25 @@ pub(crate) struct Shown {
     pub quiet: bool,
 }
 
-/// Send `turn` to the daemon and show its reply as it arrives. `true` only
-/// when the reply gave its answer.
+/// Send `turn` to the daemon and show its reply as it arrives, the images
+/// its tools make as `pictures` shows them, or as plain markers with none. `true` only when the reply gave
+/// its answer.
 ///
 /// # Errors
 ///
 /// The daemon refused the turn before running it (a folder that is not one,
 /// a model that cannot read the turn's images, a chat already being
 /// answered), in its own words; or it could not be asked.
-pub(crate) async fn send(daemon: &DaemonHandle, turn: &LocalTurn, shown: Shown) -> Result<bool> {
+pub(crate) async fn send(
+    daemon: &DaemonHandle,
+    turn: &LocalTurn,
+    shown: Shown,
+    pictures: Option<&Pictures<'_>>,
+) -> Result<bool> {
     let id = new_run_id();
     let started = daemon.run_turn(&id, turn).await?;
-    let followed = follow(daemon, &started.id, shown, tokio::signal::ctrl_c()).await;
+    let stop = tokio::signal::ctrl_c();
+    let followed = follow(daemon, &started.id, shown, pictures, stop).await;
     if let Some(line) = &followed.line {
         eprintln!("\n{line}");
     }
@@ -68,6 +76,7 @@ pub(super) async fn follow(
     daemon: &DaemonHandle,
     id: &str,
     shown: Shown,
+    pictures: Option<&Pictures<'_>>,
     stop: impl Future<Output = std::io::Result<()>>,
 ) -> Followed {
     let (tx, mut rx) = mpsc::unbounded_channel::<AgentEvent>();
@@ -81,7 +90,7 @@ pub(super) async fn follow(
     };
     let shown_reply = async {
         tokio::join!(
-            drain_event_stream(&mut rx, shown.verbose, shown.quiet),
+            drain_event_stream(&mut rx, shown.verbose, shown.quiet, pictures),
             reading
         )
     };
