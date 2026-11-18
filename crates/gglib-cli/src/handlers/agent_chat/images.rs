@@ -20,6 +20,8 @@ use gglib_core::ports::attachment_store::AttachmentError;
 use gglib_core::request_pipeline::MAX_IMAGE_BYTES;
 use gglib_core::services::AttachmentService;
 
+use super::pictures::{self, Links};
+
 /// What `/image` with no path answers.
 const USAGE: &str = "usage: /image <path>  (a PNG or a JPEG, attached to your next message)";
 
@@ -54,6 +56,11 @@ impl<'a> TurnImages<'a> {
             }
         }
         Ok(images)
+    }
+
+    /// The store the images are in.
+    pub(crate) fn service(&self) -> &'a AttachmentService {
+        self.service
     }
 
     /// The images for the message being sent; none wait after it.
@@ -153,11 +160,17 @@ pub(crate) fn short_id(id: &AttachmentId) -> &str {
 
 /// The images of a message or a tool result as the transcript shows them:
 /// ` [image WxH 3f9a2c1e]` for each, in order, with the start of its id for
-/// `gglib attachment save`, and nothing for one with none.
-pub(crate) fn markers(images: &[AttachmentInfo]) -> String {
+/// `gglib attachment save`, and nothing for one with none. A marker whose
+/// image is in `links` is a link that opens it.
+pub(crate) fn markers(images: &[AttachmentInfo], links: &Links) -> String {
     images.iter().fold(String::new(), |mut markers, image| {
         let (width, height, id) = (image.width, image.height, short_id(&image.id));
-        let _ = write!(markers, " [image {width}x{height} {id}]");
+        let marker = format!("[image {width}x{height} {id}]");
+        let marker = match links.of(&image.id) {
+            Some(address) => pictures::link(address, &marker),
+            None => marker,
+        };
+        let _ = write!(markers, " {marker}");
         markers
     })
 }

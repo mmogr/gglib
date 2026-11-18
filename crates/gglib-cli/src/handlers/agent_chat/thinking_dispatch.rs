@@ -69,16 +69,19 @@ pub(super) fn emit_reasoning(ctx: &mut RenderContext, text: &str) {
     suspend_eprint(ctx.spinner.as_ref(), text);
 }
 
-/// What a reply writes to stdout.
+/// What a reply writes: its text to stdout, a finished tool's line to
+/// stderr.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Said<'a> {
     /// Rich mode: a finished block of Markdown, rendered whole.
     Block(&'a str),
     /// Raw mode: text as it arrives, written as it is.
     Raw(&'a str),
+    /// A finished tool's line, for stderr.
+    ToolLine(&'a str),
 }
 
-/// Where a reply's [`Said`] goes: stdout, or a test's record of it.
+/// Where a reply's [`Said`] goes: the terminal, or a test's record of it.
 pub(super) type Out<'a> = &'a mut (dyn FnMut(Said<'_>) + Send);
 
 /// Emit a content chunk: close any open "Thinking" banner, then either

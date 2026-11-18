@@ -15,8 +15,9 @@ use gglib_core::domain::agent::{AgentEvent, TurnUsage};
 use tokio::sync::mpsc;
 
 use super::markdown::render_markdown;
+use super::pictures::{Links, Pictures};
 use super::progress_line;
-use super::renderer::{figure_line, render_event};
+use super::renderer::{figure_line, render_event, tool_line};
 use super::thinking_dispatch::{
     Out, RenderContext, Said, close_thinking, emit_content, emit_reasoning, end_text,
     suspend_or_run,
@@ -45,31 +46,34 @@ pub(crate) async fn drain_event_stream(
     rx: &mut mpsc::UnboundedReceiver<AgentEvent>,
     verbose: bool,
     quiet: bool,
+    pictures: Option<&Pictures<'_>>,
 ) -> bool {
     let rich = !quiet && io::stdout().is_terminal();
     let stderr_tty = io::stderr().is_terminal();
     let mut ctx = RenderContext::new(rich, stderr_tty, quiet);
-    drain(rx, verbose, &mut ctx, &mut to_stdout).await
+    drain(rx, verbose, &mut ctx, pictures, &mut to_terminal).await
 }
 
-/// A reply's text on stdout: a block through the Markdown renderer, raw
-/// text as it is.
-fn to_stdout(said: Said<'_>) {
+/// A reply's text on stdout, a block through the Markdown renderer and raw
+/// text as it is; a finished tool's line on stderr.
+fn to_terminal(said: Said<'_>) {
     match said {
         Said::Block(text) => render_markdown(text),
         Said::Raw(text) => {
             print!("{text}");
             let _ = io::stdout().flush();
         }
+        Said::ToolLine(line) => eprintln!("{line}"),
     }
 }
 
-/// [`drain_event_stream`] in the mode `ctx` names, the reply's text going
-/// to `out`.
+/// [`drain_event_stream`] in the mode `ctx` names, what the reply writes
+/// going to `out`.
 async fn drain(
     rx: &mut mpsc::UnboundedReceiver<AgentEvent>,
     verbose: bool,
     ctx: &mut RenderContext,
+    pictures: Option<&Pictures<'_>>,
     out: Out<'_>,
 ) -> bool {
     let (rich, quiet) = (ctx.rich, ctx.quiet);
@@ -137,6 +141,22 @@ async fn drain(
             AgentEvent::TurnUsage(usage) => {
                 close_thinking(ctx);
                 figures.saw(usage);
+            }
+
+            // ── A finished tool ──────────────────────────────────────
+            AgentEvent::ToolCallComplete { result, .. } => {
+                close_thinking(ctx);
+                if !quiet {
+                    // Each image the tool made is copied where a link can
+                    // open it, on a terminal that opens links.
+                    let links = match pictures {
+                        Some(pictures) => pictures.links(&result.images).await,
+                        None => Links::default(),
+                    };
+                    if let Some(line) = tool_line(&event, &links) {
+                        suspend_or_run(ctx.spinner.as_ref(), || out(Said::ToolLine(&line)));
+                    }
+                }
             }
 
             // ── Tool / progress / error events ───────────────────────

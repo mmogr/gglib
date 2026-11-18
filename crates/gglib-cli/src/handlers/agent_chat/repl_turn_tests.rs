@@ -68,6 +68,7 @@ fn session<'a>(
     Session {
         daemon: handle(),
         conversation,
+        pictures: Pictures::plain(images.service()),
         images,
         draw: DrawSwitch::through(Arc::new(CanDraw)),
         folder: folder.map(str::to_owned),

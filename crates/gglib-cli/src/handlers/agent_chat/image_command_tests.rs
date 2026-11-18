@@ -101,12 +101,12 @@ fn stored_images_are_shown_as_one_marker_each_in_order() {
     let (wide, small) = (image(2560, 1440), image(64, 32));
 
     assert_eq!(
-        markers(&[wide.clone(), small.clone()]),
+        markers(&[wide.clone(), small.clone()], &Links::default()),
         format!(
             " [image 2560x1440 {}] [image 64x32 {}]",
             &wide.id.as_str()[..8],
             &small.id.as_str()[..8]
         )
     );
-    assert_eq!(markers(&[]), "");
+    assert_eq!(markers(&[], &Links::default()), "");
 }

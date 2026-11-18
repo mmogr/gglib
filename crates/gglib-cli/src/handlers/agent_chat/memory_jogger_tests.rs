@@ -33,7 +33,7 @@ fn a_resumed_chat_shows_a_marker_for_each_image_of_its_last_user_turn() {
         stored_message(Assistant, "A missing semicolon.", &[]),
     ];
 
-    let jogger = memory_jogger(&history, "Agent session");
+    let jogger = memory_jogger(&history, "Agent session", &Links::default());
 
     let (wide, small) = (&history[0].images[0].id, &history[0].images[1].id);
     assert!(jogger.contains(&format!(
@@ -50,7 +50,11 @@ fn a_resumed_chat_shows_a_marker_for_each_image_of_its_last_user_turn() {
 fn a_resumed_chat_with_no_images_shows_no_marker() {
     use MessageRole::User;
 
-    let jogger = memory_jogger(&[stored_message(User, "hello", &[])], "Agent session");
+    let jogger = memory_jogger(
+        &[stored_message(User, "hello", &[])],
+        "Agent session",
+        &Links::default(),
+    );
 
     assert!(jogger.contains("You: hello"));
     assert!(!jogger.contains("[image"));
@@ -61,7 +65,11 @@ fn the_jogger_clips_a_long_turn_on_a_character_and_keeps_its_markers() {
     use MessageRole::User;
     let long = "é".repeat(201);
 
-    let jogger = memory_jogger(&[stored_message(User, &long, &[(64, 32)])], "t");
+    let jogger = memory_jogger(
+        &[stored_message(User, &long, &[(64, 32)])],
+        "t",
+        &Links::default(),
+    );
 
     assert!(jogger.contains(&format!("You: {}… [image 64x32 ", "é".repeat(200))));
 }
@@ -78,7 +86,7 @@ fn a_resumed_chat_shows_the_images_its_last_turns_tools_made() {
         stored_message(Assistant, "Here is a square.", &[]),
     ];
 
-    let jogger = memory_jogger(&history, "Agent session");
+    let jogger = memory_jogger(&history, "Agent session", &Links::default());
 
     let square = &history[3].images[0].id;
     let line = format!("Tool images: [image 1024x1024 {}]", &square.as_str()[..8]);
@@ -87,4 +95,25 @@ fn a_resumed_chat_shows_the_images_its_last_turns_tools_made() {
         !jogger.contains("16x16"),
         "an earlier turn's images: {jogger}"
     );
+}
+
+/// The images the jogger shows a marker for are the ones a resume makes
+/// links for: the last user message's, and its tools' after it, and no
+/// earlier turn's.
+#[test]
+fn the_jogger_s_images_are_its_last_turn_s() {
+    use MessageRole::{Assistant, Tool, User};
+    let history = [
+        stored_message(User, "draw a dot", &[(1, 1)]),
+        stored_message(Tool, "[image 16x16 PNG stored]", &[(16, 16)]),
+        stored_message(User, "and a square", &[(2, 2)]),
+        stored_message(Tool, "[image 32x32 PNG stored]", &[(32, 32)]),
+        stored_message(Assistant, "A square.", &[]),
+    ];
+
+    let shown: Vec<u32> = shown_images(&history).iter().map(|i| i.width).collect();
+
+    assert_eq!(shown, [2, 32]);
+    assert_eq!(shown_images(&history[1..2]).len(), 1, "no user message");
+    assert!(shown_images(&[]).is_empty());
 }

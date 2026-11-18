@@ -103,13 +103,14 @@ async fn said(events: Vec<AgentEvent>, rich: bool) -> String {
     let mut written = String::new();
     // Quiet in Raw mode, as a pipe's `--quiet` is; Rich mode is never quiet.
     let mut ctx = RenderContext::new(rich, false, !rich);
-    let answered = drain(&mut rx, false, &mut ctx, &mut |said| match said {
+    let answered = drain(&mut rx, false, &mut ctx, None, &mut |said| match said {
         Said::Block(text) => {
             written.push('[');
             written.push_str(text);
             written.push(']');
         }
         Said::Raw(text) => written.push_str(text),
+        Said::ToolLine(_) => {}
     })
     .await;
     assert!(answered);
@@ -144,7 +145,7 @@ fn ending_text_stops_its_spinner_and_shows_it_once() {
 
     let mut blocks = Vec::new();
     let mut out = |said: Said<'_>| match said {
-        Said::Block(text) | Said::Raw(text) => blocks.push(text.to_owned()),
+        Said::Block(text) | Said::Raw(text) | Said::ToolLine(text) => blocks.push(text.to_owned()),
     };
     let mut ctx = RenderContext::new(true, false, false);
     emit_content(&mut ctx, "A cat!", &mut out);
@@ -177,10 +178,72 @@ async fn text_beside_a_tool_call_is_out_once_the_tool_starts() {
             written.lock().unwrap().push_str(text);
         }
     };
-    let mut draining = std::pin::pin!(drain(&mut rx, false, &mut ctx, &mut out));
+    let mut draining = std::pin::pin!(drain(&mut rx, false, &mut ctx, None, &mut out));
 
     assert!(futures_util::poll!(draining.as_mut()).is_pending());
 
     assert_eq!(*written.lock().unwrap(), "A cat!");
     drop(tx);
+}
+
+/// A finished tool's line ends with a marker for the image it made, and
+/// the marker is a link to the image's copy when the session's pictures
+/// make links; with none it is the plain marker.
+#[tokio::test]
+async fn a_finished_tool_s_image_marker_is_a_link_where_pictures_make_them() {
+    use gglib_core::domain::agent::ToolResult;
+
+    use super::{Pictures, RenderContext, Said, drain};
+    use crate::bootstrap::test_context;
+    use crate::handlers::agent_chat::images::images_tests::png;
+
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = test_context(dir.path()).await;
+    let service = ctx.app.attachments();
+    let image = service.ingest(&png(4, 2)).await.unwrap().info;
+    let folder = dir.path().join("pictures");
+    std::fs::create_dir(&folder).unwrap();
+    let linking = Pictures::in_folder(service, &folder);
+    let drew = || {
+        let mut result = ToolResult::text("c1", "Drew 1 image", true);
+        result.images = vec![image.clone()];
+        AgentEvent::ToolCallComplete {
+            tool_name: "builtin:generate_image".to_owned(),
+            result,
+            wait_ms: 0,
+            execute_duration_ms: 1,
+            display_name: "Generate Image".to_owned(),
+            duration_display: "1ms".to_owned(),
+        }
+    };
+
+    let mut lines = Vec::new();
+    for pictures in [Some(&linking), None] {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        tx.send(drew()).unwrap();
+        drop(tx);
+        let mut render = RenderContext::new(true, false, false);
+        drain(&mut rx, false, &mut render, pictures, &mut |said| {
+            if let Said::ToolLine(line) = said {
+                lines.push(line.to_owned());
+            }
+        })
+        .await;
+    }
+
+    let marker = format!("[image 4x2 {}]", &image.id.as_str()[..8]);
+    let copy = folder.join(format!("{}.png", image.id.as_str()));
+    let address = reqwest::Url::from_file_path(&copy).unwrap();
+    assert!(
+        lines[0].ends_with(&format!("\x1b]8;;{address}\x1b\\{marker}\x1b]8;;\x1b\\")),
+        "{:?}",
+        lines[0]
+    );
+    assert!(copy.is_file());
+    assert!(
+        lines[1].ends_with(&format!("Drew 1 image {marker}")),
+        "{:?}",
+        lines[1]
+    );
+    assert_eq!(lines.len(), 2);
 }

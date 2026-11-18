@@ -23,6 +23,7 @@
 //! the next prompt instead of exiting (keeping behaviour consistent with the
 //! help text — `/quit` or Ctrl+D are the intended exit paths).
 
+use std::io::{self, IsTerminal as _};
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -40,6 +41,7 @@ use super::branches;
 use super::draw::DrawSwitch;
 use super::images::TurnImages;
 use super::persistence::Conversation;
+use super::pictures::Pictures;
 use super::repl_line::{self, Line};
 use super::turn::{self, Shown};
 
@@ -82,6 +84,8 @@ pub(crate) struct Session<'a> {
     /// The Thinking choice this command line named, said on each turn.
     pub thinking: Option<Thinking>,
     pub shown: Shown,
+    /// How the pictures a turn's tools make are shown.
+    pictures: Pictures<'a>,
 }
 
 impl<'a> Session<'a> {
@@ -98,6 +102,9 @@ impl<'a> Session<'a> {
         shown: Shown,
     ) -> Self {
         let draw = DrawSwitch::for_session(&daemon, target);
+        // A tool's line, and its images' markers, go to stderr.
+        let to_terminal = !shown.quiet && io::stderr().is_terminal();
+        let pictures = Pictures::for_stream(images.service(), to_terminal);
         Self {
             daemon,
             conversation,
@@ -106,6 +113,7 @@ impl<'a> Session<'a> {
             folder,
             thinking,
             shown,
+            pictures,
         }
     }
 }
@@ -132,7 +140,7 @@ impl Session<'_> {
     /// after it is offered no image tool. `true` when the reply gave its
     /// answer; a refusal is said on stderr.
     pub(crate) async fn send(&self, turn: &LocalTurn) -> bool {
-        let sent = turn::send(&self.daemon, turn, self.shown).await;
+        let sent = turn::send(&self.daemon, turn, self.shown, Some(&self.pictures)).await;
         self.draw.sent();
         sent.unwrap_or_else(|refused| {
             eprintln!("  ✗  {refused}");

@@ -85,7 +85,7 @@ pub(crate) async fn resolve(service: &AttachmentService, typed: &str) -> Result<
 }
 
 /// The file extension for an image's media type.
-fn extension(mime: &str) -> &'static str {
+pub(crate) fn extension(mime: &str) -> &'static str {
     match mime {
         "image/png" => "png",
         "image/jpeg" => "jpg",

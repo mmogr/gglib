@@ -27,6 +27,8 @@ independently readable:
 - [`renderer`] — maps [`gglib_core::AgentEvent`] variants to terminal output,
   and a reply's figure line ("41 s · 13 t/s · 2,100 tokens reused", core's
   `TurnUsage::figure_line`, the GUI thread's words)
+- `pictures` — a chat's pictures in the terminal: each image's marker a
+  link that opens a copy of it, on a terminal that opens links
 - `progress_line` — a long tool's progress ("drawing: sampling 2/4") and a
   wait before a reply ("Loading Qwen3-4B… 12 s", core's words), as one
   stderr line each report rewrites; a preview frame is not shown

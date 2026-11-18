@@ -100,7 +100,7 @@ async fn a_turn_puts_the_pages_body_and_its_recorded_reply_answers() {
     };
 
     let answered = STAND_IN_PORT
-        .scope(port, send(&handle(), &turn, QUIET))
+        .scope(port, send(&handle(), &turn, QUIET, None))
         .await;
 
     assert!(answered.expect("the turn ran"), "the reply gave its answer");
@@ -139,7 +139,7 @@ async fn a_plain_turn_sends_its_words_and_its_chat_alone() {
     });
 
     let answered = STAND_IN_PORT
-        .scope(port, send(&handle(), &plain("hello"), QUIET))
+        .scope(port, send(&handle(), &plain("hello"), QUIET, None))
         .await;
 
     assert!(answered.unwrap());
@@ -166,7 +166,7 @@ async fn a_refused_turn_is_the_daemons_sentence() {
     };
 
     let refused = STAND_IN_PORT
-        .scope(port, send(&handle(), &turn, QUIET))
+        .scope(port, send(&handle(), &turn, QUIET, None))
         .await;
 
     assert_eq!(refused.expect_err("refused").to_string(), said);
@@ -186,7 +186,7 @@ async fn a_failed_run_is_no_answer() {
     });
 
     let answered = STAND_IN_PORT
-        .scope(port, send(&handle(), &plain("hello"), QUIET))
+        .scope(port, send(&handle(), &plain("hello"), QUIET, None))
         .await;
 
     assert!(!answered.expect("the turn was taken"));
@@ -221,7 +221,7 @@ async fn followed(answer: Answer) -> (Followed, Vec<String>) {
     let (port, taken) = stand_in(answer);
     let never = std::future::pending::<std::io::Result<()>>();
     let followed = STAND_IN_PORT
-        .scope(port, follow(&handle(), "run-0123abcd", QUIET, never))
+        .scope(port, follow(&handle(), "run-0123abcd", QUIET, None, never))
         .await;
     let lines = taken.lock().unwrap().iter().map(|t| t.0.clone()).collect();
     (followed, lines)
@@ -329,7 +329,7 @@ async fn ctrl_c_cancels_the_run_and_waits_for_it_to_end() {
     let stopped = STAND_IN_PORT
         .scope(
             port,
-            follow(&handle(), "run-0123abcd", QUIET, async { Ok(()) }),
+            follow(&handle(), "run-0123abcd", QUIET, None, async { Ok(()) }),
         )
         .await;
 
