@@ -365,16 +365,11 @@ jobs:
         uses: actions/checkout@v7
 
       # Its own shared-key, and only main saves; the rust-prelude action
-      # says why.
+      # says why. No system packages: only gglib-app builds against GTK and
+      # WebKit, and `make bindings` leaves it out.
       - name: Rust prelude
         uses: ./.github/actions/rust-prelude
         with:
-          apt-packages: >-
-            libgtk-3-dev
-            libwebkit2gtk-4.1-dev
-            libayatana-appindicator3-dev
-            librsvg2-dev
-            libasound2-dev
           shared-key: "ci-bindings"
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
@@ -404,16 +399,11 @@ jobs:
         uses: actions/checkout@v7
 
       # Its own shared-key, and only main saves; the rust-prelude action
-      # says why.
+      # says why. No system packages: only gglib-app builds against GTK and
+      # WebKit, and the docs leave it out.
       - name: Rust prelude
         uses: ./.github/actions/rust-prelude
         with:
-          apt-packages: >-
-            libgtk-3-dev
-            libwebkit2gtk-4.1-dev
-            libayatana-appindicator3-dev
-            librsvg2-dev
-            libasound2-dev
           shared-key: "ci-rustdoc"
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
