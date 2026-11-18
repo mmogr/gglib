@@ -1,10 +1,11 @@
 //! A picture drawn in the terminal itself, by the two protocols terminals
 //! have for it.
 //!
-//! [`Inline::of_terminal`] says which one this terminal reads, from its own
-//! environment: there is no asking one that would not also print garbage in
-//! a terminal that does not answer. A terminal not named here shows no
-//! picture, and its marker is all it had before.
+//! [`Inline::of_terminal`] says which one this terminal reads, from what
+//! the terminal itself sets in its environment: there is no asking one that
+//! would not also print garbage in a terminal that does not answer. A
+//! terminal not named here shows no picture, and its marker is all it had
+//! before.
 //!
 //! - **iTerm2**, from 3.5: its inline image sequence in several parts
 //!   (`OSC 1337 ; MultipartFile`), as its own `imgcat` sends one. A PNG or
@@ -54,23 +55,25 @@ impl Inline {
         if set("TMUX") || set("STY") || term.starts_with("screen") || term.starts_with("tmux") {
             return None;
         }
-        // `LC_TERMINAL` is what iTerm2 sets for a shell on another machine,
-        // where `TERM_PROGRAM` does not travel.
-        let iterm = [
-            ("TERM_PROGRAM", "iTerm.app", "TERM_PROGRAM_VERSION"),
-            ("LC_TERMINAL", "iTerm2", "LC_TERMINAL_VERSION"),
-        ]
-        .into_iter()
-        .find(|(name, value, _)| is(name, value));
-        if let Some((_, _, version)) = iterm {
+        let iterm = |version: &str| {
             let multipart = env(version).is_some_and(|version| at_least(&version, (3, 5)));
-            return multipart.then_some(Self::ITerm);
+            multipart.then_some(Self::ITerm)
+        };
+        // A terminal is believed by what it sets itself. One started from
+        // another (an editor's, from a shell in iTerm2 or kitty) inherits
+        // that one's variables, and would be sent a picture it prints.
+        match env("TERM_PROGRAM").unwrap_or_default().as_str() {
+            "iTerm.app" => iterm("TERM_PROGRAM_VERSION"),
+            "ghostty" => Some(Self::Kitty),
+            // No program named: kitty names none, and none travels to a
+            // shell on another machine. `TERM` does, and so does what
+            // iTerm2 sets for that case, `LC_TERMINAL`.
+            "" if term == "xterm-kitty" || term == "xterm-ghostty" => Some(Self::Kitty),
+            "" if is("LC_TERMINAL", "iTerm2") && (set("SSH_CONNECTION") || set("SSH_TTY")) => {
+                iterm("LC_TERMINAL_VERSION")
+            }
+            _ => None,
         }
-        let kitty = set("KITTY_WINDOW_ID")
-            || term == "xterm-kitty"
-            || term == "xterm-ghostty"
-            || is("TERM_PROGRAM", "ghostty");
-        kitty.then_some(Self::Kitty)
     }
 
     /// What to write to draw `picture`, `columns` wide, the cursor left on

@@ -44,6 +44,8 @@ fn payloads<'a>(drawn: &'a str, opens: &str, closes: &str) -> Vec<&'a str> {
 fn a_terminal_known_to_draw_pictures_is_read_from_its_environment() {
     let xterm = ("TERM", "xterm-256color");
     let iterm = ("TERM_PROGRAM", "iTerm.app");
+    let from_iterm = [("LC_TERMINAL", "iTerm2"), ("LC_TERMINAL_VERSION", "3.7.7")];
+    let ssh = ("SSH_CONNECTION", "10.0.0.2 50000 10.0.0.1 22");
     for (set, inline) in [
         (
             vec![xterm, iterm, ("TERM_PROGRAM_VERSION", "3.7.7")],
@@ -53,28 +55,61 @@ fn a_terminal_known_to_draw_pictures_is_read_from_its_environment() {
             vec![xterm, iterm, ("TERM_PROGRAM_VERSION", "3.5.0beta10")],
             Some(Inline::ITerm),
         ),
-        // A shell on another machine: only LC_TERMINAL travels.
-        (
-            vec![
-                xterm,
-                ("LC_TERMINAL", "iTerm2"),
-                ("LC_TERMINAL_VERSION", "3.6.1"),
-            ],
-            Some(Inline::ITerm),
-        ),
         // Before multipart, and with no version to go by.
         (vec![xterm, iterm, ("TERM_PROGRAM_VERSION", "3.4.23")], None),
         (vec![xterm, iterm], None),
+        // A shell on another machine: only LC_TERMINAL travels.
+        (
+            vec![xterm, from_iterm[0], from_iterm[1], ssh],
+            Some(Inline::ITerm),
+        ),
+        (
+            vec![xterm, from_iterm[0], ("LC_TERMINAL_VERSION", "3.4.23"), ssh],
+            None,
+        ),
         (vec![("TERM", "xterm-ghostty")], Some(Inline::Kitty)),
         (
             vec![xterm, ("TERM_PROGRAM", "ghostty")],
             Some(Inline::Kitty),
         ),
         (vec![("TERM", "xterm-kitty")], Some(Inline::Kitty)),
-        (vec![xterm, ("KITTY_WINDOW_ID", "1")], Some(Inline::Kitty)),
+        (vec![("TERM", "xterm-kitty"), ssh], Some(Inline::Kitty)),
         (vec![xterm, ("TERM_PROGRAM", "Apple_Terminal")], None),
         (vec![xterm], None),
         (vec![], None),
+        // What another terminal left in the environment is not believed:
+        // one started from iTerm2 or kitty, here and not over SSH.
+        (vec![xterm, from_iterm[0], from_iterm[1]], None),
+        (vec![xterm, ("KITTY_WINDOW_ID", "1")], None),
+        (
+            vec![
+                xterm,
+                ("TERM_PROGRAM", "vscode"),
+                from_iterm[0],
+                from_iterm[1],
+                ssh,
+            ],
+            None,
+        ),
+        (
+            vec![("TERM", "xterm-kitty"), ("TERM_PROGRAM", "vscode")],
+            None,
+        ),
+        // Ghostty and kitty started from iTerm2 are still themselves.
+        (
+            vec![
+                xterm,
+                ("TERM_PROGRAM", "ghostty"),
+                from_iterm[0],
+                from_iterm[1],
+                ssh,
+            ],
+            Some(Inline::Kitty),
+        ),
+        (
+            vec![("TERM", "xterm-kitty"), from_iterm[0], from_iterm[1], ssh],
+            Some(Inline::Kitty),
+        ),
         // Inside a multiplexer, whatever is outside it.
         (
             vec![
@@ -86,15 +121,11 @@ fn a_terminal_known_to_draw_pictures_is_read_from_its_environment() {
             None,
         ),
         (
-            vec![("TERM", "screen-256color"), ("KITTY_WINDOW_ID", "1")],
+            vec![("TERM", "screen-256color"), ("TERM_PROGRAM", "ghostty")],
             None,
         ),
         (
-            vec![
-                ("TERM", "tmux-256color"),
-                ("LC_TERMINAL", "iTerm2"),
-                ("LC_TERMINAL_VERSION", "3.7.7"),
-            ],
+            vec![("TERM", "tmux-256color"), from_iterm[0], from_iterm[1], ssh],
             None,
         ),
         (vec![("TERM", "xterm-kitty"), ("STY", "1.pts-0.host")], None),
