@@ -18,7 +18,8 @@ use super::markdown::render_markdown;
 use super::progress_line;
 use super::renderer::{figure_line, render_event};
 use super::thinking_dispatch::{
-    RenderContext, close_thinking, emit_content, emit_reasoning, suspend_or_run,
+    Out, RenderContext, Said, close_thinking, emit_content, emit_reasoning, end_text,
+    suspend_or_run,
 };
 
 /// Drain `rx` until the channel closes or a [`AgentEvent::FinalAnswer`]
@@ -48,6 +49,30 @@ pub(crate) async fn drain_event_stream(
     let rich = !quiet && io::stdout().is_terminal();
     let stderr_tty = io::stderr().is_terminal();
     let mut ctx = RenderContext::new(rich, stderr_tty, quiet);
+    drain(rx, verbose, &mut ctx, &mut to_stdout).await
+}
+
+/// A reply's text on stdout: a block through the Markdown renderer, raw
+/// text as it is.
+fn to_stdout(said: Said<'_>) {
+    match said {
+        Said::Block(text) => render_markdown(text),
+        Said::Raw(text) => {
+            print!("{text}");
+            let _ = io::stdout().flush();
+        }
+    }
+}
+
+/// [`drain_event_stream`] in the mode `ctx` names, the reply's text going
+/// to `out`.
+async fn drain(
+    rx: &mut mpsc::UnboundedReceiver<AgentEvent>,
+    verbose: bool,
+    ctx: &mut RenderContext,
+    out: Out<'_>,
+) -> bool {
+    let (rich, quiet) = (ctx.rich, ctx.quiet);
     let mut had_text = false;
     // A progress line is on stderr, unfinished, until the next other event
     // wipes it.
@@ -68,17 +93,17 @@ pub(crate) async fn drain_event_stream(
             // ── Content tokens ───────────────────────────────────────
             AgentEvent::TextDelta { content } => {
                 had_text = true;
-                emit_content(&mut ctx, content);
+                emit_content(ctx, content, out);
             }
 
             // ── Structured reasoning (already classified upstream) ───
             AgentEvent::ReasoningDelta { content } => {
-                emit_reasoning(&mut ctx, content);
+                emit_reasoning(ctx, content);
             }
 
             // ── Turn complete ────────────────────────────────────────
             AgentEvent::FinalAnswer { content } => {
-                close_thinking(&mut ctx);
+                close_thinking(ctx);
 
                 // Stop spinner before rendering.
                 if let Some(sp) = ctx.spinner.take() {
@@ -93,15 +118,14 @@ pub(crate) async fn drain_event_stream(
                         &ctx.buf
                     };
                     if !text.is_empty() {
-                        render_markdown(text);
+                        out(Said::Block(text));
                     }
                 } else {
                     // Raw mode: defensive fallback for non-streaming responses.
                     if !had_text && !content.is_empty() {
-                        print!("{content}");
-                        let _ = io::stdout().flush();
+                        out(Said::Raw(content));
                     }
-                    println!();
+                    out(Said::Raw("\n"));
                 }
 
                 if let Some(line) = figures.line(quiet) {
@@ -111,13 +135,23 @@ pub(crate) async fn drain_event_stream(
             }
 
             AgentEvent::TurnUsage(usage) => {
-                close_thinking(&mut ctx);
+                close_thinking(ctx);
                 figures.saw(usage);
             }
 
             // ── Tool / progress / error events ───────────────────────
             _ => {
-                close_thinking(&mut ctx);
+                close_thinking(ctx);
+                // A message's text is over once its tool starts, or its
+                // round ends with none started: shown now, apart from the
+                // reply after the tool, and its spinner stopped so the
+                // tool's progress line is the only thing redrawn.
+                if matches!(
+                    event,
+                    AgentEvent::ToolCallStart { .. } | AgentEvent::IterationComplete { .. }
+                ) {
+                    end_text(ctx, out);
+                }
                 suspend_or_run(ctx.spinner.as_ref(), || {
                     render_event(&event, verbose, quiet, had_text);
                 });
@@ -127,12 +161,12 @@ pub(crate) async fn drain_event_stream(
 
     // Channel closed without a FinalAnswer — the loop ended with an error
     // (max iterations, stagnation, etc.).
-    close_thinking(&mut ctx);
+    close_thinking(ctx);
     if let Some(sp) = ctx.spinner.take() {
         sp.finish_and_clear();
     }
     if rich && !ctx.buf.is_empty() {
-        render_markdown(&ctx.buf);
+        out(Said::Block(&ctx.buf));
     }
     false
 }
