@@ -34,6 +34,7 @@ use gglib_core::domain::attachment::AttachmentId;
 use gglib_core::domain::hub_chats::LocalTurn;
 
 use crate::daemon_client::DaemonHandle;
+use crate::target::Target;
 
 use super::branches;
 use super::draw::DrawSwitch;
@@ -73,13 +74,40 @@ pub(crate) struct Session<'a> {
     pub conversation: Conversation<'a>,
     /// The images attached to the next message.
     pub images: TurnImages<'a>,
-    /// The Draw switch (`/draw`).
-    pub draw: DrawSwitch,
+    /// The Draw switch (`/draw`). Private, so every session is made by
+    /// [`Session::new`] and draws by one rule, however it was started.
+    draw: DrawSwitch,
     /// The folder each turn says (`files`); `None` says none.
     pub folder: Option<String>,
     /// The Thinking choice this command line named, said on each turn.
     pub thinking: Option<Thinking>,
     pub shown: Shown,
+}
+
+impl<'a> Session<'a> {
+    /// A session on `target`'s model: `gglib chat`'s, and a `gglib q`
+    /// continued into chat. Its Draw switch asks `daemon` whether it can
+    /// draw ([`DrawSwitch::for_session`]).
+    pub(crate) fn new(
+        daemon: DaemonHandle,
+        conversation: Conversation<'a>,
+        images: TurnImages<'a>,
+        target: Target,
+        folder: Option<String>,
+        thinking: Option<Thinking>,
+        shown: Shown,
+    ) -> Self {
+        let draw = DrawSwitch::for_session(&daemon, target);
+        Self {
+            daemon,
+            conversation,
+            images,
+            draw,
+            folder,
+            thinking,
+            shown,
+        }
+    }
 }
 
 impl Session<'_> {

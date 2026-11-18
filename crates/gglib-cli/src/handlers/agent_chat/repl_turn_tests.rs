@@ -193,3 +193,38 @@ async fn a_draw_is_for_one_message_even_one_the_daemon_refused() {
     assert!(!answered);
     assert!(!session.turn("again".to_owned(), Vec::new(), false).draw);
 }
+
+/// A session made by [`Session::new`] on this machine's model draws through
+/// its daemon: `/draw` arms the next message. `gglib chat` and a `gglib q`
+/// continued into chat are both made this way, so neither can be left
+/// without `/draw`.
+#[tokio::test]
+async fn a_new_local_session_can_draw_through_its_daemon() {
+    use crate::daemon_client::handle_tests::{answering, daemon_health};
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = test_context(dir.path()).await;
+    let (attachments, _) = service();
+    let (images, _) = attached(&attachments, &[], true).await.unwrap();
+    let conversation = chat(&ctx, &[]).await;
+    let answer = r#"{"available":true,"model":"sdxl"}"#.to_owned();
+    let (daemon, _) = answering(daemon_health(), answer);
+    let shown = Shown {
+        verbose: false,
+        quiet: true,
+    };
+    let session = Session::new(
+        handle(),
+        conversation,
+        images,
+        Target::Local,
+        None,
+        None,
+        shown,
+    );
+
+    let said = STAND_IN_PORT.scope(daemon, session.draw.say(None)).await;
+
+    assert_eq!(said, "the next message draws, with sdxl");
+    assert_eq!(session.draw.turn(), (true, None));
+}
