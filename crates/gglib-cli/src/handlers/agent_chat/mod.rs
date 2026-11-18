@@ -58,8 +58,7 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
         .map(|resumed| resumed.held.folder.clone());
     let conversation = save(ctx, &args, plan).await?;
 
-    // The session's Draw switch (`/draw`), and the folder its file tools read.
-    let draw = draw::DrawSwitch::for_session(&daemon, args.target);
+    // The folder the session's file tools read.
     let sent_to = conversation.machine.as_deref();
     let chat = kept.as_ref().map_or(files::Chat::New, |folder| {
         files::Chat::Resumed(folder.as_deref())
@@ -69,18 +68,19 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
         eprintln!("{line}");
     }
 
-    let session = repl::Session {
+    let shown = Shown {
+        verbose: args.verbose,
+        quiet: false,
+    };
+    let session = repl::Session::new(
         daemon,
         conversation,
         images,
-        draw,
+        args.target,
         folder,
-        thinking: args.thinking,
-        shown: Shown {
-            verbose: args.verbose,
-            quiet: false,
-        },
-    };
+        args.thinking,
+        shown,
+    );
     repl::run_repl(session).await
 }
 

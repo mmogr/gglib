@@ -15,7 +15,6 @@ use gglib_core::domain::hub_chats::LocalTurn;
 use crate::bootstrap::CliContext;
 use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::daemon_client;
-use crate::handlers::agent_chat::draw::DrawSwitch;
 use crate::handlers::agent_chat::files::{self, Chat};
 use crate::handlers::agent_chat::images::TurnImages;
 use crate::handlers::agent_chat::persistence::Conversation;
@@ -35,10 +34,13 @@ thoroughly. Be direct and concise.";
 
 /// System prompt for a question asked with `--no-tools`. It names no tool
 /// and no folder: a model told of tools it was not given calls one anyway,
-/// and the call comes back as its reply.
+/// and the call comes back as its reply. It does not say there are no
+/// tools either: the prompt is saved with the chat, and a later message
+/// sent with `/draw` is given the image tool, which a model told it has
+/// none argues with.
 const SYSTEM_PROMPT_NO_TOOLS: &str = "\
 Answer the question from what you know and from any text given with it. \
-You have no tools and cannot read files. Be direct and concise.";
+You cannot read files. Be direct and concise.";
 
 /// System prompt for a question asked with its tools in a directory whose
 /// files are not read: home, a system folder, or under a `--tools` list
@@ -208,17 +210,10 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         image_model: None,
         folder: folder.clone(),
     };
-    let session = Session {
-        daemon,
-        conversation,
-        images,
-        // A question's session has no Draw switch: `/draw` belongs to
-        // `gglib chat`.
-        draw: DrawSwitch::off("a question's session has no image tool; use `gglib chat`"),
-        folder,
-        thinking: None,
-        shown,
-    };
+    // The session `gglib chat` would make, with no Thinking choice: `q`
+    // names none. Its first turn, the question, never draws; a line typed
+    // after `y` may, with `/draw`.
+    let session = Session::new(daemon, conversation, images, target, folder, None, shown);
     let completed = session.send(&asked).await;
 
     // ── Continuation prompt ──────────────────────────────────────────────
