@@ -14,6 +14,8 @@ use std::process::Command;
 
 use anyhow::Result;
 
+use crate::handlers::config::copies::{bundle_version, mac_app_roots};
+
 /// Where a Linux build leaves its `AppImage`, under the checkout.
 const APPIMAGE_DIR: &str = "target/release/bundle/appimage";
 
@@ -51,15 +53,53 @@ pub(crate) fn execute() -> Result<()> {
         .map_or_else(launch_prebuilt, |repo_root| launch_from_repo(&repo_root))
 }
 
-/// The app beside the running binary of a prebuilt install, when it is there:
-/// the `.app` bundle (macOS), an `AppImage` or `gglib-gui` (Linux), or
-/// `gglib-gui.exe` (Windows).
-fn sibling_artifact(os: Os, exe_dir: &Path) -> Option<PathBuf> {
+/// The macOS app's bundle name.
+const MAC_APP: &str = "gglib.app";
+
+/// The app a prebuilt install opens, when there is one. On Linux and Windows
+/// that is the app beside the running binary: an `AppImage` or `gglib-gui`,
+/// or `gglib-gui.exe`, which is where their packages and installers put it.
+///
+/// On macOS it is the first of: the bundle the binary runs from (Homebrew
+/// links the command out of the app), `gglib.app` beside the binary (the
+/// tar.gz download), and `gglib.app` in one of `mac_roots`, the folders
+/// apps are installed in. An older app's name is never opened.
+fn installed_app(os: Os, exe_dir: &Path, mac_roots: &[PathBuf]) -> Option<PathBuf> {
     match os {
-        Os::Mac => Some(exe_dir.join("gglib.app")).filter(|bundle| bundle.exists()),
+        Os::Mac => enclosing_bundle(exe_dir)
+            .or_else(|| Some(exe_dir.join(MAC_APP)).filter(|bundle| bundle.exists()))
+            .or_else(|| {
+                mac_roots
+                    .iter()
+                    .map(|root| root.join(MAC_APP))
+                    .find(|bundle| bundle.exists())
+            }),
         Os::Linux => find_sibling_gui_artifact(exe_dir),
         Os::Windows => Some(exe_dir.join("gglib-gui.exe")).filter(|exe| exe.exists()),
     }
+}
+
+/// The `.app` bundle whose `Contents/MacOS` is `exe_dir`, if it is one.
+fn enclosing_bundle(exe_dir: &Path) -> Option<PathBuf> {
+    if !exe_dir.ends_with("Contents/MacOS") {
+        return None;
+    }
+    let bundle = exe_dir.parent()?.parent()?;
+    let is_app = bundle.extension().is_some_and(|ext| ext == "app");
+    is_app.then(|| bundle.to_path_buf())
+}
+
+/// What is said before opening a macOS app whose version differs from this
+/// command's, as an old copy left in `/Applications` can: the launch goes
+/// ahead either way.
+fn version_note(app: &Path, app_version: Option<&str>, own: &str) -> Option<String> {
+    let app_version = app_version?;
+    (app_version != own).then(|| {
+        format!(
+            "Opening gglib {app_version} at {}; this command is {own}.",
+            app.display()
+        )
+    })
 }
 
 /// Look for a Linux GUI artifact next to the running binary.
@@ -155,7 +195,7 @@ fn launch(os: Os, artifact: &Path) -> Result<()> {
 }
 
 /// Launch the GUI from a prebuilt standalone binary: whatever
-/// [`sibling_artifact`] finds next to the running executable.
+/// [`installed_app`] finds for the running executable.
 fn launch_prebuilt() -> Result<()> {
     let exe_dir = std::env::current_exe()
         .and_then(gglib_core::paths::canonical)
@@ -166,8 +206,18 @@ fn launch_prebuilt() -> Result<()> {
     };
 
     if let Some(os) = Os::current()
-        && let Some(artifact) = sibling_artifact(os, &exe_dir)
+        && let Some(artifact) = installed_app(os, &exe_dir, &mac_app_roots())
     {
+        if os == Os::Mac
+            && enclosing_bundle(&exe_dir).as_ref() != Some(&artifact)
+            && let Some(note) = version_note(
+                &artifact,
+                bundle_version(&artifact).as_deref(),
+                gglib_build_info::SEMVER,
+            )
+        {
+            println!("{note}");
+        }
         return launch(os, &artifact);
     }
 

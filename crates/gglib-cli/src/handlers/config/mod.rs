@@ -1,6 +1,6 @@
 #![doc = include_str!("README.md")]
 pub(crate) mod check_deps;
-mod copies;
+pub(crate) mod copies;
 mod copy_version;
 pub(crate) mod engine;
 pub(crate) mod fast_downloads;
