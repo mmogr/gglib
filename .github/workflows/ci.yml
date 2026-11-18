@@ -514,13 +514,21 @@ jobs:
   # the same engines until package-lock.json moves Playwright. Edge, the
   # desktop app's webview on Windows, runs weekly in browser-edge.yml.
   #
-  # The browsers are downloaded each run, not cached: restoring them takes
-  # about as long as the download, and WebKit's system libraries are
-  # installed by apt either way.
+  # The job runs in Playwright's image for the locked version, from
+  # `playwright-image`, which carries both engines and the system libraries
+  # WebKit needs. A run installs nothing through apt and downloads no
+  # browser, so an Ubuntu mirror's speed is no part of it. `--user 1001` is
+  # the runner's own user, so what the job writes in the workspace and the
+  # npm cache is the runner's; `--ipc=host` gives Chromium the host's shared
+  # memory, which Docker's default 64 MB can run short of.
   test-browser:
     name: Test (Browser engines)
+    needs: [playwright-image]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    container:
+      image: ${{ needs.playwright-image.outputs.image }}
+      options: --user 1001 --ipc=host
     defaults:
       run:
         shell: bash
@@ -536,9 +544,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Install Chromium and WebKit
-        run: npx playwright install --with-deps chromium webkit
 
       - name: Run the browser-engine tests
         run: npm run test:browser
