@@ -37,7 +37,10 @@ const TIMEOUT: &str = "shift 3; exec \"$@\"";
 fn apt_machine() -> Machine {
     let mut machine = Machine::bare()
         .with_tool("id", "0")
-        .with("uname", "case \"$1\" in -s) echo Linux ;; *) echo x86_64 ;; esac")
+        .with(
+            "uname",
+            "case \"$1\" in -s) echo Linux ;; *) echo x86_64 ;; esac",
+        )
         .with("curl", "echo \"STUB curl $*\" >&2; echo key")
         .with(
             "tee",
@@ -305,12 +308,18 @@ fn a_mac_is_told_its_own_install_and_nothing_runs() {
 
         let said = stderr(&out);
         assert_eq!(out.status.code(), Some(1), "{said}");
-        assert!(said.contains(&format!("on a Mac: brew install {package}")), "{said}");
+        assert!(
+            said.contains(&format!("on a Mac: brew install {package}")),
+            "{said}"
+        );
         assert!(said.contains("releases/latest"), "{said}");
         assert!(!said.contains("STUB"), "{said}");
     }
     let calls = machine.calls();
-    assert!(calls.iter().all(|call| call.starts_with("uname ")), "{calls:?}");
+    assert!(
+        calls.iter().all(|call| call.starts_with("uname ")),
+        "{calls:?}"
+    );
 }
 
 #[test]
