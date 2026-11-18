@@ -1245,13 +1245,15 @@ jobs:
             cd ..
           done
 
-  # The gglib formula and gglib-gui cask, rendered from packaging/homebrew
+  # The gglib cask and gglib-cli formula, rendered from packaging/homebrew
   # with the release's own SHA256SUMS and pushed to mmogr/homebrew-tap, so
-  # `brew install mmogr/tap/gglib` and `brew install --cask
-  # mmogr/tap/gglib-gui` work.
+  # `brew install mmogr/tap/gglib` installs the desktop app with the command
+  # on a Mac, and `brew install mmogr/tap/gglib-cli` the command alone.
   #
   # The tap is shared: other projects' formulae and casks live there too, so
-  # this job writes only gglib's two files and leaves the rest alone.
+  # this job writes only gglib's two files and leaves the rest alone. It
+  # deletes the two that gglib's packages were called before: a formula
+  # named gglib would win over the cask of the same name.
   #
   # HOMEBREW_TAP_DEPLOY_KEY is the private half of a deploy key with write
   # access on the tap repository. Until it is set this renders, then stops
@@ -1305,6 +1307,7 @@ jobs:
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
 
           git clone git@github.com:${{ github.repository_owner }}/homebrew-tap.git push-tap
+          git -C push-tap rm -q --ignore-unmatch Formula/gglib.rb Casks/gglib-gui.rb
           mkdir -p push-tap/Formula push-tap/Casks
           cp tap/Formula/*.rb push-tap/Formula/
           cp tap/Casks/*.rb push-tap/Casks/

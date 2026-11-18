@@ -194,10 +194,17 @@ fi
 # shellcheck disable=SC2086
 add_names "$REPO" $STATE_NAMES
 
+# An app Homebrew owns is left to Homebrew. gglib-gui is the cask's old
+# name, which still owns its app until it is reinstalled as gglib.
 BREW_APP=0
-if command -v brew >/dev/null 2>&1 && brew list --cask gglib-gui >/dev/null 2>&1; then
-    BREW_APP=1
-    NOTES+=("The desktop app itself came from Homebrew: brew uninstall --cask gglib-gui")
+if command -v brew >/dev/null 2>&1; then
+    for cask in gglib gglib-gui; do
+        if brew list --cask "$cask" >/dev/null 2>&1; then
+            BREW_APP=1
+            NOTES+=("The desktop app itself came from Homebrew: brew uninstall --cask $cask")
+            break
+        fi
+    done
 fi
 
 if [ "$(uname -s)" = "Darwin" ]; then

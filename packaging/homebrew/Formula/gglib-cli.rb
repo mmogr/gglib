@@ -1,7 +1,10 @@
 # Rendered by scripts/render_homebrew.sh into mmogr/homebrew-tap on each
 # stable release. Edit this template in the gglib repository, not the tap.
-class Gglib < Formula
-  desc "Local model runtime and OpenAI-compatible proxy for llama.cpp"
+#
+# The gglib command alone, for macOS and Linux. On a Mac the gglib cask
+# installs the desktop app with this same command.
+class GglibCli < Formula
+  desc "Local model runtime and OpenAI-compatible proxy for llama.cpp (command only)"
   homepage "https://github.com/mmogr/gglib"
   version "@VERSION@"
   license "AGPL-3.0-only"

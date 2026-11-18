@@ -217,6 +217,14 @@ fn a_checkout_with_nothing_built_is_told_where_the_app_was_expected() {
     );
 }
 
+/// An install with no app is told how its own system installs it.
+#[test]
+fn an_install_without_the_app_is_told_how_its_system_installs_it() {
+    assert!(install_hint(Os::Mac).ends_with("brew install mmogr/tap/gglib"));
+    assert!(install_hint(Os::Linux).ends_with("https://mmogr.github.io/gglib/install.sh | sh"));
+    assert!(install_hint(Os::Windows).ends_with("https://github.com/mmogr/gglib/releases/latest"));
+}
+
 /// The system the rules are applied for is the one this binary runs on.
 #[test]
 fn the_system_is_the_one_this_binary_was_built_for() {
