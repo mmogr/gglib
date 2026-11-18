@@ -20,6 +20,9 @@
 # manager's steps are the few lines in its function below, for anyone who
 # would rather run them by hand.
 #
+# On any system but Linux it says what installs gglib there instead (brew on
+# a Mac, the installer on Windows) and stops before anything is run.
+#
 # The repositories carry stable releases for x86_64. GGLIB_REPO_URL points the
 # script at another copy of them; release.yml uses that to test a build.
 set -eu
@@ -37,6 +40,13 @@ for arg in "$@"; do
     *) die "unknown option $arg (the only one is --cli)" ;;
   esac
 done
+
+if [ "$(uname -s)" != Linux ]; then
+  brew_pkg=gglib
+  if [ "$cli" = 1 ]; then brew_pkg=gglib-cli; fi
+  say "this installs gglib's Linux packages."
+  die "on a Mac: brew install mmogr/tap/$brew_pkg. On Windows: the installer at https://github.com/mmogr/gglib/releases/latest"
+fi
 
 if [ "$(id -u)" -eq 0 ]; then
   as_root() { "$@"; }
