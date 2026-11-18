@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.38.0-rc.2](https://github.com/mmogr/gglib/compare/v0.38.0-rc.1...v0.38.0-rc.2) (2026-11-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **release:** a Homebrew install from before reinstalls once: brew uninstall gglib (or brew uninstall --cask gglib-gui), then brew install mmogr/tap/gglib. On Linux, or for the command alone, the package is now mmogr/tap/gglib-cli.
+
+### What gglib now does
+
+* **cli:** gglib gui opens the macOS app wherever it is installed ([#2104](https://github.com/mmogr/gglib/issues/2104)) ([802764d](https://github.com/mmogr/gglib/commit/802764d95aa58680b99f8cf960bd5528942d077a))
+* **release:** brew install mmogr/tap/gglib installs the desktop app with the command-line tool ([#2105](https://github.com/mmogr/gglib/issues/2105)) ([b535e30](https://github.com/mmogr/gglib/commit/b535e3066fc9bc20a930d4a2484561c96400072f))
+
+
+### What it stopped getting wrong
+
+* **ci:** an approval commit names a list by its length ([#2076](https://github.com/mmogr/gglib/issues/2076)) ([82dc556](https://github.com/mmogr/gglib/commit/82dc5568d1c4368c968558a0946c65453746f7db))
+* **ci:** approving an engine trial no longer refuses on a real terminal ([#2098](https://github.com/mmogr/gglib/issues/2098)) ([1a0d6a4](https://github.com/mmogr/gglib/commit/1a0d6a49d2544f4a4fb4e4a3a28fad1e54c03b87)), closes [#2097](https://github.com/mmogr/gglib/issues/2097)
+* **ci:** system packages come through one action, cached, with a mirror guard that names no mirror ([#2103](https://github.com/mmogr/gglib/issues/2103)) ([ff14f61](https://github.com/mmogr/gglib/commit/ff14f61419c06a4753efbcaa1bffd4064e591453)), closes [#2102](https://github.com/mmogr/gglib/issues/2102)
+* **ci:** the browser-engine tests run in Playwright's image, with nothing installed by apt ([#2101](https://github.com/mmogr/gglib/issues/2101)) ([e2c1761](https://github.com/mmogr/gglib/commit/e2c1761e3b2e648251cb15c52878fb88443146ca)), closes [#2100](https://github.com/mmogr/gglib/issues/2100)
+* **core:** the log file keeps what gglib did, not only its warnings ([#2092](https://github.com/mmogr/gglib/issues/2092)) ([157d741](https://github.com/mmogr/gglib/commit/157d741586e8750afdb8316c7344718fb2384be3)), closes [#2084](https://github.com/mmogr/gglib/issues/2084)
+* **frontend:** a path wraps after a separator, not inside a folder's name ([#2093](https://github.com/mmogr/gglib/issues/2093)) ([5a0561d](https://github.com/mmogr/gglib/commit/5a0561dff8f157c7ddc5237ad4607f9c92ef2f8e)), closes [#2085](https://github.com/mmogr/gglib/issues/2085)
+* **runtime:** on Windows an NVIDIA GPU gets the CUDA build without the CUDA toolkit ([#2090](https://github.com/mmogr/gglib/issues/2090)) ([c1f0120](https://github.com/mmogr/gglib/commit/c1f012019a0474251c78b97ecfbf04a66a4947eb)), closes [#2082](https://github.com/mmogr/gglib/issues/2082)
+* **runtime:** the image engine's Linux download is refused where the system's glibc is too old ([#2078](https://github.com/mmogr/gglib/issues/2078)) ([8e4ab2d](https://github.com/mmogr/gglib/commit/8e4ab2df3d88cbce6a7b33d361c0f2db8f0ade44))
+* **tauri:** the window no longer says gglib isn't running while the daemon is healthy ([#2091](https://github.com/mmogr/gglib/issues/2091)) ([deefc7c](https://github.com/mmogr/gglib/commit/deefc7c4311eb8e1395556078e80731b584f0f0a)), closes [#2083](https://github.com/mmogr/gglib/issues/2083)
+
+
+### Documentation
+
+* **readme:** Quick Start shows one install per system ([#2106](https://github.com/mmogr/gglib/issues/2106)) ([4f3de44](https://github.com/mmogr/gglib/commit/4f3de442c65def335687060889f8245c1285c937))
+
+
+### Internal
+
+* a pin moves only once its engine has been tried on the owner's machine ([#2087](https://github.com/mmogr/gglib/issues/2087)) ([d39487c](https://github.com/mmogr/gglib/commit/d39487c2b8cff79e420732d40de3f4cc90c3a2e1))
+* a pin pull request's engine is tried on the owner's machine with one command ([#2086](https://github.com/mmogr/gglib/issues/2086)) ([af6b897](https://github.com/mmogr/gglib/commit/af6b89732f80f4dbbb5444b37d29615c6c2a8b4e))
+* a test of a server that is not there holds its port ([#2096](https://github.com/mmogr/gglib/issues/2096)) ([740ddd1](https://github.com/mmogr/gglib/commit/740ddd1dff58f1293ec3e5068330b4dc922e809a))
+* **deps:** bump playwright ([#2099](https://github.com/mmogr/gglib/issues/2099)) ([2cd46ff](https://github.com/mmogr/gglib/commit/2cd46ff332f66ba423135887914bb4f013c0fe4b))
+* **deps:** bump the cargo and npm dependencies to the newest versions their ranges allow ([#2072](https://github.com/mmogr/gglib/issues/2072)) ([fe4646f](https://github.com/mmogr/gglib/commit/fe4646fbee11fb3d13366e45af8cefcbfe971418))
+* **deps:** move llama.cpp's pin from b12110 to b12359 ([#2074](https://github.com/mmogr/gglib/issues/2074)) ([a804a38](https://github.com/mmogr/gglib/commit/a804a3805aa3764df795bf8685815b22d955cb23))
+* **deps:** move stable-diffusion.cpp's pin from master-1025-8ee08e3 to master-1098-b521db4 ([#2094](https://github.com/mmogr/gglib/issues/2094)) ([8548696](https://github.com/mmogr/gglib/commit/85486961717c226e1ac242ab56ce2e1f883d0184))
+* **deps:** the release-please CLI resolves minimatch 11, past GHSA-g3hv-75wg-m249 ([#2108](https://github.com/mmogr/gglib/issues/2108)) ([6c4f891](https://github.com/mmogr/gglib/commit/6c4f891f59f47adf9ef7830f61761616cd523328))
+
 ## [0.38.0-rc.1](https://github.com/mmogr/gglib/compare/v0.37.0-rc.1...v0.38.0-rc.1) (2026-11-17)
 
 
