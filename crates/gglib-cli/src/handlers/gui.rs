@@ -221,10 +221,27 @@ fn launch_prebuilt() -> Result<()> {
         return launch(os, &artifact);
     }
 
-    println!("Desktop GUI is not included in this release.");
+    println!("The desktop app is not installed.");
+    if let Some(os) = Os::current() {
+        println!("{}", install_hint(os));
+    }
     println!();
     println!("Use 'gglib web' to open the browser-based interface instead.");
     Ok(())
+}
+
+/// How each system installs the desktop app, which brings this command
+/// with it.
+fn install_hint(os: Os) -> &'static str {
+    match os {
+        Os::Mac => "Install the app and this command together with: brew install mmogr/tap/gglib",
+        Os::Linux => {
+            "Install the app and this command together with: curl -fsSL https://mmogr.github.io/gglib/install.sh | sh"
+        }
+        Os::Windows => {
+            "Install the app and this command together with the installer at https://github.com/mmogr/gglib/releases/latest"
+        }
+    }
 }
 
 /// Launch the platform-appropriate GUI bundle from a source repo, or say
