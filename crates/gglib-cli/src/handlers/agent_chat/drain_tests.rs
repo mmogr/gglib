@@ -110,7 +110,7 @@ async fn said(events: Vec<AgentEvent>, rich: bool) -> String {
             written.push(']');
         }
         Said::Raw(text) => written.push_str(text),
-        Said::ToolLine(_) => {}
+        Said::ToolLine(_) | Said::Picture(_) => {}
     })
     .await;
     assert!(answered);
@@ -145,7 +145,9 @@ fn ending_text_stops_its_spinner_and_shows_it_once() {
 
     let mut blocks = Vec::new();
     let mut out = |said: Said<'_>| match said {
-        Said::Block(text) | Said::Raw(text) | Said::ToolLine(text) => blocks.push(text.to_owned()),
+        Said::Block(text) | Said::Raw(text) | Said::ToolLine(text) | Said::Picture(text) => {
+            blocks.push(text.to_owned());
+        }
     };
     let mut ctx = RenderContext::new(true, false, false);
     emit_content(&mut ctx, "A cat!", &mut out);
@@ -196,6 +198,7 @@ async fn a_finished_tool_s_image_marker_is_a_link_where_pictures_make_them() {
     use super::{Pictures, RenderContext, Said, drain};
     use crate::bootstrap::test_context;
     use crate::handlers::agent_chat::images::images_tests::png;
+    use crate::handlers::agent_chat::inline_picture::Inline;
 
     let dir = tempfile::tempdir().unwrap();
     let ctx = test_context(dir.path()).await;
@@ -217,17 +220,25 @@ async fn a_finished_tool_s_image_marker_is_a_link_where_pictures_make_them() {
         }
     };
 
-    let mut lines = Vec::new();
-    for pictures in [Some(&linking), None] {
+    let drawing = Pictures::in_folder(service, &folder).drawing(Inline::Kitty);
+    let (mut lines, mut drawn) = (Vec::new(), Vec::new());
+    for pictures in [Some(&linking), None, Some(&drawing)] {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         tx.send(drew()).unwrap();
         drop(tx);
         let mut render = RenderContext::new(true, false, false);
-        drain(&mut rx, false, &mut render, pictures, &mut |said| {
-            if let Said::ToolLine(line) = said {
-                lines.push(line.to_owned());
-            }
-        })
+        drain(
+            &mut rx,
+            false,
+            &mut render,
+            pictures,
+            &mut |said| match said {
+                Said::ToolLine(line) => lines.push(line.to_owned()),
+                // Under the line it belongs to: after it, and before the next.
+                Said::Picture(picture) => drawn.push((lines.len(), picture.to_owned())),
+                Said::Block(_) | Said::Raw(_) => {}
+            },
+        )
         .await;
     }
 
@@ -245,5 +256,14 @@ async fn a_finished_tool_s_image_marker_is_a_link_where_pictures_make_them() {
         "{:?}",
         lines[1]
     );
-    assert_eq!(lines.len(), 2);
+    assert_eq!(lines.len(), 3);
+    // Only the session that draws pictures drew one, under its tool's line.
+    let [(under, picture)] = drawn.as_slice() else {
+        panic!("one picture: {drawn:?}");
+    };
+    assert_eq!(*under, 3);
+    assert!(
+        picture.starts_with("  \x1b_Ga=T,f=100,q=2,c=1,m=0;"),
+        "{picture:?}"
+    );
 }

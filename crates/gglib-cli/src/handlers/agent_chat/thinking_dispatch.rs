@@ -69,8 +69,8 @@ pub(super) fn emit_reasoning(ctx: &mut RenderContext, text: &str) {
     suspend_eprint(ctx.spinner.as_ref(), text);
 }
 
-/// What a reply writes: its text to stdout, a finished tool's line to
-/// stderr.
+/// What a reply writes: its text to stdout, a finished tool's line and
+/// pictures to stderr.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Said<'a> {
     /// Rich mode: a finished block of Markdown, rendered whole.
@@ -79,6 +79,8 @@ pub(super) enum Said<'a> {
     Raw(&'a str),
     /// A finished tool's line, for stderr.
     ToolLine(&'a str),
+    /// What draws the pictures a tool made, for stderr after its line.
+    Picture(&'a str),
 }
 
 /// Where a reply's [`Said`] goes: the terminal, or a test's record of it.
