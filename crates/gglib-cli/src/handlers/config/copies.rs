@@ -66,13 +66,19 @@ impl Search {
     }
 }
 
+/// The folders a macOS app bundle is installed in: `/Applications`, then
+/// the user's own `~/Applications`. `gglib gui` looks in the same ones.
+pub(crate) fn mac_app_roots() -> Vec<PathBuf> {
+    let mut roots = vec![PathBuf::from("/Applications")];
+    roots.extend(std::env::home_dir().map(|home| home.join("Applications")));
+    roots
+}
+
 /// Where the desktop app is installed on this platform. Every branch is
 /// compiled on every platform, so each is checked everywhere.
 fn apps_here() -> Apps {
     if cfg!(target_os = "macos") {
-        let mut roots = vec![PathBuf::from("/Applications")];
-        roots.extend(std::env::home_dir().map(|home| home.join("Applications")));
-        let bundles = roots
+        let bundles = mac_app_roots()
             .iter()
             .flat_map(|root| {
                 MAC_APP_NAMES
@@ -260,7 +266,7 @@ fn known(version: Option<String>) -> String {
 
 /// The bundle's `CFBundleShortVersionString`, read from an XML
 /// `Contents/Info.plist`. A binary plist, or one without the key, has none.
-fn bundle_version(bundle: &Path) -> Option<String> {
+pub(crate) fn bundle_version(bundle: &Path) -> Option<String> {
     let plist = std::fs::read_to_string(bundle.join("Contents/Info.plist")).ok()?;
     let after = plist.split_once("<key>CFBundleShortVersionString</key>")?.1;
     let value = after.trim_start().strip_prefix("<string>")?;
