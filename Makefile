@@ -392,6 +392,10 @@ enforce: ## Run the architecture enforcement checks
 	@# its rules for a runner's mirror list are seen only on a day a mirror is
 	@# slow. Its fixtures hold them here.
 	@./scripts/apt_packages.py --self-test
+	@# A step that runs `apt-get install` itself has no cache and nothing to
+	@# turn to when the runner's mirror is slow, and it works on the day it is
+	@# written. Every install goes through the apt-packages action.
+	@./scripts/check_system_packages.sh
 	@# engine_trial.py runs only on the owner's machine, when a pin pull request
 	@# is tried, so its readers and its refusals are held here, on every change.
 	@./scripts/engine_trial.py --self-test
