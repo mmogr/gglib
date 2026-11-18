@@ -6,8 +6,8 @@
 //! machine's database, so a link needs a file to point at. The picture is
 //! copied, as stored, into a folder beside the database that is this user's
 //! alone, when its marker is printed. A copy not linked for [`KEPT`] is
-//! removed when a session starts; `gglib attachment save` is still how a
-//! picture is kept.
+//! removed when a session whose markers are links starts; `gglib attachment
+//! save` is still how a picture is kept.
 //!
 //! On a terminal that draws pictures, one a tool made is also drawn under
 //! the tool's line ([`Inline`]).
