@@ -55,7 +55,7 @@ pub(crate) async fn drain_event_stream(
 }
 
 /// A reply's text on stdout, a block through the Markdown renderer and raw
-/// text as it is; a finished tool's line on stderr.
+/// text as it is; a finished tool's line, and its pictures, on stderr.
 fn to_terminal(said: Said<'_>) {
     match said {
         Said::Block(text) => render_markdown(text),
@@ -64,6 +64,10 @@ fn to_terminal(said: Said<'_>) {
             let _ = io::stdout().flush();
         }
         Said::ToolLine(line) => eprintln!("{line}"),
+        Said::Picture(drawn) => {
+            eprint!("{drawn}");
+            let _ = io::stderr().flush();
+        }
     }
 }
 
@@ -148,13 +152,22 @@ async fn drain(
                 close_thinking(ctx);
                 if !quiet {
                     // Each image the tool made is copied where a link can
-                    // open it, on a terminal that opens links.
-                    let links = match pictures {
-                        Some(pictures) => pictures.links(&result.images).await,
-                        None => Links::default(),
+                    // open it, on a terminal that opens links, and drawn
+                    // under the line on one that draws pictures.
+                    let (links, drawn) = match pictures {
+                        Some(pictures) => (
+                            pictures.links(&result.images).await,
+                            pictures.drawn(&result.images).await,
+                        ),
+                        None => (Links::default(), String::new()),
                     };
                     if let Some(line) = tool_line(&event, &links) {
-                        suspend_or_run(ctx.spinner.as_ref(), || out(Said::ToolLine(&line)));
+                        suspend_or_run(ctx.spinner.as_ref(), || {
+                            out(Said::ToolLine(&line));
+                            if !drawn.is_empty() {
+                                out(Said::Picture(&drawn));
+                            }
+                        });
                     }
                 }
             }

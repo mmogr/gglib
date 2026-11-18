@@ -274,6 +274,11 @@ folder, readable only by you, and a copy not shown for a week is removed
 when a chat starts. There is no link over SSH, inside tmux or screen, or
 when the output is not a terminal; the marker is then plain text.
 
+In iTerm2 (3.5 or later), kitty and Ghostty, an image a tool makes is also
+shown in the terminal, under the tool's line, up to 40 columns wide. kitty
+and Ghostty show PNGs only. Other terminals, and tmux or screen, show the
+marker alone.
+
 ```bash
 gglib attachment save 3f9a2c1e
 gglib attachment save 3f9a2c1e ~/Pictures/dot.png --force

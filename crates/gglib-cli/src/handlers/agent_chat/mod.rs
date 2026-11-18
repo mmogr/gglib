@@ -4,6 +4,7 @@ pub(crate) mod drain;
 pub(crate) mod draw;
 pub(crate) mod files;
 pub(crate) mod images;
+mod inline_picture;
 mod markdown;
 mod memory_jogger;
 pub(crate) mod persistence;

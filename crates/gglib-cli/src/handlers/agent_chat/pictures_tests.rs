@@ -224,3 +224,41 @@ async fn a_copy_that_cannot_be_finished_leaves_no_part() {
     assert_eq!(left.len(), 1, "{left:?}");
     assert!(taken.is_dir());
 }
+
+/// On a terminal that draws pictures, a stored picture is drawn two
+/// columns in, sized by its own pixels; one that is not in the store, and
+/// any on a terminal that draws none, is not.
+#[tokio::test]
+async fn a_stored_picture_is_drawn_where_the_terminal_draws_them() {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::STANDARD;
+
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = test_context(dir.path()).await;
+    let service = ctx.app.attachments();
+    let bytes = png(16, 8);
+    let image = service.ingest(&bytes).await.unwrap().info;
+    let gone = AttachmentInfo {
+        id: AttachmentId::of(b"never stored"),
+        ..image.clone()
+    };
+    let folder = spaced(&dir);
+    let both = [gone, image];
+
+    // Whatever window the tests run in: a wide one, and none.
+    let kitty = Pictures::in_folder(service, &folder).drawing(Inline::Kitty);
+    let drawn = kitty.drawn_in(&both, Some(120)).await;
+    assert_eq!(kitty.drawn_in(&both, None).await, drawn);
+    // One column narrower than the picture's two, less the margin.
+    let narrow = kitty.drawn_in(&both, Some(3)).await;
+    assert!(narrow.contains(",c=1,"), "{narrow:?}");
+
+    // 16 pixels are two columns.
+    let encoded = STANDARD.encode(&bytes);
+    assert_eq!(
+        drawn,
+        format!("  \x1b_Ga=T,f=100,q=2,c=2,m=0;{encoded}\x1b\\\n")
+    );
+    assert_eq!(Pictures::in_folder(service, &folder).drawn(&both).await, "");
+    assert_eq!(Pictures::plain(service).drawn(&both).await, "");
+}
