@@ -1,0 +1,185 @@
+name: System packages action
+
+# The apt-packages action on the runners CI uses, each time the action, its
+# script or this workflow changes, so a change to it is seen to work before
+# every job that installs a system package depends on it. Three things only a
+# real runner shows:
+#
+#   cold      a run with no entry downloads, installs and saves one;
+#   warm      the next run on the same system installs from that entry with
+#             nothing downloaded;
+#   rotation  a mirror that never answers, put first on the runner's own
+#             list, is given up on when its budget runs out, the packages
+#             come from the next mirror, and the list is put back as it was.
+#
+# Not one of CI's jobs: `CI Success` does not wait on it.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/actions/apt-packages/**'
+      - '.github/workflows/apt-packages.yml'
+      - 'scripts/apt_packages.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apt-packages-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # release.yml's `linux-repos` installs these two, in a job only a stable
+  # release runs; here they are seen to install through the action.
+  cold:
+    name: Download and save (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install through the action
+        uses: ./.github/actions/apt-packages
+        with:
+          packages: apt-utils createrepo-c
+          save: "true"
+
+      - name: The packages are installed
+        run: command -v apt-ftparchive createrepo_c
+
+  warm:
+    name: Install from the cache (${{ matrix.os }})
+    needs: [cold]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install through the action
+        id: packages
+        uses: ./.github/actions/apt-packages
+        with:
+          packages: apt-utils createrepo-c
+
+      - name: The packages are installed
+        run: command -v apt-ftparchive createrepo_c
+
+      # An entry is for one system. While GitHub moves its runners to a new
+      # image this job can land on a different one from `cold`, and then
+      # there is no entry of its own to hold it to.
+      - name: Nothing was downloaded
+        env:
+          HIT: ${{ steps.packages.outputs.cache-hit }}
+          SOURCE: ${{ steps.packages.outputs.source }}
+        run: |
+          echo "cache-hit=$HIT source=$SOURCE"
+          if [[ $HIT != true ]]; then
+            echo "::notice title=another runner image::This runner is not the system the entry was saved on, so the install from the cache was not checked."
+            exit 0
+          fi
+          if [[ $SOURCE != cache ]]; then
+            echo "::error title=downloaded on a cache hit::The entry saved for this system did not install without a download."
+            exit 1
+          fi
+
+  rotation:
+    name: Give up on a stalled mirror (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # A server on this runner that accepts a connection and never answers,
+      # ranked ahead of the runner's own mirrors, which keep their order
+      # behind it. apt waits on such a mirror; it is an error only after
+      # apt's own timeout, which is longer than the budget below.
+      - name: Put a mirror that never answers first on the runner's list
+        id: stall
+        run: |
+          list=$(scripts/apt_packages.py mirrors | head -n 1)
+          if [[ ! -f $list ]]; then
+            echo "::notice title=no mirror list::This runner reads its mirrors from no list, so there is no mirror to give up on."
+            echo "listed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "The runner's list, $list:"
+          cat "$list"
+          nohup python3 -c '
+          import socket
+          server = socket.socket()
+          server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+          server.bind(("127.0.0.1", 8099))
+          server.listen(64)
+          held = []
+          while True:
+              held.append(server.accept()[0])
+          ' > /dev/null 2>&1 &
+          LIST=$list python3 - > "$RUNNER_TEMP/mirrors.txt" <<'PY'
+          import os, sys
+          sys.path.insert(0, "scripts")
+          import apt_packages
+          lines = open(os.environ["LIST"]).read().splitlines()
+          print("http://127.0.0.1:8099/ubuntu/\tpriority:1")
+          for place, number in enumerate(apt_packages.ranked("\n".join(lines)), start=2):
+              print(f"{lines[number].split()[0]}\tpriority:{place}")
+          PY
+          sudo cp "$RUNNER_TEMP/mirrors.txt" "$list"
+          echo "With the stalled mirror first:"
+          cat "$list"
+          {
+            echo "listed=true"
+            echo "list=$list"
+          } >> "$GITHUB_OUTPUT"
+
+      # A package no entry holds, so there is something to download.
+      - name: Install through the action
+        id: packages
+        uses: ./.github/actions/apt-packages
+        with:
+          packages: patchelf
+          budget-seconds: "20"
+
+      - name: The package is installed
+        run: command -v patchelf
+
+      - name: The stalled mirror was given up on, and the list put back
+        if: steps.stall.outputs.listed == 'true'
+        env:
+          DROPPED: ${{ steps.packages.outputs.mirrors-dropped }}
+          SOURCE: ${{ steps.packages.outputs.source }}
+          LIST: ${{ steps.stall.outputs.list }}
+        run: |
+          echo "source=$SOURCE mirrors-dropped=$DROPPED"
+          if [[ $SOURCE != mirror || $DROPPED -lt 1 ]]; then
+            echo "::error title=no mirror given up on::The download finished without giving up on the mirror that never answers."
+            exit 1
+          fi
+          if ! diff "$RUNNER_TEMP/mirrors.txt" "$LIST"; then
+            echo "::error title=mirror list changed::The runner's mirror list was not put back as the action found it."
+            exit 1
+          fi
