@@ -1,9 +1,10 @@
 name: Rust prelude
 description: >-
   What a job does before it builds Rust: on Linux, frees disk space and
-  installs the system packages it names; on every OS, installs the toolchain
-  rust-toolchain.toml pins (its Apple targets included) and restores the
-  job's Rust cache. A local action, so the caller checks out first.
+  installs the system packages it names, through the apt-packages action; on
+  every OS, installs the toolchain rust-toolchain.toml pins (its Apple
+  targets included) and restores the job's Rust cache. A local action, so
+  the caller checks out first.
 
 inputs:
   apt-packages:
@@ -20,7 +21,8 @@ inputs:
     default: ""
   save-if:
     description: >-
-      "true" lets this run save its Rust cache entry, "false" restores only.
+      "true" lets this run save its Rust cache entry and its system packages'
+      entry, "false" restores only.
     required: false
     default: "false"
   free-disk:
@@ -62,32 +64,16 @@ runs:
         docker-images: true
         swap-storage: true
 
-    # The runner's apt reads /etc/apt/apt-mirrors.txt, Azure's mirror first,
-    # and fails over only on an error, never on a slow transfer. One region's
-    # Azure mirror can serve packages at tens of kB/s, which outlasts a job's
-    # timeout (#1780). So the download gets four minutes, about 250 kB/s for
-    # the largest set a job installs; past that the Azure mirror is dropped
-    # and the download carries on from archive.ubuntu.com, keeping what has
-    # arrived. The install itself reads only the local cache.
+    # The apt-packages action: from the cache when an entry holds the
+    # packages, otherwise from the runner's mirrors, each with a time budget
+    # before the next is tried. A run saves its entry on the terms it saves
+    # its Rust cache.
     - name: Install system dependencies (Linux)
       if: runner.os == 'Linux' && inputs.apt-packages != ''
-      shell: bash
-      env:
-        PACKAGES: ${{ inputs.apt-packages }}
-      run: |
-        # Split on purpose, one element per package.
-        # shellcheck disable=SC2206
-        packages=($PACKAGES)
-        sudo apt-get update
-        if ! sudo timeout 240 apt-get install -y --download-only "${packages[@]}"; then
-          echo "::warning title=slow apt mirror::The package download did not finish in four minutes from the Azure mirror; fetching the rest from archive.ubuntu.com."
-          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
-            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
-          fi
-          sudo apt-get update
-          sudo apt-get install -y --download-only "${packages[@]}"
-        fi
-        sudo apt-get install -y "${packages[@]}"
+      uses: ./.github/actions/apt-packages
+      with:
+        packages: ${{ inputs.apt-packages }}
+        save: ${{ inputs.save-if }}
 
     # rust-toolchain.toml names the channel, the components and the Apple
     # targets, so this installs all of them. Each release leg builds for its
