@@ -154,7 +154,9 @@ async fn the_questions_turn_says_the_folder_it_was_asked_in() {
 }
 
 /// A question asked with `--no-tools` is told of no tool and no folder, and
-/// one asked with its tools is told of both.
+/// one asked with its tools is told of both. It is not told it has no tools
+/// at all: its chat can go on to a message sent with `/draw`, which is given
+/// the image tool.
 #[tokio::test]
 async fn a_question_without_tools_is_not_told_it_has_them() {
     let here = canonical_here();
@@ -175,5 +177,6 @@ async fn a_question_without_tools_is_not_told_it_has_them() {
     ] {
         assert!(!told.contains(named), "{named} in: {told}");
     }
-    assert!(told.contains("no tools"), "{told}");
+    assert!(told.contains("cannot read files"), "{told}");
+    assert!(!told.to_lowercase().contains("no tools"), "{told}");
 }
