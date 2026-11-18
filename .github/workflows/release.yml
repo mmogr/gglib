@@ -1125,10 +1125,12 @@ jobs:
           ref: ${{ needs.meta.outputs.sha }}
           persist-credentials: false
 
+      # apt-packages.yml installs these two through the action whenever the
+      # action changes, since this job runs only for a stable release.
       - name: Install apt-ftparchive and createrepo_c
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y apt-utils createrepo-c
+        uses: ./.github/actions/apt-packages
+        with:
+          packages: apt-utils createrepo-c
 
       - name: Collect .deb and .rpm packages
         uses: actions/download-artifact@v8
@@ -1351,17 +1353,13 @@ jobs:
           persist-credentials: false
 
       # Restores the Rust cache only, as in the `build` job. The docs build
-      # fits the runner's disk as it comes.
+      # fits the runner's disk as it comes, and installs no system package:
+      # only gglib-app builds against GTK and WebKit, and it is excluded
+      # below, as in ci.yml's `rustdoc`.
       - name: Rust prelude
         uses: ./.github/actions/rust-prelude
         with:
           free-disk: "false"
-          apt-packages: >-
-            libgtk-3-dev
-            libwebkit2gtk-4.1-dev
-            libayatana-appindicator3-dev
-            librsvg2-dev
-            libasound2-dev
           shared-key: "docs-ubuntu"
           save-if: "false"
 

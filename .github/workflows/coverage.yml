@@ -4,8 +4,8 @@ name: Coverage
 # crates (crates/layers.toml, which says what is measured, among them), their
 # manifests and lockfile, the toolchain, the recorded contracts their tests
 # read, the npm manifests the job installs from, the script that reads the
-# crate list, and the rust-prelude action. The badges keep the last run's
-# figures in between.
+# crate list, and the rust-prelude action with the apt-packages action it
+# installs through. The badges keep the last run's figures in between.
 on:
   push:
     branches: [main]
@@ -18,6 +18,8 @@ on:
       - 'package*.json'
       - '.github/workflows/coverage.yml'
       - '.github/actions/rust-prelude/**'
+      - '.github/actions/apt-packages/**'
+      - 'scripts/apt_packages.py'
       - 'scripts/crate_list.py'
 
 # The newest push's figures are the ones the badges show, so a run still

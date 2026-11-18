@@ -1,0 +1,85 @@
+name: System packages
+description: >-
+  Installs the apt packages a Linux job names: from the cache when an entry
+  holds them, and from a mirror that keeps to a time budget when none does.
+  The one place a workflow installs a system package, which
+  scripts/check_system_packages.sh holds. scripts/apt_packages.py does the
+  work and says how. A local action, so the caller checks out first.
+
+inputs:
+  packages:
+    description: The apt packages to install, separated by spaces or newlines.
+    required: true
+  save:
+    description: >-
+      "true" lets this run save a cache entry when it had to download,
+      "false" restores only.
+    required: false
+    default: "false"
+  budget-seconds:
+    description: >-
+      What each mirror on the runner's list gets for the package lists and
+      the packages together, before the next mirror is tried.
+    required: false
+    default: "240"
+
+outputs:
+  source:
+    description: >-
+      "cache" when the packages were installed with nothing downloaded,
+      "mirror" when any of it was downloaded.
+    value: ${{ steps.install.outputs.source }}
+  mirrors-dropped:
+    description: How many mirrors ran past the budget, or failed, and were given up on.
+    value: ${{ steps.install.outputs.mirrors-dropped }}
+  cache-hit:
+    description: >-
+      "true" when the entry restored was saved for this very system and
+      these very packages, and not an older one for the same release.
+    value: ${{ steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    # The system and the packages asked for, read on the runner: its
+    # release and architecture, the package names, and a hash of what is
+    # installed on it. Nothing here names a runner image or a mirror.
+    - name: Name the cache entry
+      id: key
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: scripts/apt_packages.py key --packages "$PACKAGES"
+
+    # apt's lists and the downloaded packages, in a directory of the
+    # action's own. Without an entry for this key, the newest one for the
+    # same packages, or failing that for the same release, still holds most
+    # of them, so only what changed is downloaded.
+    - name: Restore the package cache
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.key.outputs.dir }}
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: |
+          ${{ steps.key.outputs.restore-packages }}
+          ${{ steps.key.outputs.restore-release }}
+
+    - name: Install the system packages
+      id: install
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        DIR: ${{ steps.key.outputs.dir }}
+        BUDGET: ${{ inputs.budget-seconds }}
+      run: scripts/apt_packages.py install --packages "$PACKAGES" --dir "$DIR" --budget-seconds "$BUDGET"
+
+    # Only a run that downloaded has anything new to keep. Each caller says
+    # whether it may save, as it does for its Rust cache: an entry a pull
+    # request saves is one only that pull request can restore.
+    - name: Save the package cache
+      if: inputs.save == 'true' && steps.install.outputs.source == 'mirror'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.key.outputs.dir }}
+        key: ${{ steps.key.outputs.key }}
