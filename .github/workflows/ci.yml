@@ -478,19 +478,57 @@ jobs:
             ts-test-results.json
           retention-days: 30
 
+  # The image `test-browser` runs in: Playwright's own, at the Playwright
+  # version package-lock.json locks. Playwright runs only the browser builds
+  # its own version pins, so the image must be that version exactly. Read
+  # here rather than written in the workflow, so a Dependabot bump of
+  # `playwright` moves the image with it. `noble` is Ubuntu 24.04, the
+  # runners' own.
+  playwright-image:
+    name: Playwright Image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: package-lock.json
+          sparse-checkout-cone-mode: false
+
+      - name: Read the locked Playwright version
+        id: image
+        run: |
+          version=$(jq -r '.packages["node_modules/playwright"].version' package-lock.json)
+          if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error title=no Playwright version::package-lock.json locks playwright at '$version', not a version x.y.z that names an image."
+            exit 1
+          fi
+          echo "image=mcr.microsoft.com/playwright:v$version-noble" >> "$GITHUB_OUTPUT"
+          echo "mcr.microsoft.com/playwright:v$version-noble"
+
   # tests/ts/browser/ in Chromium and WebKit, through Playwright: what jsdom
   # cannot answer, such as a DOM call's return value in a real engine. The
   # engines are the ones the locked Playwright version pins, so a run reads
   # the same engines until package-lock.json moves Playwright. Edge, the
   # desktop app's webview on Windows, runs weekly in browser-edge.yml.
   #
-  # The browsers are downloaded each run, not cached: restoring them takes
-  # about as long as the download, and WebKit's system libraries are
-  # installed by apt either way.
+  # The job runs in Playwright's image for the locked version, from
+  # `playwright-image`, which carries both engines and the system libraries
+  # WebKit needs. A run installs nothing through apt and downloads no
+  # browser, so an Ubuntu mirror's speed is no part of it. `--user 1001` is
+  # the runner's own user, so what the job writes in the workspace and the
+  # npm cache is the runner's; `--ipc=host` gives Chromium the host's shared
+  # memory, which Docker's default 64 MB can run short of.
   test-browser:
     name: Test (Browser engines)
+    needs: [playwright-image]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    container:
+      image: ${{ needs.playwright-image.outputs.image }}
+      options: --user 1001 --ipc=host
     defaults:
       run:
         shell: bash
@@ -506,9 +544,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Install Chromium and WebKit
-        run: npx playwright install --with-deps chromium webkit
 
       - name: Run the browser-engine tests
         run: npm run test:browser
@@ -1258,7 +1293,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     if: always()
-    needs: [scope, boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, test-browser, clippy, clippy-cross-os, test-cross-os, fmt, cli-cross-os, ios-check, ffi-apple, phone-llama]
+    needs: [scope, boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, playwright-image, test-browser, clippy, clippy-cross-os, test-cross-os, fmt, cli-cross-os, ios-check, ffi-apple, phone-llama]
     steps:
       - name: Check every job did what its scope says
         env:
