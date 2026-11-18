@@ -37,7 +37,10 @@ const TIMEOUT: &str = "shift 3; exec \"$@\"";
 fn apt_machine() -> Machine {
     let mut machine = Machine::bare()
         .with_tool("id", "0")
-        .with_tool("uname", "x86_64")
+        .with(
+            "uname",
+            "case \"$1\" in -s) echo Linux ;; *) echo x86_64 ;; esac",
+        )
         .with("curl", "echo \"STUB curl $*\" >&2; echo key")
         .with(
             "tee",
@@ -278,6 +281,44 @@ fn each_gglib_on_path_and_the_app_are_named_before_anything_is_installed() {
             .contains(&format!("timeout -s KILL 2 {} --version", ahead.display())),
         "{:?}",
         machine.calls()
+    );
+}
+
+/// Run on a Mac, the script installs nothing: it names the brew line, the
+/// command alone with `--cli`, and the Windows installer, then stops before
+/// it asks for root or runs anything.
+#[test]
+fn a_mac_is_told_its_own_install_and_nothing_runs() {
+    let _guard = one_at_a_time();
+    let machine = apt_machine().with("uname", "echo Darwin");
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packaging/install.sh");
+
+    for (args, package) in [
+        (&[][..], "mmogr/tap/gglib."),
+        (&["--cli"][..], "mmogr/tap/gglib-cli."),
+    ] {
+        let mut command = cmd("/bin/sh");
+        command
+            .arg(&source)
+            .args(args)
+            .env_clear()
+            .env("PATH", machine.path())
+            .stdin(Stdio::null());
+        let out = command.output().expect("install.sh runs");
+
+        let said = stderr(&out);
+        assert_eq!(out.status.code(), Some(1), "{said}");
+        assert!(
+            said.contains(&format!("on a Mac: brew install {package}")),
+            "{said}"
+        );
+        assert!(said.contains("releases/latest"), "{said}");
+        assert!(!said.contains("STUB"), "{said}");
+    }
+    let calls = machine.calls();
+    assert!(
+        calls.iter().all(|call| call.starts_with("uname ")),
+        "{calls:?}"
     );
 }
 
