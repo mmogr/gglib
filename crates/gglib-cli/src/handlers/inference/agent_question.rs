@@ -15,6 +15,7 @@ use gglib_core::domain::hub_chats::LocalTurn;
 use crate::bootstrap::CliContext;
 use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::daemon_client;
+use crate::dispatch::AlreadySaid;
 use crate::handlers::agent_chat::files::{self, Chat};
 use crate::handlers::agent_chat::images::TurnImages;
 use crate::handlers::agent_chat::persistence::Conversation;
@@ -223,8 +224,9 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     //   - stdin is not a TTY (piped input) — would read garbage or hang
     let interactive = !quiet && Input::stdin() == Input::Terminal;
 
+    // Why the question has no answer is on stderr already.
     if !completed {
-        return Err(anyhow!("agent did not produce a final answer"));
+        return Err(AlreadySaid.into());
     }
     if interactive && super::question_input::ask_continue()? {
         run_repl(session).await?;

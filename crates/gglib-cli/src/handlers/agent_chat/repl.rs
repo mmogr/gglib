@@ -138,7 +138,8 @@ impl Session<'_> {
     /// Send `turn`, and show its reply. Draw is for one message, so whatever
     /// the turn did, finished, failed, refused or cancelled, the message
     /// after it is offered no image tool. `true` when the reply gave its
-    /// answer; a refusal is said on stderr.
+    /// answer; otherwise why it gave none, a refusal among them, has been
+    /// said on stderr.
     pub(crate) async fn send(&self, turn: &LocalTurn) -> bool {
         let sent = turn::send(&self.daemon, turn, self.shown, Some(&self.pictures)).await;
         self.draw.sent();

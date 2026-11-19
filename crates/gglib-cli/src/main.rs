@@ -6,14 +6,29 @@
 //! opened, then bootstraps the composition root and delegates to the
 //! command dispatcher.
 //!
+//! A command that fails exits 1 with its error printed after `Error:`,
+//! unless it is [`AlreadySaid`]: that command has printed why itself.
+//!
 //! See [`gglib_cli::leaves_nothing_behind`],
 //! [`gglib_cli::dispatch_without_library`] and [`gglib_cli::dispatch`] for
 //! command routing and [`gglib_cli::bootstrap`] for dependency wiring.
 
-use gglib_cli::{bootstrap, dispatch, dispatch_without_library, leaves_nothing_behind, parse};
+use std::process::ExitCode;
+
+use gglib_cli::{
+    AlreadySaid, bootstrap, dispatch, dispatch_without_library, leaves_nothing_behind, parse,
+};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> anyhow::Result<ExitCode> {
+    match run().await {
+        Err(e) if e.is::<AlreadySaid>() => Ok(ExitCode::FAILURE),
+        ended => ended.map(|()| ExitCode::SUCCESS),
+    }
+}
+
+/// The command line, parsed and run.
+async fn run() -> anyhow::Result<()> {
     gglib_core::utils::process::host::prepare();
     let (cli, remote) = parse();
     if leaves_nothing_behind(cli.command.as_ref()) {
