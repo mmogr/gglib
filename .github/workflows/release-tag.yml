@@ -6,24 +6,9 @@
 # assets in a run of its own. Nothing that cancels this CI run can then
 # cancel the builds.
 #
-# This tags every version, a candidate's and a stable one's. release-please.yml
-# never tags, and neither does promote.yml: a candidate arrives as the merged
-# release PR and a stable version as the merged promotion (promote.yml), each
-# a commit that sets the branch's version. A stable version is held to two
-# more rules before it is tagged: it is its last candidate with the version
-# alone changed, and it is not below the newest stable. Once it is tagged and
-# released, the branch `stable` is moved to it.
-#
-# The branch `stable` follows the newest stable version, for a build from
-# source: `git clone --branch stable`, or `make setup-stable`. It only ever
-# moves forward, so a clone of it updates with `git pull`. The stable
-# version's commit is on main and `stable`'s tip is not (0.30.0 to 0.38.0
-# were tagged off main, and each move since leaves a commit of its own), so
-# the move is to a commit joining the two: the stable version's tree, with
-# the tagged commit and `stable`'s tip as its parents. Were `stable` ever
-# put on main's own history, the moves after that would be plain
-# fast-forwards to the tagged commit. The branch is moved last, and whenever
-# the tag was made, so nothing about it can stop a release.
+# This tags every candidate. release-please.yml never tags, and promote.yml
+# tags a stable version itself, from the candidate's tag, so a promotion
+# never comes this way.
 #
 # main cuts the next minor's or major's candidates and a line its own
 # version's patches, and scripts/release_lines.py holds each branch to its
@@ -69,7 +54,6 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       is-prerelease: ${{ steps.version.outputs.is-prerelease }}
       bump: ${{ steps.bump.outputs.sha }}
-      previous: ${{ steps.newest.outputs.previous }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -146,26 +130,10 @@ jobs:
           echo "sha=$bump" >> "$GITHUB_OUTPUT"
           echo "v$VERSION will tag $bump"
 
-      # A stable version is never below the newest stable: the stable
-      # channels each carry one version, and release.yml would replace the
-      # newer with the older. promote.yml refuses that before it opens a
-      # promotion, so this is for a version set to stable by hand. The same
-      # script names the stable version before this one, where the release's
-      # notes start.
-      - name: Require a stable release to be the newest
-        id: newest
-        if: steps.version.outputs.changed == 'true' && steps.version.outputs.is-prerelease != 'true'
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          git tag -l 'v*' > "$RUNNER_TEMP/tags.txt"
-          scripts/release_lines.py previous --stable "$VERSION" --tags "$RUNNER_TEMP/tags.txt" | tee -a "$GITHUB_OUTPUT"
-
       # A stable version is released only as its last release candidate with
-      # the version changed. promote.yml makes one that way and checks it
-      # before it opens the promotion, and ci.yml's `scope` job checks the
-      # pull request; this is the guard, for those and for a version set to
-      # stable on a branch by hand. Checked before anything is tagged, so a
+      # the version changed. promote.yml makes one that way from the
+      # candidate's tag and never comes here, so this guards a version set
+      # to stable on a branch by hand. Checked before anything is tagged, so a
       # refusal leaves no tag and no release behind; the script's header
       # says how to recover. Judged on the bump commit's own tree, so a bump
       # whose run was overtaken is not judged on a newer one.
@@ -248,29 +216,18 @@ jobs:
           echo "tagged=false" >> "$GITHUB_OUTPUT"
           echo "::notice::another run tagged v$VERSION; this run makes no release and dispatches nothing"
 
-      # The notes are generated, sorted by .github/release.yml. A stable
-      # version's run from the stable version before it: --notes-start-tag
-      # pins the range to that tag, where GitHub starts a stable release's
-      # notes anyway. --latest says outright what check-version made sure
-      # of: this is the newest stable version, so it is the one the release
-      # page and the badges point at (GitHub's default weighs the date and
-      # the version).
+      # The notes are generated, sorted by .github/release.yml.
       - name: Create GitHub Release
         if: steps.tag.outputs.tagged == 'true'
         env:
           PRERELEASE: ${{ needs.check-version.outputs.is-prerelease }}
-          PREVIOUS: ${{ needs.check-version.outputs.previous }}
         run: |
           if gh release view "v$VERSION" > /dev/null 2>&1; then
             echo "the release for v$VERSION exists already"
             exit 0
           fi
           args=(--title "Release v$VERSION" --generate-notes --verify-tag)
-          if [ "$PRERELEASE" = "true" ]; then
-            args+=(--prerelease)
-          else
-            args+=(--notes-start-tag "$PREVIOUS" --latest)
-          fi
+          if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
           gh release create "v$VERSION" "${args[@]}"
 
       # From main, whose release.yml is the current one, also for a line's
@@ -286,10 +243,10 @@ jobs:
       # labelled `autorelease: pending`. Swapping that label for `autorelease: tagged`
       # is how a release tells it. Only the merged PR titled for this version
       # on this branch is touched (release-please titles it
-      # `chore(<branch>): release <version>`); a promotion's pull request is
-      # promote.yml's, titled otherwise and never labelled so, and nothing
-      # changes. Allowed to fail, so a label can never hold up the build: if
-      # it fails, release-please.yml stops with an error naming the label.
+      # `chore(<branch>): release <version>`); a promotion has no such PR, and
+      # nothing changes. Last and allowed to fail, so a label can never hold
+      # up the build: if it fails, release-please.yml stops with an error
+      # naming the label.
       - name: Mark the release PR as tagged
         if: steps.tag.outputs.tagged == 'true'
         continue-on-error: true
@@ -324,59 +281,3 @@ jobs:
         env:
           BRANCH: ${{ github.ref_name }}
         run: gh workflow run release-please.yml --ref main -f branch="$BRANCH"
-
-      # Last, so that nothing here can stop a release, and whenever the tag
-      # was made, even when the release or the dispatch after it failed:
-      # `stable` follows the newest stable tag, and check-version made sure
-      # this is it. Through the API with the App's token, which the branch's
-      # ruleset lets past; there is no checkout in this job.
-      #
-      # A fast-forward to the tag's commit when `stable` is behind it. It is
-      # not, as things stand: `stable`'s tip is a commit that main does not
-      # hold, so the tag's commit does not descend from it, and `stable`
-      # moves to a new commit with the tag's tree and two parents, the tag's
-      # commit and where `stable` was. That is still a fast-forward for the
-      # branch, and the tree a build from it reads is the stable version's;
-      # the next promotion finds `stable` on that commit and joins again.
-      # A refusal fails the run and names what finishes it by hand.
-      - name: Move the stable branch
-        if: ${{ !cancelled() && steps.tag.outputs.tagged == 'true' && needs.check-version.outputs.is-prerelease != 'true' }}
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-        run: |
-          by_hand="Re-run this job; or an admin moves it with: git fetch origin --tags && git push origin 'refs/tags/v$VERSION^{commit}:refs/heads/stable'"
-          if ! tip=$(gh api "repos/$GH_REPO/git/ref/heads/stable" --jq .object.sha 2> /dev/null); then
-            if gh api -X POST "repos/$GH_REPO/git/refs" -f ref=refs/heads/stable -f sha="$BUMP" > /dev/null; then
-              echo "✓ stable was created at v$VERSION"
-              exit 0
-            fi
-            echo "::error::v$VERSION is tagged, but the stable branch could not be read or created. $by_hand"
-            exit 1
-          fi
-          target=$BUMP
-          if [ "$tip" != "$BUMP" ]; then
-            status=$(gh api "repos/$GH_REPO/compare/$tip...$BUMP" --jq .status) || status=unknown
-            # A second attempt of this run finds `stable` past the tag's commit already.
-            if [ "$status" = behind ] || [ "$status" = identical ]; then
-              echo "✓ stable holds v$VERSION already"
-              exit 0
-            fi
-            if [ "$status" != ahead ]; then
-              tree=$(gh api "repos/$GH_REPO/git/commits/$BUMP" --jq .tree.sha) || tree=
-              target=
-              if [ -n "$tree" ]; then
-                target=$(gh api -X POST "repos/$GH_REPO/git/commits" -f message="chore(release): stable follows v$VERSION" \
-                  -f tree="$tree" -f "parents[]=$BUMP" -f "parents[]=$tip" --jq .sha) || target=
-              fi
-              if [ -z "$target" ]; then
-                echo "::error::v$VERSION is tagged, but the commit joining it to the stable branch could not be made. $by_hand"
-                exit 1
-              fi
-              echo "stable was at $tip, which v$VERSION does not descend from; $target joins them"
-            fi
-          fi
-          if ! gh api -X PATCH "repos/$GH_REPO/git/refs/heads/stable" -f sha="$target" -F force=false > /dev/null; then
-            echo "::error::v$VERSION is tagged, but the stable branch did not move. $by_hand"
-            exit 1
-          fi
-          echo "✓ stable is at v$VERSION"

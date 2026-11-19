@@ -344,9 +344,8 @@ make setup   # checks deps, builds everything, installs the gglib CLI
 gglib up
 ```
 
-That builds `main`, the development version, so its version is the last one
-cut from it: a release candidate's, `X.Y.Z-rc.N`, or the stable version's
-between a promotion and the next candidate. `make setup-stable` builds the newest stable
+That builds `main`, the development version, so its version is a release
+candidate's, `X.Y.Z-rc.N`. `make setup-stable` builds the newest stable
 release instead: it switches the checkout to the `stable` branch, runs the
 same setup there, and switches back.
 

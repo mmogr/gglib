@@ -1,65 +1,66 @@
-# Promotes a branch's release candidate to the stable release: X.Y.Z-rc.N
-# becomes X.Y.Z and nothing else changes. Run it from Actions -> Promote ->
-# Run workflow, or with `gh workflow run promote.yml -R mmogr/gglib`, once
-# the candidate has released and while the branch is still exactly that
-# candidate.
+# Promotes a release candidate to the stable release: X.Y.Z-rc.N becomes
+# X.Y.Z and nothing else changes. Run it from Actions -> Promote -> Run
+# workflow, or with `gh workflow run promote.yml -R mmogr/gglib`, any time
+# after the candidate has released. main need not stand still.
 #
-# The stable version lands on the branch. This workflow moves the version on
-# the branch's tip and opens a pull request, which merges itself once CI
-# passes, since there is nothing in it to review: check_rc_promotion.sh
-# proves the code is the candidate's here, CI proves it again on the pull
-# request (ci.yml's `scope` job), and CI's release job (release-tag.yml)
-# once more before it tags. After the merge that job tags vX.Y.Z on the
-# merge's commit, makes the release, dispatches release.yml and moves the
-# branch `stable`; each stable channel waits for its approval as before.
-# So the branch reads X.Y.Z from the promotion until its next candidate, and
-# the stable tag is in its history, where release-please finds it.
+# The stable version is made from the candidate's tag, not from its branch.
+# The candidate's commit is checked out, the version moved, and the result
+# committed on top of it and pushed as the tag vX.Y.Z. Nothing lands on the
+# branch, so merging while a candidate is out does not force another
+# candidate, and the code that ships is exactly the code that was tested.
+# The tag, the release and the build are made here, as release-tag.yml
+# makes a candidate's; a promotion never passes through release-tag.yml.
+# The branch's CHANGELOG.md gets no heading for the stable version: the
+# tag's copy has it, and so does the release page.
 #
-# The branch must stand still between its last candidate and the promotion.
-# A stable release ships its last candidate unchanged, so anything merged
-# after the candidate needs another candidate first: this workflow refuses,
-# naming what merged, and the release PR is already proposing rc.N+1. The
-# same holds while the promotion's pull request waits for CI: the ruleset
-# will not merge it behind its branch, and brought up to date it fails CI's
-# check. Cut the next candidate and run Promote again; that updates the same
-# pull request.
-#
-# release-please cannot do this: with no commit since the candidate's tag it
-# opens no pull request. Once the stable version is on the branch it reads
-# the next cycle from there by itself: the next minor's rc.1 after a feat or
-# a breaking change, the next patch's after fixes alone.
+# The branch `stable` follows the newest stable version, for a build from
+# source: `git clone --branch stable`, or `make setup-stable`. The commit a
+# promotion makes has a second parent, where `stable` was: the stable version
+# before it, unless that one never reached the branch. So `stable` only ever
+# moves forward, and a clone of it updates with `git pull`. The branch is
+# moved last, and whenever the tag was pushed, so nothing about it can stop a
+# release.
 #
 # A candidate comes from main, the next minor's or major's, or from a
 # maintenance line release/X.Y.x, that version's next patch (CONTRIBUTING,
-# "Maintenance lines"); `branch` says which, and the pull request goes into
-# that branch. scripts/release_lines.py holds a promotion to two rules. The
-# candidate must be the newest of its version, and that version unshipped.
-# And a version below the newest stable is never promoted: the stable
-# channels (apt, dnf, pacman, the AUR, Homebrew and the docs site) each
-# carry one version, and release.yml would replace the newer with the older.
-# That is the rule that only the newest stable line is maintained.
+# "Maintenance lines"); a promotion is the same either way, and it is tag-driven, so
+# nothing here asks which. Two things do change with two lines out, and
+# scripts/release_lines.py decides both. A blank candidate is refused when
+# more than one version has candidates waiting, since "the newest" would be
+# a guess. And a version below the newest stable is never promoted: the
+# stable channels (apt, dnf, pacman, the AUR, Homebrew and the docs site)
+# each carry one version, and release.yml would replace the newer with the
+# older. That is the rule that only the newest stable line is maintained.
 #
-# The pull request is opened with the GitHub App token, as update-deps.yml's
-# is: a pull request opened with GITHUB_TOKEN starts no workflows, so CI
-# would never run on it.
+# release-please cannot do this: with no commit since the candidate's tag it
+# opens no pull request. And once a stable version has shipped this way,
+# release-please would next propose rc.N+1 of that same version;
+# release-please.yml sees that and makes the release PR propose the next
+# cycle's rc.1 instead: on main the next major's after a breaking change
+# once 1.0.0 has shipped, the next minor's after a feat (or a breaking change
+# before 1.0.0) and the next patch's otherwise (the next minor's once the
+# version has a line of its own), on a line its next patch's.
+#
+# The push uses the GitHub App token, as release-tag.yml's tag does:
+# GITHUB_TOKEN may create a ref only at the run's own commit. The release and
+# the dispatch use GITHUB_TOKEN with this job's grants, as there.
 
 name: Promote
 
 on:
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'The branch whose candidate to promote: main, or a line release/X.Y.x'
+      candidate:
+        description: 'The candidate to promote, vX.Y.Z-rc.N; blank takes the newest, when one version alone has candidates out'
         required: false
-        default: main
+        default: ''
         type: string
       dry_run:
-        description: 'Dry run: make the promotion and check it, then push nothing and open no pull request'
+        description: 'Dry run: make the promotion and check it, then tag, release and build nothing'
         required: false
         default: false
         type: boolean
 
-# Everything that writes uses the App's token.
 permissions:
   contents: read
 
@@ -77,8 +78,11 @@ jobs:
     name: Promote the release candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    env:
-      BRANCH: ${{ inputs.branch }}
+    permissions:
+      # The release, with GITHUB_TOKEN; the tag is pushed with the App's.
+      contents: write
+      # The dispatch of release.yml.
+      actions: write
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -87,88 +91,54 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # The branch's tip, with its whole history for the candidate's tag. The
-      # App's token stays in the checkout for the push.
-      - name: Checkout the branch
+      # main, for the tags and the history; the candidate is checked out
+      # below. The App's token stays in the checkout for the push.
+      - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.branch }}
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Fetch tags
         run: git fetch --force --tags
 
-      # Only main and the lines release.
-      - name: Require a branch that releases
-        run: scripts/release_lines.py line --branch "$BRANCH"
-
-      # The candidate is the version the branch carries. It must be tagged
-      # and released, the newest candidate of its version, and that version
-      # unshipped; and the stable version it makes must not be below the
-      # newest stable, since the stable channels would be downgraded.
-      # scripts/release_lines.py says each, before anything is changed. It
-      # also names the stable version before this one, which the changelog's
-      # heading and the release's notes start from.
-      - name: Read the branch's candidate
+      # A stable release ships its last candidate, so an older candidate of
+      # the same version is refused here with the newest one named, as is a
+      # candidate of a version that has shipped, and a blank candidate while
+      # two versions have candidates out; scripts/release_lines.py says each.
+      # check_rc_promotion.sh checks the first on the tree, later. Then the
+      # stable version this promotion makes is held to the newest: a version
+      # below the newest stable is refused, since the stable channels would be
+      # downgraded. Both before anything is checked out or changed. The
+      # script also names the stable version before this one, which the
+      # release's notes and the CHANGELOG.md heading start from: the newest
+      # below it, not the newest overall, once a line's patch and main's
+      # minor interleave.
+      - name: Choose the candidate
         id: candidate
         env:
           GH_TOKEN: ${{ github.token }}
+          CANDIDATE: ${{ inputs.candidate }}
         run: |
-          RC=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
-          if ! [[ "$RC" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
-            echo "::error::$BRANCH carries $RC, which is not a release candidate X.Y.Z-rc.N, so there is nothing to promote. Merge the release PR to cut a candidate, let it release, then run Promote."
-            exit 1
-          fi
           git tag -l 'v*' > "$RUNNER_TEMP/tags.txt"
-          scripts/release_lines.py candidate --input "v$RC" --tags "$RUNNER_TEMP/tags.txt" > "$RUNNER_TEMP/candidate.txt"
+          scripts/release_lines.py candidate --input "$CANDIDATE" --tags "$RUNNER_TEMP/tags.txt" > "$RUNNER_TEMP/candidate.txt"
           cat "$RUNNER_TEMP/candidate.txt" >> "$GITHUB_OUTPUT"
+          CANDIDATE=$(sed -n 's/^candidate=//p' "$RUNNER_TEMP/candidate.txt")
           STABLE=$(sed -n 's/^stable=//p' "$RUNNER_TEMP/candidate.txt")
           scripts/release_lines.py previous --stable "$STABLE" --tags "$RUNNER_TEMP/tags.txt" >> "$GITHUB_OUTPUT"
-          if ! gh release view "v$RC" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            echo "::error::v$RC is tagged but has no release, so it was never built. Re-run the failed jobs of the CI run that tagged it, then run Promote again."
+          if ! gh release view "$CANDIDATE" > /dev/null 2>&1; then
+            echo "::error::$CANDIDATE is tagged but has no release, so it was never built. Re-run the failed jobs of the CI run that tagged it, then run Promote again."
             exit 1
           fi
-          echo "✓ $BRANCH carries v$RC, which becomes $STABLE"
+          echo "✓ promoting $CANDIDATE to $STABLE"
 
-      # A stable release ships its last candidate unchanged, so the branch's
-      # tip must be the candidate's commit. check_rc_promotion.sh would
-      # refuse the same tree below; this says what merged and what to do.
-      # A promotion's pull request left open from an earlier run can no
-      # longer be right, and is closed.
-      - name: Require the branch to be its candidate
+      - name: Check out the candidate
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           CANDIDATE: ${{ steps.candidate.outputs.candidate }}
-          STABLE: ${{ steps.candidate.outputs.stable }}
-        run: |
-          if ! git merge-base --is-ancestor "refs/tags/$CANDIDATE" HEAD; then
-            echo "::error::$CANDIDATE is not in $BRANCH's history, so $BRANCH cannot be promoted as it. Check which branch cut the candidate and run Promote with that branch."
-            exit 1
-          fi
-          count=$(git rev-list --count "refs/tags/$CANDIDATE..HEAD")
-          if [ "$count" = 0 ]; then
-            echo "✓ $BRANCH is exactly $CANDIDATE"
-            exit 0
-          fi
-          {
-            echo "## $STABLE was not promoted"
-            echo
-            echo "$count commit(s) merged into \`$BRANCH\` after \`$CANDIDATE\`, and a stable release ships its last candidate unchanged:"
-            echo
-            git log --format='- %h %s' -n 20 "refs/tags/$CANDIDATE..HEAD"
-            if [ "$count" -gt 20 ]; then echo "- and $((count - 20)) more"; fi
-            echo
-            echo "Merge the release PR to cut the next candidate, let it release, then run Promote again."
-          } >> "$GITHUB_STEP_SUMMARY"
-          stale=$(gh pr list -R "$GITHUB_REPOSITORY" --base "$BRANCH" --head "promote-v$STABLE" --state open --json number --jq '.[0].number // empty' || true)
-          if [ -n "$stale" ]; then
-            gh pr close "$stale" -R "$GITHUB_REPOSITORY" --delete-branch \
-              --comment "$BRANCH has moved past $CANDIDATE, so this promotion no longer matches a candidate. Promote opens another once the next candidate has released." || true
-          fi
-          echo "::error::$count commit(s) merged into $BRANCH after $CANDIDATE, and a stable release ships its last candidate unchanged. Merge the release PR to cut the next candidate, let it release, then run Promote again. The run's summary lists them."
-          exit 1
+        run: git checkout --detach "refs/tags/$CANDIDATE"
 
+      # The tree is the candidate's, so promote.py is the candidate's copy;
+      # `previous` was chosen above, from the tags.
       - name: Promote the version
         id: promote
         env:
@@ -181,25 +151,33 @@ jobs:
         with:
           version: ${{ steps.promote.outputs.stable }}
 
-      # CI makes the same check on the pull request and release-tag.yml
-      # before it tags. Making it here too means a promotion they would
-      # refuse is never opened. After the lockfiles, which a promotion also
+      # The guard: the tree is the candidate's with only the version changed,
+      # or nothing is tagged. After the lockfiles, which a promotion also
       # changes.
       - name: Require the promotion to match the candidate
         run: scripts/check_rc_promotion.sh
 
-      # One commit on top of the branch's tip, by the App, as
-      # release-please.yml commits the release PR's lockfiles. Only the files
-      # a promotion moves are taken, and anything else left in the tree stops
-      # the run. Its message is the pull request's title, so the squash keeps
-      # it: release-tag.yml tags the commit that carries it, and
-      # release-please reads the next cycle from the commits after it.
+      # One commit on top of the candidate's, by the App, as release-please.yml
+      # commits the release PR's lockfiles. Only the files a promotion moves
+      # are taken, and anything else left in the tree stops the run.
+      #
+      # The commit then gets a second parent: where `stable` is, or the
+      # previous stable tag while there is no such branch (the checkout above
+      # fetched every branch). That is the stable version before this one,
+      # unless that version never reached the branch, as one tagged without
+      # Promote would not. The tree and the first parent stay as committed, so
+      # the change it shows is still the version alone. With the branch's own
+      # tip as a parent, moving `stable` to this commit is a fast-forward
+      # whatever was tagged in between. A promotion that descends from that
+      # tip already, as a line's patch does, stays a plain commit.
       - name: Commit the promotion
+        id: commit
         env:
           GH_TOKEN: ${{ github.token }}
           SLUG: ${{ steps.app-token.outputs.app-slug }}
           RC: ${{ steps.promote.outputs.rc }}
           STABLE: ${{ steps.promote.outputs.stable }}
+          PREVIOUS: ${{ steps.candidate.outputs.previous }}
         run: |
           git add Cargo.toml package.json .release-please-manifest.json Cargo.lock package-lock.json CHANGELOG.md
           if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
@@ -208,9 +186,18 @@ jobs:
             exit 1
           fi
           id=$(gh api "users/${SLUG}[bot]" --jq .id)
-          git -c user.name="${SLUG}[bot]" -c user.email="${id}+${SLUG}[bot]@users.noreply.github.com" \
-            commit -q -m "chore(release): promote $RC to $STABLE"
-          git log -1 --format='%H%n%an <%ae>%n%s' HEAD
+          as_app=(-c user.name="${SLUG}[bot]" -c user.email="${id}+${SLUG}[bot]@users.noreply.github.com")
+          git "${as_app[@]}" commit -q -m "chore(release): promote $RC to $STABLE"
+          before="refs/tags/$PREVIOUS"
+          if git rev-parse -q --verify refs/remotes/origin/stable > /dev/null; then
+            before=refs/remotes/origin/stable
+          fi
+          if ! git merge-base --is-ancestor "$before" HEAD; then
+            linked=$(git "${as_app[@]}" commit-tree "HEAD^{tree}" -p "HEAD^" -p "$before^{commit}" -m "chore(release): promote $RC to $STABLE")
+            git reset -q --soft "$linked"
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git log -1 --format='%H%n%an <%ae>%n%s%nparents: %P' HEAD
           git diff --stat "HEAD^1" HEAD
 
       - name: Dry run
@@ -219,63 +206,83 @@ jobs:
           CANDIDATE: ${{ steps.candidate.outputs.candidate }}
           STABLE: ${{ steps.promote.outputs.stable }}
         run: |
+          if ! git rev-parse -q --verify refs/remotes/origin/stable > /dev/null; then
+            branch="There is no stable branch yet; the promotion would create it."
+          elif git merge-base --is-ancestor refs/remotes/origin/stable HEAD; then
+            branch="The stable branch would move forward to it from $(git rev-parse --short refs/remotes/origin/stable)."
+          else
+            branch="The stable branch, at $(git rev-parse --short refs/remotes/origin/stable), would NOT fast-forward to it."
+          fi
           {
             echo "## Dry run: v$STABLE from $CANDIDATE"
             echo
-            echo "The promotion was made and checked. Nothing was pushed and no pull request was opened."
+            echo "The promotion was made and checked. Nothing was tagged, released or built."
             echo
             echo '```'
-            git diff --stat "refs/tags/$CANDIDATE" HEAD
+            git diff --stat "$CANDIDATE" HEAD
             echo '```'
             echo
-            echo "A real run opens this as a pull request into \`$BRANCH\`, which merges itself once CI passes. CI's release job then tags v$STABLE on the merge and builds it."
+            echo "The commit's parents: $(git log -1 --format=%P HEAD). $branch"
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::notice::dry run of v$STABLE from $CANDIDATE: nothing was pushed and no pull request was opened"
+          echo "::notice::dry run of v$STABLE from $CANDIDATE: nothing was tagged, released or built"
 
-      # The head branch is named for the stable version, so a second run for
-      # the same version (after another candidate, say) replaces the first's
-      # commit and keeps its pull request. The labels are the ones the release
-      # PR carries: `Label Check` passes them, and .github/release.yml keeps
-      # the pull request out of the release's notes.
-      - name: Open the pull request
-        id: pr
+      # The commit reaches the repository as this tag; the stable branch
+      # follows it in the last step.
+      - name: Push the tag
+        id: tag
         if: ${{ !inputs.dry_run }}
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RC: ${{ steps.promote.outputs.rc }}
           STABLE: ${{ steps.promote.outputs.stable }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          head="promote-v$STABLE"
-          title="chore(release): promote $RC to $STABLE"
-          git push --force origin "HEAD:refs/heads/$head"
-          {
-            echo "$RC becomes $STABLE, and nothing else changes. Cargo.toml, package.json, the release-please manifest and both lockfiles move only their version, and CHANGELOG.md gains a heading for $STABLE. \`scripts/check_rc_promotion.sh\` checked that against the tag v$RC; CI checks it again here, and once more before it tags."
-            echo
-            echo "This pull request merges itself once CI passes. CI then tags v$STABLE on the merge, and each stable channel waits for its approval."
-            echo
-            echo "It merges only while \`$BRANCH\` is still v$RC. If something else merges first, cut the next candidate and run Promote again."
-            echo
-            echo "Opened by the Promote workflow: $RUN_URL"
-          } > "$RUNNER_TEMP/body.md"
-          number=$(gh pr list -R "$GITHUB_REPOSITORY" --base "$BRANCH" --head "$head" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$number" ]; then
-            gh pr edit "$number" -R "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/body.md"
-          else
-            url=$(gh pr create -R "$GITHUB_REPOSITORY" --base "$BRANCH" --head "$head" --title "$title" \
-              --body-file "$RUNNER_TEMP/body.md" --label version-bump --label automated)
-            number=${url##*/}
-          fi
-          echo "number=$number" >> "$GITHUB_OUTPUT"
-          {
-            echo "## v$STABLE from v$RC"
-            echo
-            echo "Opened #$number into \`$BRANCH\`. It merges itself once CI passes; CI's release job then tags v$STABLE, makes the release and dispatches release.yml."
-          } >> "$GITHUB_STEP_SUMMARY"
+          git push origin "HEAD:refs/tags/v$STABLE"
+          echo "✓ tagged v$STABLE"
 
-      - name: Enable auto-merge
+      # The notes run from the stable version before this one, sorted by
+      # .github/release.yml. --notes-start-tag pins the range to that tag,
+      # where GitHub starts a stable release's notes anyway. --latest says
+      # outright what the candidate step made sure of: this is the newest
+      # stable version, so it is the one the release page and the badges
+      # point at (GitHub's default weighs the date and the version).
+      - name: Create GitHub Release
         if: ${{ !inputs.dry_run }}
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          PR: ${{ steps.pr.outputs.number }}
-        run: gh pr merge "$PR" -R "$GITHUB_REPOSITORY" --auto --squash
+          GH_TOKEN: ${{ github.token }}
+          STABLE: ${{ steps.promote.outputs.stable }}
+          PREVIOUS: ${{ steps.candidate.outputs.previous }}
+        run: |
+          gh release create "v$STABLE" --title "Release v$STABLE" --generate-notes --notes-start-tag "$PREVIOUS" --verify-tag --latest
+          echo "✓ released v$STABLE, with notes since $PREVIOUS"
+
+      # From main, whose release.yml is the current one and whose ref the
+      # stable channels' environments require; it checks out the tag. A
+      # failed build is re-run with the same command.
+      - name: Dispatch the build
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE: ${{ steps.candidate.outputs.candidate }}
+          STABLE: ${{ steps.promote.outputs.stable }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          gh workflow run release.yml --ref main -f tag="v$STABLE"
+          {
+            echo "## v$STABLE from $CANDIDATE"
+            echo
+            echo "Tagged $SHA, released, and release.yml dispatched. Each stable channel waits for its approval there."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Last, so that nothing here can stop a release, and whenever the tag was
+      # pushed, even when the release or the dispatch after it failed: `stable`
+      # follows the tag, and a dry run pushes none. The push is a plain
+      # fast-forward, since the commit descends from where `stable` was. A
+      # refusal fails the run and names the push that finishes it by hand.
+      - name: Move the stable branch
+        if: ${{ !cancelled() && steps.tag.outcome == 'success' }}
+        env:
+          STABLE: ${{ steps.promote.outputs.stable }}
+        run: |
+          if ! git push origin HEAD:refs/heads/stable; then
+            echo "::error::v$STABLE is tagged, but the stable branch did not move. An admin moves it with: git fetch origin --tags && git push origin refs/tags/v$STABLE:refs/heads/stable"
+            exit 1
+          fi
+          echo "✓ stable is at v$STABLE"
