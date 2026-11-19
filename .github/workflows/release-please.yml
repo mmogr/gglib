@@ -89,6 +89,19 @@ jobs:
     # the one named by hand.
     env:
       BRANCH: ${{ github.event.workflow_run.head_branch || inputs.branch }}
+      # The branch's pull requests that carry `autorelease: pending`, open or
+      # merged as `state` says, read from the repository's own list. Not
+      # `gh pr list --label`, which asks GitHub's search: its index is
+      # seconds behind a label, and the release PR is looked for the moment
+      # release-please has opened and labelled it.
+      PENDING_PRS: |
+        query($owner: String!, $name: String!, $base: String!, $state: PullRequestState!) {
+          repository(owner: $owner, name: $name) {
+            pullRequests(states: [$state], baseRefName: $base, labels: ["autorelease: pending"], first: 100) {
+              nodes { number headRefName }
+            }
+          }
+        }
     outputs:
       # The open release PR of the branch, after the update: its number, its
       # head branch and its base. Empty when there is none.
@@ -132,7 +145,8 @@ jobs:
             echo "::error::v$VERSION is not tagged. Re-run the Release job of CI on $BRANCH, then run this workflow by hand for $BRANCH."
             exit 1
           fi
-          pending=$(gh pr list -R "$GITHUB_REPOSITORY" --base "$BRANCH" --state merged --label 'autorelease: pending' --json number --jq 'length')
+          pending=$(gh api graphql -f query="$PENDING_PRS" -f owner="${GITHUB_REPOSITORY%/*}" -f name="${GITHUB_REPOSITORY#*/}" \
+            -f base="$BRANCH" -f state=MERGED --jq '.data.repository.pullRequests.nodes | length')
           if [ "$pending" != 0 ]; then
             echo "::error::a merged release PR of $BRANCH is still labelled 'autorelease: pending'; CI's release job relabels it when it tags, and goes on if the relabel fails. Swap the label for 'autorelease: tagged' by hand, then run this workflow by hand for $BRANCH."
             exit 1
@@ -236,13 +250,18 @@ jobs:
       # The pull request release-please keeps carries `autorelease: pending`
       # while it is open; a merged one waiting for its tag was ruled out
       # above. None open means nothing on the branch adds to the changelog.
+      #
+      # The lock job below runs only when this finds the pull request. A
+      # search for the label did not find one opened seconds earlier, so a
+      # new release PR kept release-please's /issues/N links and failed CI's
+      # lockfile guard until the next merge into the branch.
       - name: Find the release PR
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr list -R "$GITHUB_REPOSITORY" --base "$BRANCH" --state open --label 'autorelease: pending' \
-            --json number,headRefName > "$RUNNER_TEMP/prs.json"
+          gh api graphql -f query="$PENDING_PRS" -f owner="${GITHUB_REPOSITORY%/*}" -f name="${GITHUB_REPOSITORY#*/}" \
+            -f base="$BRANCH" -f state=OPEN --jq '.data.repository.pullRequests.nodes' > "$RUNNER_TEMP/prs.json"
           count=$(jq length "$RUNNER_TEMP/prs.json")
           if [ "$count" = 0 ]; then
             echo "✓ no release PR is open on $BRANCH"
