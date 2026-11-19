@@ -296,6 +296,26 @@ async fn a_reply_whose_stream_stops_says_so_and_how_to_read_the_rest() {
     );
 }
 
+/// A run that ended without failing, and without an answer or an error
+/// event, says it gave no answer: every reply with no answer says why.
+#[tokio::test]
+async fn a_run_that_ended_with_no_answer_says_so() {
+    let (ended, _) = followed(Answer::Runs {
+        frames: Vec::new(),
+        status: RunStatus::Completed,
+        error: None,
+    })
+    .await;
+
+    assert_eq!(
+        ended,
+        Followed {
+            answered: false,
+            line: Some("  ✗  the model gave no answer".to_owned())
+        }
+    );
+}
+
 /// An answered reply says nothing more.
 #[tokio::test]
 async fn an_answered_reply_says_nothing_more() {

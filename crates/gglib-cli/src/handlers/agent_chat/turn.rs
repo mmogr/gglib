@@ -34,7 +34,7 @@ pub(crate) struct Shown {
 
 /// Send `turn` to the daemon and show its reply as it arrives, the images
 /// its tools make as `pictures` shows them, or as plain markers with none. `true` only when the reply gave
-/// its answer.
+/// its answer; a reply that gave none has said why on stderr.
 ///
 /// # Errors
 ///
@@ -117,13 +117,18 @@ pub(super) async fn follow(
 }
 
 /// What to say of a reply that gave no answer, by how its stream ended:
-/// a run that failed, unless an error event said why; a stream that ended,
-/// or could not be read, before the run did, with how to read the rest.
+/// nothing when an error event has said why already; why a run failed, in
+/// the daemon's words; that a run which ended otherwise gave no answer; a
+/// stream that ended, or could not be read, before the run did, with how to
+/// read the rest.
 fn ending(id: &str, end: &Result<Option<RunInfo>>, failed_aloud: bool) -> Option<String> {
     let rest = format!("`gglib run show {id} --follow` reads the rest");
     match end {
         Ok(Some(_)) if failed_aloud => None,
-        Ok(Some(info)) => failure(info).map(|why| format!("  ✗  {why}")),
+        Ok(Some(info)) => {
+            let why = failure(info).unwrap_or_else(|| "the model gave no answer".to_owned());
+            Some(format!("  ✗  {why}"))
+        }
         Ok(None) => Some(format!(
             "  ✗  the daemon's stream ended before the reply did; {rest}"
         )),

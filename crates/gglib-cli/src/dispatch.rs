@@ -18,6 +18,19 @@ use crate::config_commands::ConfigCommand;
 use crate::handlers;
 use crate::remote_flag::RemoteFlag;
 
+/// A command that has already printed why it failed returns this; `main`
+/// exits 1 without printing it.
+#[derive(Debug)]
+pub struct AlreadySaid;
+
+impl std::fmt::Display for AlreadySaid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the command failed, and has said why")
+    }
+}
+
+impl std::error::Error for AlreadySaid {}
+
 /// Whether `command` must leave nothing behind but what it is for, so it
 /// runs before logging is set up, which makes gglib's data folder and opens
 /// a log file there.
