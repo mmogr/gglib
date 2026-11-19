@@ -783,8 +783,8 @@ setup: check-deps build-tauri install ## Full setup (check deps + build + instal
 	@scripts/install-engine.sh sd || echo "○ The image runtime was not installed or updated; chat models work without it. Retry with: make sd-install"
 
 # The newest stable release, built from source. `main` is the development
-# version and reads as the next release candidate; the branch `stable` is
-# where Promote leaves each stable version (CONTRIBUTING, "Run Promote").
+# version and reads as the last version cut from it; the branch `stable` is
+# where each promoted stable version is left (CONTRIBUTING, "Run Promote").
 #
 # `setup-stable` builds that branch and comes back: it refuses over
 # uncommitted changes to tracked files, fetches the branch by name (so a

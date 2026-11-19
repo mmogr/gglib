@@ -26,11 +26,14 @@ is one `::error::` line on stderr and exit 1, and says what to do.
   `guard-pr` passes it, which is every run inside a cycle and every run
   after a `Release-As:` line. Where release-please is wrong there is one
   right answer, which this prints as `release_as` for the real run to force.
-  After a promotion it proposes the shipped version's `rc.N+1`, since the
-  stable version's commit is not on the branch: on main that becomes the
-  next minor's rc.1 after a feat or a breaking change and the next patch's
-  otherwise (the next minor's when the patch is a branched line's), and on
-  a line its next patch's. A feat merged while main's candidate is a patch
+  A promotion lands on its branch (promote.yml), and release-please reads
+  the next cycle from the stable version there by itself. Where a stable
+  version was tagged off its branch, as 0.30.0 to 0.38.0 were, it proposes
+  the shipped version's `rc.N+1` instead, since that version's commit is not
+  on the branch: on main that becomes the next minor's rc.1 after a feat or
+  a breaking change and the next patch's otherwise (the next minor's when
+  the patch is a branched line's), and on a line its next patch's. A feat
+  merged while main's candidate is a patch
   makes it propose the stable `X.Y.0`, which becomes `X.Y.0-rc.1`. Once
   1.0.0 has shipped, a breaking change on main always starts the next major,
   `(M+1).0.0-rc.1` above the newest stable M.x, whatever it proposed (a
@@ -55,10 +58,9 @@ is one `::error::` line on stderr and exit 1, and says what to do.
   the lock job runs this as the backstop.
 * `guard-tag`: the same line rule at the tag (release-tag.yml), for a
   version set by hand or by an admin's push that the release PR never saw.
-* `candidate`: which candidate Promote promotes. Named, it must be the
-  newest candidate of its version, and the version unshipped. Blank takes
-  the newest candidate when exactly one version has candidates out, and
-  is refused when two lines do, naming both.
+* `candidate`: whether Promote may promote the candidate its branch
+  carries. It must be tagged, the newest candidate of its version, and the
+  version unshipped.
 * `previous`: the stable version a promotion's notes and changelog start
   from: the newest stable below it. Refused when a newer stable exists,
   since the stable channels carry one version each and would be downgraded;
@@ -240,8 +242,8 @@ def guard_pr(branch: str, text: str, tags: Sequence[str], branches: Sequence[str
             )
         if shipped(version, tags):
             raise Refusal(
-                f"The release PR proposes {text}, but {spell(stable_of(version))} has shipped: Promote tagged "
-                f"v{spell(stable_of(version))} from its candidate, so from {branch} the candidate still looks like "
+                f"The release PR proposes {text}, but {spell(stable_of(version))} has shipped: "
+                f"v{spell(stable_of(version))} was tagged off {branch}, so from there the candidate still looks like "
                 f"the last release. Merge a commit whose message ends with {patch_hint}{REWRITTEN}"
             )
         before = (major, minor, patch - 1, None)
@@ -278,8 +280,8 @@ def guard_pr(branch: str, text: str, tags: Sequence[str], branches: Sequence[str
         else:
             ahead = f"{minor_hint} (a feat or a breaking change since {stable})"
         raise Refusal(
-            f"The release PR proposes {text}, but {stable} has shipped: Promote tagged v{stable} from its "
-            f"candidate, so from main the candidate still looks like the last release. Merge a commit whose "
+            f"The release PR proposes {text}, but {stable} has shipped: v{stable} was tagged off main, so "
+            f"from there the candidate still looks like the last release. Merge a commit whose "
             f"message ends with {ahead} or {patch_hint} "
             f"(fixes only; or cut release/{major}.{minor}.x from v{stable} and backport them there){REWRITTEN}"
         )
@@ -426,50 +428,27 @@ def guard_tag(branch: str, text: str, branches: Sequence[str]) -> Dict[str, str]
 
 def candidate(text: str, tags: Sequence[str]) -> Dict[str, str]:
     known = versions(tags)
-    if text:
-        chosen = parse(text)
-        if not text.startswith("v") or chosen is None or chosen[3] is None:
-            raise Refusal(f"{text} is not a candidate's tag, vX.Y.Z-rc.N")
-        if chosen not in known:
-            raise Refusal(
-                f"{text} is not tagged. CI tags a candidate once it passes on its branch; wait for that, or "
-                f"re-run CI's release job if it failed."
-            )
-    else:
-        waiting: Dict[Version, Version] = {}
-        for rc in candidates(tags):
-            if stable_of(rc) not in known:
-                waiting[stable_of(rc)] = rc  # sorted, so the last of a version wins
-        if not candidates(tags):
-            raise Refusal("no candidate is tagged. Merge the release PR to cut one, let it release, then run Promote.")
-        if not waiting:
-            raise Refusal(
-                "no candidate is waiting: every candidate's version has shipped. Merge a release PR to cut one, "
-                "let it release, then run Promote."
-            )
-        if len(waiting) > 1:
-            names = ", ".join(f"v{spell(rc)}" for rc in waiting.values())
-            raise Refusal(
-                f"candidates of {len(waiting)} versions are out: {names}. Name the one to promote; blank takes "
-                f"the newest only when one version has candidates."
-            )
-        chosen = next(iter(waiting.values()))
+    chosen = parse(text)
+    if not text.startswith("v") or chosen is None or chosen[3] is None:
+        raise Refusal(f"'{text}' is not a candidate's tag, vX.Y.Z-rc.N")
+    if chosen not in known:
+        raise Refusal(
+            f"{text} is not tagged. CI tags a candidate once it passes on its branch; wait for that, or "
+            f"re-run CI's release job if it failed."
+        )
     stable = stable_of(chosen)
     newest = [v for v in candidates(tags) if stable_of(v) == stable][-1]
     if newest != chosen:
         raise Refusal(
             f"v{spell(chosen)} is not the newest candidate of {spell(stable)}; v{spell(newest)} is. A stable "
-            f"release ships the last candidate: promote v{spell(newest)}, or leave the candidate blank for the "
-            f"newest."
+            f"release ships the last candidate, and the branch that cut v{spell(newest)} carries it: run Promote "
+            f"with that branch."
         )
     if stable in known:
-        below = [v for v in stables(tags) if sort_key(v) < sort_key(stable)]
-        before = f"v{spell(below[-1])}" if below else "<the stable version before it>"
         raise Refusal(
-            f"{spell(stable)} has shipped already: v{spell(stable)} is tagged. If an earlier run tagged it and "
-            f"then failed, finish by hand: gh release create v{spell(stable)} --title 'Release v{spell(stable)}' "
-            f"--generate-notes --notes-start-tag {before} --verify-tag --latest, then gh workflow run "
-            f"release.yml --ref main -f tag=v{spell(stable)}."
+            f"{spell(stable)} has shipped already: v{spell(stable)} is tagged, and the branch still carries its "
+            f"candidate because that version was tagged off the branch. There is nothing to promote: merge the "
+            f"release PR to cut the next version's candidate, let it release, then run Promote."
         )
     return {"candidate": f"v{spell(chosen)}", "stable": spell(stable)}
 
@@ -806,9 +785,8 @@ def self_test() -> bool:
     passes("tag 0.x: 1.0.0's rc.1 on main", guard_tag("main", "1.0.0-rc.1", []), {"version": "1.0.0-rc.1", "line": ""})
     passes("tag 1.x: 2.0.0's rc.1 beside a line", guard_tag("main", "2.0.0-rc.1", ["release/1.0.x"]), {"version": "2.0.0-rc.1", "line": ""})
     refuses("tag 1.x: a major on a line", lambda: guard_tag("release/1.0.x", "2.0.0-rc.1", ["release/1.0.x"]), "not a version of the 1.0.x line")
-    passes("candidate: blank, 1.0.0's soak", candidate("", SOAK + ["v1.0.0-rc.2"]), {"candidate": "v1.0.0-rc.2", "stable": "1.0.0"})
-    refuses("candidate: blank, 0.35.0 and 1.0.0 both out", lambda: candidate("", CYCLE_35 + ["v1.0.0-rc.1"]), "candidates of 2 versions are out", "v0.35.0-rc.1", "v1.0.0-rc.1")
-    refuses("candidate: blank, 1.1.0 and 2.0.0 both out", lambda: candidate("", CYCLE_1_1 + ["v2.0.0-rc.1"]), "candidates of 2 versions are out")
+    passes("candidate: 1.0.0's soak", candidate("v1.0.0-rc.2", SOAK + ["v1.0.0-rc.2"]), {"candidate": "v1.0.0-rc.2", "stable": "1.0.0"})
+    passes("candidate: 2.0.0's, with 1.1.0's out too", candidate("v2.0.0-rc.1", CYCLE_1_1 + ["v2.0.0-rc.1"]), {"candidate": "v2.0.0-rc.1", "stable": "2.0.0"})
     passes("previous: 1.0.0 starts from 0.x's last", previous("1.0.0", SOAK + ["v1.0.0-rc.2"]), {"previous": "v0.35.0"})
     passes("previous: 2.0.0 starts from 1.x's last", previous("2.0.0", CYCLE_2 + ["v1.0.1"]), {"previous": "v1.0.1"})
     refuses("previous: a 0.x patch after 1.0.0", lambda: previous("0.35.1", ONE), "v1.0.0 is the newest stable", "downgrade")
@@ -825,19 +803,16 @@ def self_test() -> bool:
     refuses("tag: a feature branch", lambda: guard_tag("feat/thing", "0.30.1-rc.1", []), "nothing else releases")
 
     # candidate
-    passes("candidate: blank, one version out", candidate("", TODAY), {"candidate": "v0.30.0-rc.2", "stable": "0.30.0"})
+    refuses("candidate: blank", lambda: candidate("", TODAY), "not a candidate's tag")
     passes("candidate: named newest", candidate("v0.30.0-rc.2", TODAY), {"candidate": "v0.30.0-rc.2", "stable": "0.30.0"})
     refuses("candidate: named older", lambda: candidate("v0.30.0-rc.1", TODAY), "not the newest candidate of 0.30.0", "v0.30.0-rc.2 is")
-    refuses("candidate: named shipped", lambda: candidate("v0.29.0-rc.7", TODAY), "0.29.0 has shipped already", "--notes-start-tag v0.28.0", "--latest")
+    refuses("candidate: named shipped", lambda: candidate("v0.29.0-rc.7", TODAY), "0.29.0 has shipped already", "tagged off the branch", "cut the next version's candidate")
     refuses("candidate: not a tag", lambda: candidate("0.30.0-rc.2", TODAY), "not a candidate's tag")
     refuses("candidate: a stable tag", lambda: candidate("v0.30.0", TODAY), "not a candidate's tag")
     refuses("candidate: untagged", lambda: candidate("v0.30.0-rc.9", TODAY), "not tagged")
-    refuses("candidate: blank, none tagged", lambda: candidate("", ["v0.1.0"]), "no candidate is tagged")
-    refuses("candidate: blank, all shipped", lambda: candidate("", ["v0.29.0-rc.1", "v0.29.0"]), "every candidate's version has shipped")
     two_out = LINE + ["v0.30.1-rc.1"]
-    refuses("candidate: blank, two lines out", lambda: candidate("", two_out), "candidates of 2 versions are out", "v0.30.1-rc.1", "v0.31.0-rc.1", "Name the one")
     passes("candidate: named, two lines out", candidate("v0.30.1-rc.1", two_out), {"candidate": "v0.30.1-rc.1", "stable": "0.30.1"})
-    passes("candidate: blank, line only", candidate("", LINE[:-1] + ["v0.30.1-rc.1"]), {"candidate": "v0.30.1-rc.1", "stable": "0.30.1"})
+    passes("candidate: a line's, alone", candidate("v0.30.1-rc.1", LINE[:-1] + ["v0.30.1-rc.1"]), {"candidate": "v0.30.1-rc.1", "stable": "0.30.1"})
 
     # previous
     passes("previous: today", previous("0.30.0", TODAY), {"previous": "v0.29.0"})
@@ -905,8 +880,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     sub.add_argument("--branch", required=True, help="the branch being tagged")
     sub.add_argument("--version", required=True)
     sub.add_argument("--branches", required=True, help="a file of branches, or - for stdin")
-    sub = commands.add_parser("candidate", help="which candidate Promote promotes")
-    sub.add_argument("--input", default="", help="the candidate named, vX.Y.Z-rc.N, or blank")
+    sub = commands.add_parser("candidate", help="whether Promote may promote a branch's candidate")
+    sub.add_argument("--input", required=True, help="the candidate the branch carries, vX.Y.Z-rc.N")
     sub.add_argument("--tags", required=True, help="a file of tags, or - for stdin")
     sub = commands.add_parser("previous", help="the stable version a promotion's notes start from")
     sub.add_argument("--stable", required=True, help="the version being promoted, X.Y.Z")

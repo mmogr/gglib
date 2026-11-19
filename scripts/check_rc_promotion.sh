@@ -17,10 +17,12 @@
 # A stable version with no RC tag fails too, so every stable release has been
 # out as a prerelease first: a candidate is cut by merging the release PR.
 #
-# Run in two places: promote.yml, on the promotion it has made from the
-# candidate's tag, before it pushes that as the stable tag; and
-# release-tag.yml's check-version, on a stable version set on main by hand,
-# before it tags. Each is the guard for its own path.
+# Run in three places: promote.yml, on the promotion it has made on the
+# branch's tip, before it opens the pull request; ci.yml's `scope` job, on a
+# pull request that sets a stable version, merged with its base as it is
+# then; and release-tag.yml's check-version, on the commit that set the
+# stable version, before it tags. The last is the guard; the first two only
+# save a promotion that the release would then refuse.
 #
 # A prerelease version passes untouched.
 set -euo pipefail
