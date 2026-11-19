@@ -27,10 +27,12 @@
 # nothing here asks which. Two things do change with two lines out, and
 # scripts/release_lines.py decides both. A blank candidate is refused when
 # more than one version has candidates waiting, since "the newest" would be
-# a guess. And a version below the newest stable is never promoted: the
-# stable channels (apt, dnf, pacman, the AUR, Homebrew and the docs site)
-# each carry one version, and release.yml would replace the newer with the
-# older. That is the rule that only the newest stable line is maintained.
+# a guess; a candidate left behind below the newest stable is not waiting,
+# so a blank run passes over it. And a version below the newest stable is
+# never promoted: the stable channels (apt, dnf, pacman, the AUR, Homebrew
+# and the docs site) each carry one version, and release.yml would replace
+# the newer with the older. That is the rule that only the newest stable
+# line is maintained.
 #
 # release-please cannot do this: with no commit since the candidate's tag it
 # opens no pull request. And once a stable version has shipped this way,

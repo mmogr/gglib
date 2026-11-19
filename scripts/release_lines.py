@@ -58,7 +58,9 @@ is one `::error::` line on stderr and exit 1, and says what to do.
 * `candidate`: which candidate Promote promotes. Named, it must be the
   newest candidate of its version, and the version unshipped. Blank takes
   the newest candidate when exactly one version has candidates out, and
-  is refused when two lines do, naming both.
+  is refused when two lines do, naming both. A candidate of a version
+  below the newest stable is not out: `previous` never lets it ship, so a
+  blank run passes over it.
 * `previous`: the stable version a promotion's notes and changelog start
   from: the newest stable below it. Refused when a newer stable exists,
   since the stable channels carry one version each and would be downgraded;
@@ -158,6 +160,11 @@ def candidates(tags: Sequence[str]) -> List[Version]:
 
 def shipped(version: Version, tags: Sequence[str]) -> bool:
     return stable_of(version) in stables(tags)
+
+
+def superseded(stable: Version, tags: Sequence[str]) -> List[Version]:
+    """The stable versions newer than this one; any at all, and it never ships."""
+    return [v for v in stables(tags) if sort_key(v) > sort_key(stable)]
 
 
 def newest_major(tags: Sequence[str]) -> int:
@@ -436,16 +443,18 @@ def candidate(text: str, tags: Sequence[str]) -> Dict[str, str]:
                 f"re-run CI's release job if it failed."
             )
     else:
+        # A version below the newest stable never ships (`previous` refuses
+        # it), so a candidate left behind there is not waiting.
         waiting: Dict[Version, Version] = {}
         for rc in candidates(tags):
-            if stable_of(rc) not in known:
+            if stable_of(rc) not in known and not superseded(stable_of(rc), tags):
                 waiting[stable_of(rc)] = rc  # sorted, so the last of a version wins
         if not candidates(tags):
             raise Refusal("no candidate is tagged. Merge the release PR to cut one, let it release, then run Promote.")
         if not waiting:
             raise Refusal(
-                "no candidate is waiting: every candidate's version has shipped. Merge a release PR to cut one, "
-                "let it release, then run Promote."
+                "no candidate is waiting: every candidate's version has shipped, or is below the newest stable "
+                "version. Merge a release PR to cut one, let it release, then run Promote."
             )
         if len(waiting) > 1:
             names = ", ".join(f"v{spell(rc)}" for rc in waiting.values())
@@ -482,7 +491,7 @@ def previous(text: str, tags: Sequence[str]) -> Dict[str, str]:
     if stable is None or stable[3] is not None or text.startswith("v"):
         raise Refusal(f"'{text}' is not a stable version X.Y.Z")
     shipped_versions = stables(tags)
-    newer = [v for v in shipped_versions if sort_key(v) > sort_key(stable)]
+    newer = superseded(stable, tags)
     if newer:
         raise Refusal(
             f"v{spell(newer[-1])} is the newest stable version; promoting {text} after it would downgrade "
@@ -838,6 +847,12 @@ def self_test() -> bool:
     refuses("candidate: blank, two lines out", lambda: candidate("", two_out), "candidates of 2 versions are out", "v0.30.1-rc.1", "v0.31.0-rc.1", "Name the one")
     passes("candidate: named, two lines out", candidate("v0.30.1-rc.1", two_out), {"candidate": "v0.30.1-rc.1", "stable": "0.30.1"})
     passes("candidate: blank, line only", candidate("", LINE[:-1] + ["v0.30.1-rc.1"]), {"candidate": "v0.30.1-rc.1", "stable": "0.30.1"})
+    # Two patches were cut and left behind, and main went on: they are not out.
+    left = ["v0.32.0", "v0.32.1-rc.1", "v0.33.0", "v0.33.1-rc.1", "v0.38.0-rc.2", "v0.38.0"]
+    passes("candidate: blank, past candidates left behind", candidate("", left + ["v0.39.0-rc.1"]), {"candidate": "v0.39.0-rc.1", "stable": "0.39.0"})
+    refuses("candidate: blank, only candidates left behind", lambda: candidate("", left), "no candidate is waiting", "below the newest stable")
+    passes("candidate: named, left behind", candidate("v0.33.1-rc.1", left), {"candidate": "v0.33.1-rc.1", "stable": "0.33.1"})
+    refuses("previous: a candidate left behind", lambda: previous("0.33.1", left), "v0.38.0 is the newest stable", "downgrade")
 
     # previous
     passes("previous: today", previous("0.30.0", TODAY), {"previous": "v0.29.0"})
