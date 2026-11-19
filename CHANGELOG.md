@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.39.0-rc.1](https://github.com/mmogr/gglib/compare/v0.38.0-rc.2...v0.39.0-rc.1) (2026-11-19)
+
+
+### What gglib now does
+
+* **cli:** an image a tool makes is shown in the terminal, in iTerm2, kitty and Ghostty ([#2115](https://github.com/mmogr/gglib/issues/2115)) ([7bd1cf8](https://github.com/mmogr/gglib/commit/7bd1cf8379af88b89478cf799da19e728f5f886e))
+* **cli:** an image's marker in a chat is a link that opens the image ([#2114](https://github.com/mmogr/gglib/issues/2114)) ([f479c81](https://github.com/mmogr/gglib/commit/f479c81cf5ac2ac9fd940b206712c3b0b05c02f2))
+
+
+### What it stopped getting wrong
+
+* **cli:** a question continued into chat can draw ([#2110](https://github.com/mmogr/gglib/issues/2110)) ([f9a298e](https://github.com/mmogr/gglib/commit/f9a298e898d08c9aed56f985a9d7b6b6a63c2886))
+* **cli:** text written beside a tool call is shown before the tool, apart from the reply ([#2113](https://github.com/mmogr/gglib/issues/2113)) ([45d68d2](https://github.com/mmogr/gglib/commit/45d68d2a6c629531be57c3caad3998fc8f742d20))
+
+
+### Internal
+
+* **promote:** the stable release lands on its branch, through a pull request that merges itself ([#2119](https://github.com/mmogr/gglib/issues/2119)) ([da852bb](https://github.com/mmogr/gglib/commit/da852bbb53edc31ca16f0d689b1868fc06cd5db4))
+
 ## [0.38.0-rc.2](https://github.com/mmogr/gglib/compare/v0.38.0-rc.1...v0.38.0-rc.2) (2026-11-18)
 
 
