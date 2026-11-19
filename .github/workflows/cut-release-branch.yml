@@ -7,8 +7,9 @@
 # release PR (release-please.yml) and Promote all follow the branch once it
 # exists.
 #
-# The line starts at the tag, not at main: the commit that reads X.Y.Z is
-# the one Promote made on top of the candidate, and it is not on main. From
+# The line starts at the tag, not at main's tip: the commit that reads X.Y.Z
+# is the promotion's, which main has moved past (for 0.30.0 to 0.38.0 it is
+# one Promote made on top of the candidate, and is not on main at all). From
 # the tag, release-please finds vX.Y.Z on the branch's first commit and
 # proposes X.Y.(Z+1)-rc.1 from the cherry-picks alone.
 #
@@ -177,7 +178,7 @@ jobs:
             echo
             echo "- Put \`$LABEL\` on a merged pull request into main, and Backport opens the cherry-pick against \`$BRANCH\`."
             echo "- Once that merges and CI on \`$BRANCH\` passes, the Release PR workflow opens \`chore($BRANCH): release X.Y.Z-rc.1\` for the line's next patch; merging it tags and builds the candidate."
-            echo "- Promote with the candidate named, \`vX.Y.Z-rc.N\`, ships the patch to every stable channel."
+            echo "- Promote with \`branch: $BRANCH\` opens the promotion into the line, and its merge ships the patch to every stable channel."
             echo
             echo "Only the newest stable line is maintained: when the next minor is promoted, this line is done. Delete the branch and the \`$LABEL\` label; the tags keep its history."
           } >> "$GITHUB_STEP_SUMMARY"

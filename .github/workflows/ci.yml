@@ -1043,6 +1043,29 @@ jobs:
           # fallback.
           fetch-depth: 2
 
+      # A pull request that moves the version to a stable one is a promotion
+      # (promote.yml), and a stable version is its last candidate with the
+      # version alone changed. Judged on the merge with the base as it is
+      # now, so a promotion brought up to date with a branch that has moved
+      # past its candidate fails here, before it can merge; release-tag.yml
+      # makes the same check before it tags. Only when the version moves: the
+      # branch reads the stable version from a promotion until its next
+      # candidate, and every other pull request in that time changes more
+      # than a version. The checkout has no tags, so the version's
+      # candidates are fetched for the comparison.
+      - name: A pull request that sets a stable version is its last candidate
+        if: github.event_name == 'pull_request'
+        run: |
+          version() { grep -m1 '^version = ' | sed -E 's/version = "(.*)"/\1/'; }
+          before=$(git show HEAD^1:Cargo.toml | version)
+          after=$(version < Cargo.toml)
+          if [ "$before" = "$after" ] || [[ "$after" == *-* ]]; then
+            echo "✓ this pull request sets no stable version"
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "refs/tags/v${after}-rc.*:refs/tags/v${after}-rc.*"
+          scripts/check_rc_promotion.sh
+
       # contracts/upstream/<engine>/trial.json says the pinned engine was
       # tried on the owner's machine, and `Test (Rust)` holds the pin to it.
       # It is written on a branch of this repository, from the owner's

@@ -9,17 +9,19 @@
 # and the manifest, and adds its changes to CHANGELOG.md. Merging the pull
 # request changes the branch's version, and CI's release job
 # (release-tag.yml) tags and releases that version as a prerelease.
-# Promotion to a stable version is promote.yml's job, made from the
-# candidate's tag, not this one's.
+# Promotion to a stable version is promote.yml's job, not this one's: it
+# opens the pull request that moves the branch from its candidate to the
+# stable version, and release-please reads the next cycle from that version
+# once it is on the branch and tagged.
 #
 # release-please's own choice of version is checked before it touches the pull
 # request. A dry run says what it would propose, and scripts/release_lines.py
 # keeps that unless the release lines refuse it. Three proposals are refused
 # with one right answer each, which the real run is then made to propose:
-# after a promotion, the shipped version's rc.N+1 (Promote tags the stable
-# version from the candidate's commit, so release-please still counts the
-# candidate as the last release); and the stable X.Y.0 that a feat over a
-# patch candidate makes it propose. Once 1.0.0 has shipped, a breaking
+# the shipped version's rc.N+1, proposed when a stable version was tagged
+# off its branch (0.30.0 to 0.38.0 were, from the candidate's commit, so
+# release-please still counts the candidate as the last release); and the
+# stable X.Y.0 that a feat over a patch candidate makes it propose. Once 1.0.0 has shipped, a breaking
 # change on main starts the next major unless main is in its candidates
 # already, so it never ships in a minor or a patch; and a version's first
 # candidate is always rc.1. So the release PR never waits on a `Release-As:`
@@ -197,8 +199,8 @@ jobs:
             --branches "$RUNNER_TEMP/release-branches.txt" | tee -a "$GITHUB_OUTPUT"
 
       # `release-pr` only keeps the pull request; it never tags or makes a
-      # release. release-tag.yml tags a candidate and promote.yml a stable
-      # version, and each makes the GitHub release itself, with generated
+      # release. release-tag.yml tags every version, a candidate's and a
+      # stable one's, and makes the GitHub release itself, with generated
       # notes. With `always-update` in the config it rewrites the pull request
       # on every run, so the pull request is never behind its branch, which
       # the ruleset requires before a merge.
