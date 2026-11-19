@@ -585,10 +585,13 @@ whether to delete that folder and the desktop app, and whether to delete your
 downloaded models.
 
 To work against a library of your own, for example while changing the
-database schema, give the build its own folder and its own daemon port:
+database schema, give the build its own folder, its own daemon port and its
+own endpoint port. The installed gglib's endpoint usually holds 8080, the
+port a new folder starts with, and `up` then says the port is in use:
 
 ```bash
 export GGLIB_DATA_DIR="$PWD/.dev" GGLIB_DAEMON_PORT=9888
+cargo run -p gglib-cli -- config set proxy-port 8081
 cargo run -p gglib-cli -- up
 ```
 
