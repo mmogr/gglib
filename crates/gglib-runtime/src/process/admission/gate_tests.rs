@@ -513,6 +513,43 @@ async fn the_observer_sees_the_render_step() {
     drop(granted(second.as_mut()));
 }
 
+/// Rule 8: a render queued behind another render that is itself waiting,
+/// with none on the GPU, is told it waits behind a render, second in line.
+#[tokio::test]
+async fn a_render_behind_a_waiting_render_is_told_so() {
+    #[derive(Debug, Default)]
+    struct Seen(Mutex<Vec<GateWait>>);
+    impl GateWaitObserver for Seen {
+        fn waiting(&self, wait: GateWait) {
+            self.0.lock().unwrap().push(wait);
+        }
+    }
+
+    let (q, lease) = chat_and_image();
+    let second_lease = q.lease(1).expect("flux is resident");
+    let gate = q.generation_gate();
+    let in_flight = q.lease(PRIMARY_SLOT).expect("qwen is resident");
+
+    let mut first = pin!(gate.render_turn(lease, None));
+    assert!(poll(first.as_mut()).is_pending(), "a chat is in flight");
+    let seen = Arc::new(Seen::default());
+    let observer = Arc::clone(&seen) as Arc<dyn GateWaitObserver>;
+    let mut second = pin!(gate.render_turn(second_lease, Some(observer)));
+    assert!(poll(second.as_mut()).is_pending(), "a render waits ahead");
+
+    let behind = GateWait {
+        reason: WaitReason::ImageRender,
+        step: 0,
+        total: 0,
+        position: 2,
+    };
+    assert_eq!(*seen.0.lock().unwrap(), [behind]);
+
+    drop(in_flight);
+    drop(granted(first.as_mut()));
+    drop(granted(second.as_mut()));
+}
+
 /// The dashboard's view of the gate: the render holding it names its image
 /// model and step, the chats in flight are counted, and so are the renders
 /// waiting.
