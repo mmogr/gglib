@@ -166,12 +166,13 @@ jobs:
       # The commit then gets a second parent: where `stable` is, or the
       # previous stable tag while there is no such branch (the checkout above
       # fetched every branch). That is the stable version before this one,
-      # unless that version never reached the branch, as one tagged without
-      # Promote would not. The tree and the first parent stay as committed, so
+      # unless that version never reached the branch, as one whose move was
+      # refused would not. The tree and the first parent stay as committed, so
       # the change it shows is still the version alone. With the branch's own
       # tip as a parent, moving `stable` to this commit is a fast-forward
       # whatever was tagged in between. A promotion that descends from that
-      # tip already, as a line's patch does, stays a plain commit.
+      # tip already stays a plain commit, as a line's patch does when
+      # `stable` is at the tag the line was cut from.
       - name: Commit the promotion
         id: commit
         env:
