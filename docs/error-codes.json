@@ -387,6 +387,12 @@
       "meaning": "The model's turn was cut off at its token limit while it wrote a tool call, or before it wrote any text, so the agent run stopped rather than use half of it; retry, or turn thinking off."
     },
     {
+      "code": "no_answer",
+      "type": null,
+      "status": null,
+      "meaning": "The agent run's final reply was no answer: it had no text, or it was a tool call written as text on a turn that offered no tools. What the model wrote, its thinking included, is in the run's events."
+    },
+    {
       "code": "agent_error",
       "type": null,
       "status": null,

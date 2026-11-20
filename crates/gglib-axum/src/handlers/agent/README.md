@@ -122,7 +122,11 @@ its thinking budget plus 8192 when that is more. A reply cut off there while
 it writes a call, or before it writes any text, ends the run `failed`,
 `turn_too_long`; one cut off in its text is taken as if it had stopped,
 after a `system_warning`. The words after a Draw's picture are the exception
-and are always answered for. A device's `max_tokens` is not read, so it can
+and are always answered for. A final reply with no text, or one that starts
+with a tool call written as text when no tools were offered, ends the run
+`failed`, `no_answer`, with the words of its `error` event: what arrived of
+the reply is saved, marked incomplete, as for any failed run. A device's
+`max_tokens` is not read, so it can
 neither raise nor lower the limit. The endpoint's loop guard alone counts
 such a loop's trips; when it ends the run it answers in the model's place
 with a finished message, which ends the run well with that sentence.

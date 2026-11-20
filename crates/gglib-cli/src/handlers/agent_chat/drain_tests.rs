@@ -93,6 +93,14 @@ fn a_tool_round_with_text() -> Vec<AgentEvent> {
 /// What `events` write to stdout in the mode `rich` names: each [`Said`]
 /// in order, a block as `[text]`.
 async fn said(events: Vec<AgentEvent>, rich: bool) -> String {
+    let (written, answered) = drained(events, rich).await;
+    assert!(answered);
+    written
+}
+
+/// What `events` write to stdout in the mode `rich` names, as [`said`]
+/// gives it, and whether they were an answer.
+async fn drained(events: Vec<AgentEvent>, rich: bool) -> (String, bool) {
     use super::{RenderContext, Said, drain};
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -113,8 +121,32 @@ async fn said(events: Vec<AgentEvent>, rich: bool) -> String {
         Said::ToolLine(_) | Said::Picture(_) => {}
     })
     .await;
-    assert!(answered);
-    written
+    (written, answered)
+}
+
+/// A reply whose run ended as no answer after it wrote a tool call as text:
+/// the text was streamed before the run could judge it, so it is on stdout,
+/// in a pipe and on a terminal, and the reply is no answer.
+#[tokio::test]
+async fn a_reply_that_ended_as_no_answer_has_written_the_text_it_streamed() {
+    let markup = "<tool_call>\n{\"name\": \"read_file\", \"arguments\": {}}\n</tool_call>";
+    let events = || {
+        vec![
+            AgentEvent::TextDelta {
+                content: markup.to_owned(),
+            },
+            AgentEvent::Error {
+                message: "The model gave no answer.".to_owned(),
+                code: None,
+            },
+        ]
+    };
+
+    assert_eq!(drained(events(), false).await, (markup.to_owned(), false));
+    assert_eq!(
+        drained(events(), true).await,
+        (format!("[{markup}]"), false)
+    );
 }
 
 /// On a terminal, text written beside a tool call is its own block, shown
