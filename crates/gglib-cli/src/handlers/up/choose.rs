@@ -44,9 +44,9 @@ pub(super) async fn run(ctx: &CliContext, requested: Option<&str>, yes: bool) ->
 /// whether it did.
 ///
 /// `gglib q` falls back to the default model, and a first run has none, so
-/// without this the first question after `up` asks for `-m`. A default
-/// the user chose is theirs, and stays; one whose model has since been
-/// removed is as good as none.
+/// without this a question after `up` asks for `-m` as soon as the library
+/// holds a second chat model. A default the user chose is theirs, and
+/// stays; one whose model has since been removed is as good as none.
 pub(super) async fn adopt_as_default(ctx: &CliContext, model_id: i64) -> Result<bool> {
     if let Some(current) = ctx.app.settings().get().await?.default_model_id
         && ctx.app.models().get_by_id(current).await?.is_some()

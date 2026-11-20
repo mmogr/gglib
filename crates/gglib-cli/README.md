@@ -220,7 +220,7 @@ environment switches (`GGLIB_DISABLE_CACHE_AUTOSIZE`, `GGLIB_DISABLE_KV_QUANT`,
 The `q` command supports piped input or file context:
 
 ```bash
-# Simple question (uses default model)
+# Simple question (uses the default model, or the library's only chat model)
 gglib q "What is the capital of France?"
 
 # Read context from a file
@@ -425,7 +425,9 @@ Reasoning content is split from response text upstream by llama-server's
 `AgentEvent::ReasoningDelta` and routes reasoning to stderr while answer
 text reaches stdout. This works regardless of rendering mode.
 
-**Set a default model** to avoid using `--model` every time:
+**Set a default model** to avoid using `--model` every time. With no
+default, `gglib q` asks the library's only chat model when it holds exactly
+one, and says which:
 
 ```bash
 gglib config set default-model-id 1

@@ -1,6 +1,8 @@
 //! `gglib q` against a stand-in daemon: the chat it makes keeps what its
 //! command line named, and its one turn says the folder it was asked in.
 //! Which folders a question adopts is `agent_chat::files`' rule and tests.
+//! A question that names no model asks the default, else the library's only
+//! chat model, and says which.
 
 use serde_json::{Value, json};
 
@@ -179,4 +181,139 @@ async fn a_question_without_tools_is_not_told_it_has_them() {
     }
     assert!(told.contains("cannot read files"), "{told}");
     assert!(!told.to_lowercase().contains("no tools"), "{told}");
+}
+
+/// A context over a fresh library in `dir` that holds chat models named
+/// `chat` and image models named `image`, in that order, and no default.
+async fn library_of(dir: &std::path::Path, chat: &[&str], image: &[&str]) -> CliContext {
+    gglib_core::paths::isolate_data_root();
+    let ctx = test_context(dir).await;
+    let named = |name: &str| {
+        let path = dir.join(format!("{name}.gguf"));
+        gglib_core::domain::NewModel::new(name.to_owned(), path, Some(8.0), chrono::Utc::now())
+    };
+    for name in chat {
+        ctx.app.models().add(named(name)).await.expect("registered");
+    }
+    for name in image {
+        let mut model = named(name);
+        model.image_family = Some(gglib_core::domain::ImageFamily::Flux1);
+        ctx.app.models().add(model).await.expect("registered");
+    }
+    ctx
+}
+
+/// The model a question that named none asks in `ctx`, by name, and what it
+/// said of the choice.
+async fn unnamed(ctx: &CliContext, quiet: bool) -> Result<(String, String)> {
+    let default_id = ctx.app.settings().get().await.unwrap().default_model_id;
+    let mut said = Vec::new();
+    let id = unnamed_model(ctx, default_id, quiet, &mut said).await?;
+    let model = ctx
+        .app
+        .models()
+        .get(&id)
+        .await
+        .unwrap()
+        .expect("in the library");
+    Ok((model.name, String::from_utf8(said).unwrap()))
+}
+
+/// With no default, a library of one chat model answers a question that
+/// names none, and the question says which model that is, unless `--quiet`.
+/// Image models are not counted.
+#[tokio::test]
+async fn a_question_that_names_no_model_asks_the_only_chat_model_and_says_which() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = library_of(dir.path(), &["qwen"], &[]).await;
+    assert_eq!(
+        unnamed(&ctx, false).await.unwrap(),
+        (
+            "qwen".to_owned(),
+            "Model: qwen (the only chat model in the library)\n".to_owned()
+        )
+    );
+    assert_eq!(
+        unnamed(&ctx, true).await.unwrap(),
+        ("qwen".to_owned(), String::new())
+    );
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = library_of(dir.path(), &["gemma"], &["flux", "sdxl"]).await;
+    assert_eq!(unnamed(&ctx, true).await.unwrap().0, "gemma");
+}
+
+/// With no default and no chat model, or several, there is nothing to
+/// choose by: the question says to name a model or set a default.
+#[tokio::test]
+async fn a_question_that_names_no_model_is_refused_with_no_chat_model_or_several() {
+    for (chat, image) in [
+        (&[][..], &[][..]),
+        (&[][..], &["flux"][..]),
+        (&["qwen", "gemma"][..], &[][..]),
+    ] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = library_of(dir.path(), chat, image).await;
+
+        let refused = unnamed(&ctx, false)
+            .await
+            .expect_err("nothing to choose by");
+
+        let said = refused.to_string();
+        assert!(
+            said.starts_with("No model specified and no default model set."),
+            "{chat:?} {image:?}: {said}"
+        );
+        assert!(said.contains("gglib config set default-model-id"), "{said}");
+    }
+}
+
+/// A default the settings name is asked, among several, and nothing is
+/// said of it: the user chose it.
+#[tokio::test]
+async fn a_question_that_names_no_model_asks_the_default_and_says_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = library_of(dir.path(), &["qwen", "gemma"], &[]).await;
+    let gemma = ctx.app.models().get("gemma").await.unwrap().unwrap();
+    let update = gglib_core::settings::SettingsUpdate {
+        default_model_id: Some(Some(gemma.id)),
+        ..Default::default()
+    };
+    ctx.app.settings().update(update).await.expect("saved");
+
+    assert_eq!(
+        unnamed(&ctx, false).await.unwrap(),
+        ("gemma".to_owned(), String::new())
+    );
+}
+
+/// The whole command, with no `-m`, in a library of one chat model and no
+/// default: the question is answered, on a chat that names that model.
+#[tokio::test]
+async fn a_question_with_no_model_named_is_answered_by_the_only_chat_model() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let notes = dir.path().join("notes.txt");
+    std::fs::write(&notes, "a cat on a mat").unwrap();
+    let ctx = library_of(dir.path(), &["qwen"], &["flux"]).await;
+    let args = QuestionArgs {
+        model_arg: None,
+        ..question(true, &notes)
+    };
+    let (port, _taken) = stand_in(Answer::Runs {
+        frames: vec![json!({"type": "final_answer", "content": "A cat."}).to_string()],
+        status: RunStatus::Completed,
+        error: None,
+    });
+
+    STAND_IN_PORT
+        .scope(port, execute(&ctx, args))
+        .await
+        .expect("answered");
+
+    let chats = ctx.app.chat_history().list_conversations().await.unwrap();
+    let [chat] = chats.as_slice() else {
+        panic!("one chat: {chats:?}");
+    };
+    let named = chat.settings.as_ref().and_then(|s| s.model_name.clone());
+    assert_eq!(named.as_deref(), Some("qwen"), "{chat:?}");
 }
