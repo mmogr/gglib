@@ -378,6 +378,8 @@ fn uninstalling_keeps_what_another_tool_put_in_the_folder() {
 
 /// A path on the list that is a link is removed as a link: what it points
 /// at, outside the engine's folder, stays.
+// Unix only: a symbolic link, which the removal must take without following
+// it.
 #[cfg(unix)]
 #[test]
 fn uninstalling_removes_a_link_and_not_what_it_points_at() {

@@ -387,10 +387,6 @@ pub(crate) fn spawn_log_readers(child: &mut Child, port: u16, tail: &OutputTail)
 mod tests {
     use super::*;
 
-    // Only the `#[cfg(unix)]` tests below write an executable stub to disk.
-    #[cfg(unix)]
-    use {std::fs, std::os::unix::fs::PermissionsExt, tempfile::TempDir};
-
     /// Minimal `ServerConfig` for `build_command` arg-emission tests — every
     /// cache-related field defaults off so each test only sets what it cares
     /// about.
@@ -615,14 +611,9 @@ mod tests {
 
     /// Test that a valid bootstrap path is used directly.
     #[test]
-    #[cfg(unix)]
     fn test_select_llama_path_uses_valid_bootstrap_path() {
-        let temp_dir = TempDir::new().unwrap();
-        let binary_path = temp_dir.path().join("llama-server");
-
-        // Create a fake binary
-        fs::write(&binary_path, "#!/bin/sh\necho test").unwrap();
-        fs::set_permissions(&binary_path, fs::Permissions::from_mode(0o755)).unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let binary_path = gglib_test_proc::install(temp_dir.path(), "llama-server", "");
 
         let result = select_llama_path(Some(&binary_path));
         assert!(result.is_ok());
@@ -649,29 +640,36 @@ mod tests {
         let _ = result;
     }
 
-    /// Test that `build_and_spawn` prefers the injected path when present.
+    /// Test that `build_and_spawn` prefers the injected path when present:
+    /// the program there is the one started, with the launch's arguments.
     #[tokio::test]
-    #[cfg(unix)]
     async fn test_build_and_spawn_prefers_bootstrap_path() {
-        let temp_dir = TempDir::new().unwrap();
-        let binary_path = temp_dir.path().join("llama-server");
-
-        // Create a fake binary that exits immediately
-        fs::write(&binary_path, "#!/bin/sh\nexit 0").unwrap();
-        fs::set_permissions(&binary_path, fs::Permissions::from_mode(0o755)).unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let argv = temp_dir.path().join("argv");
+        // A stand-in that records its arguments and exits.
+        let binary_path = gglib_test_proc::install(
+            temp_dir.path(),
+            "llama-server",
+            &format!("argv {}", argv.display()),
+        );
 
         let config = ServerConfig {
             port: Some(8080),
             ..minimal_config()
         };
 
-        // Should use the bootstrap path (will spawn then immediately exit)
-        let result = build_and_spawn(Some(&binary_path), &config, 8080);
+        let mut child = build_and_spawn(Some(&binary_path), &config, 8080)
+            .expect("build_and_spawn should succeed with valid bootstrap path");
 
-        // We expect this to succeed in spawning (even if the process exits immediately)
+        let status = tokio::time::timeout(std::time::Duration::from_secs(30), child.wait())
+            .await
+            .expect("the stand-in exits")
+            .expect("the child is waited for");
+        assert!(status.success(), "{status}");
+        let started_with = std::fs::read_to_string(&argv).expect("the stand-in at the path ran");
         assert!(
-            result.is_ok(),
-            "build_and_spawn should succeed with valid bootstrap path"
+            started_with.lines().any(|arg| arg == "8080"),
+            "{started_with}"
         );
     }
 

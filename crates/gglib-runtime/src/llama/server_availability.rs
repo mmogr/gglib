@@ -143,4 +143,30 @@ mod tests {
         let result = validate_binary(&nonexistent);
         assert!(matches!(result, Err(LlamaServerError::NotFound { .. })));
     }
+
+    /// A file that is there with no execute bit is refused as not
+    /// executable, naming it; with the bit, it is the binary.
+    // Unix only: the check reads the file's execute bits, which Windows does
+    // not have.
+    #[cfg(unix)]
+    #[test]
+    fn a_file_with_no_execute_bit_is_not_executable() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let path = dir.path().join("llama-server");
+        std::fs::write(&path, b"not a program").unwrap();
+        let set_mode = |mode| {
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+        };
+
+        set_mode(0o644);
+        match validate_binary(&path) {
+            Err(LlamaServerError::NotExecutable { path: named }) => assert_eq!(named, path),
+            other => panic!("expected NotExecutable, got {other:?}"),
+        }
+
+        set_mode(0o755);
+        assert_eq!(validate_binary(&path).expect("it has the bit"), path);
+    }
 }
