@@ -14,6 +14,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
+use gglib_core::request_pipeline::{MAX_IMAGE_TOKENS, estimate_image_tokens};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -60,6 +61,33 @@ impl Harness {
             .await
             .unwrap();
         (response.status(), response.text().await.unwrap())
+    }
+
+    /// The newest request's entry on the status route, once `written`
+    /// accepts it: a turn's prompt tokens are written when its answer has
+    /// been read, hence the poll, which gives up after five seconds.
+    async fn newest_record(&self, written: impl Fn(&Value) -> bool) -> Value {
+        let mut entry = Value::Null;
+        for _ in 0..250 {
+            let status: Value = Client::new()
+                .get(format!("{}/v1/gglib/proxy/status", self.base))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            entry = status["recent_requests"]
+                .as_array()
+                .and_then(|recent| recent.last())
+                .cloned()
+                .unwrap_or(Value::Null);
+            if written(&entry) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        entry
     }
 
     fn admits(&self) -> u64 {
@@ -287,5 +315,77 @@ async fn a_text_request_still_moves_the_chars_per_token_ratio() {
 
     assert_eq!(status, StatusCode::BAD_REQUEST, "{text}");
     assert_eq!(error_of(&text)["code"], "context_length_exceeded");
+    harness.stop();
+}
+
+/// The request's record says its image, what the image was estimated at and
+/// the prompt the upstream counted, streamed or not.
+#[tokio::test]
+async fn an_image_requests_record_says_its_images_their_estimate_and_the_prompt_measured() {
+    let estimate = estimate_image_tokens(640, 480);
+    for streamed in [true, false] {
+        let harness = Harness::spawn().await;
+        harness.upstream.prompt_tokens.store(346, Ordering::SeqCst);
+        let mut body = request(SEES, &[user_with_image("what is this?", &png_url(400))]);
+        body["stream"] = json!(streamed);
+
+        let (status, text) = harness.post(&body).await;
+        assert_eq!(status, StatusCode::OK, "{text}");
+        let record = harness
+            .newest_record(|record| !record["prompt_tokens"].is_null())
+            .await;
+
+        assert_eq!(record["images"], 1, "streamed {streamed}: {record}");
+        assert_eq!(record["image_tokens"], estimate, "{record}");
+        assert_eq!(record["prompt_tokens"], 346, "{record}");
+        assert_eq!(
+            record["image_words"],
+            format!("1 image ~{estimate} tokens \u{b7} 346 prompt tokens"),
+            "{record}"
+        );
+        harness.stop();
+    }
+}
+
+/// A request with no image records the prompt it was counted at, and nothing
+/// of images.
+#[tokio::test]
+async fn a_text_requests_record_holds_its_prompt_tokens_and_no_image() {
+    let harness = Harness::spawn().await;
+    harness.upstream.prompt_tokens.store(12, Ordering::SeqCst);
+    let body = request(SEES, &[json!({"role": "user", "content": "hello"})]);
+
+    let (status, text) = harness.post(&body).await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let record = harness
+        .newest_record(|record| !record["prompt_tokens"].is_null())
+        .await;
+
+    assert_eq!(record["images"], 0, "{record}");
+    assert_eq!(record["image_tokens"], 0, "{record}");
+    assert_eq!(record["prompt_tokens"], 12, "{record}");
+    assert_eq!(record["image_words"], Value::Null, "{record}");
+    harness.stop();
+}
+
+/// A request refused as longer than the context says the images it arrived
+/// with, which are why: two of unreadable size, each at the cap.
+#[tokio::test]
+async fn a_request_refused_over_the_context_records_the_images_it_arrived_with() {
+    let harness = Harness::spawn().await;
+    let message = json!({"role": "user", "content": [
+        {"type": "image_url", "image_url": {"url": "https://example.com/1.png"}},
+        {"type": "image_url", "image_url": {"url": "https://example.com/2.png"}},
+    ]});
+
+    let (status, text) = harness.post(&request(SEES, &[message])).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{text}");
+    let record = harness.newest_record(|record| !record.is_null()).await;
+
+    assert_eq!(record["was_clamped"], true, "{record}");
+    assert_eq!(record["images"], 2, "{record}");
+    assert_eq!(record["image_tokens"], 2 * MAX_IMAGE_TOKENS, "{record}");
+    assert_eq!(record["prompt_tokens"], Value::Null, "{record}");
+    assert_eq!(record["image_words"], "2 images ~8,192 tokens", "{record}");
     harness.stop();
 }

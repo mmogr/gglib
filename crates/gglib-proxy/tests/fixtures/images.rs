@@ -108,8 +108,9 @@ impl Upstream {
     }
 }
 
-/// An upstream that answers every completion with one word, a finish and a
-/// usage frame, and takes a body of any size, as llama-server does.
+/// An upstream that answers every completion with one word, a finish and its
+/// usage, streamed or whole as the request asks, and takes a body of any
+/// size, as llama-server does.
 pub(crate) async fn spawn_upstream(cancel: CancellationToken) -> (u16, Arc<Upstream>) {
     let upstream = Arc::new(Upstream::default());
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
@@ -119,6 +120,8 @@ pub(crate) async fn spawn_upstream(cancel: CancellationToken) -> (u16, Arc<Upstr
         .route(
             "/v1/chat/completions",
             post(|State(upstream): State<Arc<Upstream>>, body: Bytes| async move {
+                let streamed = serde_json::from_slice::<Value>(&body)
+                    .is_ok_and(|request| request["stream"] == true);
                 upstream.seen.lock().unwrap().push(body);
                 let prompt_tokens = upstream.prompt_tokens.load(Ordering::SeqCst);
                 let usage = json!({"choices": [], "usage": {
@@ -126,6 +129,18 @@ pub(crate) async fn spawn_upstream(cancel: CancellationToken) -> (u16, Arc<Upstr
                     "completion_tokens": 1,
                     "total_tokens": prompt_tokens + 1,
                 }});
+                if !streamed {
+                    let whole = json!({
+                        "choices": [{"index": 0, "finish_reason": "stop", "message": {
+                            "role": "assistant", "content": "ok",
+                        }}],
+                        "usage": usage["usage"],
+                    });
+                    return Response::builder()
+                        .header("content-type", "application/json")
+                        .body(Body::from(whole.to_string()))
+                        .unwrap();
+                }
                 Response::builder()
                     .header("content-type", "text/event-stream")
                     .header("cache-control", "no-cache")

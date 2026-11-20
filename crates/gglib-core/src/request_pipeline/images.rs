@@ -89,6 +89,27 @@ pub fn has_images(body: &Value) -> bool {
     request_image_urls(body).next().is_some()
 }
 
+/// The images a request carries, and what they are charged together.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RequestImages {
+    /// How many there are, over every message.
+    pub count: usize,
+    /// The sum of [`image_url_tokens`] over them: what the context budget
+    /// counts them at.
+    pub tokens: usize,
+}
+
+impl RequestImages {
+    /// The images in the request's `messages`, history included.
+    #[must_use]
+    pub fn of(body: &Value) -> Self {
+        request_image_urls(body).fold(Self::default(), |sum, url| Self {
+            count: sum.count + 1,
+            tokens: sum.tokens.saturating_add(image_url_tokens(url)),
+        })
+    }
+}
+
 /// The refusal of a request that carries an image for a model that cannot
 /// read one.
 ///

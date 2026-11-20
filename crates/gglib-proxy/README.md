@@ -1315,6 +1315,10 @@ neither prompt field is present does it fall back to `n_past` →
 | `payload_chars_after` | `usize` | Body size after truncation |
 | `messages_truncated` | `usize` | Number of messages whose content was replaced |
 | `was_clamped` | `bool` | `true` when HTTP 400 was returned to the client |
+| `images` | `usize` | Images in the request, over every message: counted on the body sent on to the model, and on the body as it arrived for a request refused as longer than the context |
+| `image_tokens` | `usize` | The prompt tokens those images were estimated at, which is what the context budget counted them at ([ADR 0015](../../docs/adr/0015-a-model-reads-images-through-its-projector.md)) |
+| `prompt_tokens` | `u32` \| `null` | `usage.prompt_tokens` as the upstream reported it, for the whole prompt: text, template and images. Written once the turn's usage is read; `null` until then, and on a turn that ended without one |
+| `image_words` | `string` \| `null` | What the images cost, in the words every surface shows: `1 image ~3,600 tokens`, then `1 image ~3,600 tokens · 3,646 prompt tokens` once `prompt_tokens` is written. `null` with no image |
 | `recorded_at_secs` | `u64` | Unix timestamp of the observation |
 | `dialect_residue` | `bool` | Tool-call markup llama-server left unparsed reached client-visible output. Back-patched once the turn's outcome is known |
 | `tool_repaired` | `bool` | This turn's tool call failed schema validation and a re-issue produced a conformant one. Back-patched once the turn's outcome is known |
