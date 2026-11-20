@@ -126,22 +126,22 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(unix)]
     fn pid_exists_for_self() {
         let self_pid = std::process::id();
         assert!(pid_exists(self_pid));
     }
 
     #[test]
-    #[cfg(unix)]
     fn pid_exists_false_for_impossible_pid() {
         assert!(!pid_exists(999_999));
     }
 
     /// `0` is the caller's own process group to `kill(2)`, and `u32::MAX`
     /// would wrap to `-1`, every process: neither is a process that exists.
-    #[test]
+    // Unix only: `kill(2)` reads 0 and a wrapped pid as a process group,
+    // which only the signal path refuses.
     #[cfg(unix)]
+    #[test]
     fn pid_exists_false_for_a_value_that_names_a_group() {
         assert!(!pid_exists(0));
         assert!(!pid_exists(u32::MAX));
