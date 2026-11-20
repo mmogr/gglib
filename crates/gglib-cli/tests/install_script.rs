@@ -10,6 +10,7 @@
 //! machine's `timeout`, `sleep` and `realpath`. Nothing here can reach the
 //! real `/etc`, a real package manager or a real gglib.
 
+// Unix only: `packaging/install.sh` is a shell script, for Linux.
 #![cfg(unix)]
 
 #[path = "support/stub_tools.rs"]

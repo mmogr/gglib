@@ -148,7 +148,6 @@ fn config_paths_names_a_library_this_build_refuses() {
 }
 
 /// The keys `config paths` printed before it listed copies, in order.
-#[cfg(unix)]
 const OLD_KEYS: [&str; 11] = [
     "binary",
     "version",
@@ -164,7 +163,6 @@ const OLD_KEYS: [&str; 11] = [
 ];
 
 /// Whether `key` is `name`, or `name_N`.
-#[cfg(unix)]
 fn numbered(key: &str, name: &str) -> bool {
     key.strip_prefix(name).is_some_and(|rest| {
         rest.is_empty()
@@ -174,24 +172,17 @@ fn numbered(key: &str, name: &str) -> bool {
     })
 }
 
-/// A `gglib` stand-in in the new directory `dir`: a script that runs `body`.
-#[cfg(unix)]
-fn stub(dir: &Path, body: &str) -> std::path::PathBuf {
-    use std::os::unix::fs::PermissionsExt as _;
-
+/// A `gglib` stand-in in the new directory `dir`, which follows
+/// `instructions` whatever it is asked.
+fn stand_in(dir: &Path, instructions: &str) -> std::path::PathBuf {
     std::fs::create_dir_all(dir).expect("a directory");
-    let path = dir.join("gglib");
-    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("a stand-in");
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
-        .expect("it is made executable");
-    path
+    gglib_test_proc::install(dir, "gglib", instructions)
 }
 
 /// The lines every release has printed come first, each once and in their
 /// order; the lines for the copies on `PATH` and the desktop app come after
 /// them, under keys of their own. A copy that hangs costs its two seconds
 /// and reads as `version unknown`.
-#[cfg(unix)]
 #[test]
 fn the_old_lines_come_first_and_each_copy_on_path_follows() {
     use std::time::{Duration, Instant};
@@ -200,16 +191,8 @@ fn the_old_lines_come_first_and_each_copy_on_path_follows() {
     let (data, home) = (root.path().join("data"), root.path().join("home"));
     std::fs::create_dir(&home).expect("a home");
     let (first, second) = (root.path().join("a"), root.path().join("b"));
-    let answers = stub(&first, "echo 'gglib 0.34.0 (a1b2c3d4e5f6)'");
-    // This machine's sleep, by its full path: the PATH below has no tools.
-    let sleep = std::env::var_os("PATH")
-        .and_then(|paths| {
-            std::env::split_paths(&paths)
-                .map(|dir| dir.join("sleep"))
-                .find(|candidate| candidate.is_file())
-        })
-        .expect("this machine has sleep");
-    let hangs = stub(&second, &format!("exec '{}' 30", sleep.display()));
+    let answers = stand_in(&first, "print gglib 0.34.0 (a1b2c3d4e5f6)");
+    let hangs = stand_in(&second, "sleep 30");
 
     let started = Instant::now();
     let out = gglib(&data, &home, &[&first, &second], &["config", "paths"]);

@@ -1,15 +1,15 @@
 //! Copies found on a `PATH` made of temporary directories, and app folders
 //! made the same way, so nothing here depends on this machine's own `PATH`
-//! or `/Applications`. Only the `read_version` tests run anything.
+//! or `/Applications`. Only the `read_version` tests run anything, and what
+//! they run is the stand-in program (`gglib-test-proc`).
 
 use std::ffi::OsString;
-use std::os::unix::fs::{PermissionsExt as _, symlink};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use super::super::copy_version::read_version;
-use super::{Apps, Search, lines};
+use super::{Apps, Search, exe, lines};
 
 /// A temporary directory to build a machine in.
 struct Root(tempfile::TempDir);
@@ -33,17 +33,27 @@ impl Root {
         path
     }
 
-    /// A script at `rel` with `body`, executable unless `mode` says not.
-    fn script(&self, rel: &str, body: &str, mode: u32) -> PathBuf {
-        let path = self.at(rel);
-        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("a script");
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).expect("its mode");
+    /// A file at `rel`, named as a program is on this platform (`.exe` on
+    /// Windows), that this user could run: a `gglib` stand-in the [`lines`]
+    /// tests list and never start.
+    fn gglib(&self, rel: &str) -> PathBuf {
+        let named = self.at(rel);
+        let name = named.file_name().expect("a name").to_string_lossy();
+        let path = named.with_file_name(exe(&name));
+        std::fs::write(&path, b"never run").expect("a file");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+                .expect("its mode");
+        }
         path
     }
 
-    /// A `gglib` stand-in at `rel`, never run by the [`lines`] tests.
-    fn gglib(&self, rel: &str) -> PathBuf {
-        self.script(rel, "exit 99", 0o755)
+    /// A `gglib` in the new directory `rel` that follows `instructions`: a
+    /// copy the `read_version` tests start.
+    fn stand_in(&self, rel: &str, instructions: &str) -> PathBuf {
+        gglib_test_proc::install(&self.dir(rel), "gglib", instructions)
     }
 }
 
@@ -141,8 +151,12 @@ fn the_running_copy_is_this_one_and_is_not_asked() {
     assert_eq!(*asked.lock().expect("the record"), vec![first]);
 }
 
+// Unix only: the copy is reached through a link to a file.
+#[cfg(unix)]
 #[test]
 fn a_running_copy_reached_through_a_link_is_this_one() {
+    use std::os::unix::fs::symlink;
+
     let root = Root::new();
     let bin = root.dir("bin");
     let cellar = root.gglib("Cellar/gglib/0.35.0/bin/gglib");
@@ -161,23 +175,48 @@ fn a_running_copy_reached_through_a_link_is_this_one() {
     assert_eq!(got.len(), 2, "{got:?}");
 }
 
+/// `a` is on `PATH` twice, and once more through a link to the folder.
 #[test]
-fn a_repeated_entry_or_a_link_to_a_listed_file_is_listed_once_under_its_first_path() {
+fn a_repeated_entry_or_a_linked_folder_is_listed_once_under_its_first_path() {
+    let root = Root::new();
+    let (a, b) = (root.dir("a"), root.dir("b"));
+    let first = root.gglib("a/gglib");
+    let other = root.gglib("b/gglib");
+    let linked = root.0.path().join("a-again");
+    gglib_core::paths::link_folder(&a, &linked);
+    let (read, asked) = reader(&[(&first, "0.34.0"), (&other, "0.30.0")]);
+
+    let got = lines(&search(path_of(&[&a, &b, &linked, &a, &b]), None), &read);
+
+    assert_eq!(
+        got,
+        vec![
+            format!(
+                "gglib_on_path_1 = {} (0.34.0, runs as `gglib`)",
+                first.display()
+            ),
+            format!("gglib_on_path_2 = {} (0.30.0, shadowed)", other.display()),
+            "desktop_app = none found".to_owned(),
+        ]
+    );
+    assert_eq!(*asked.lock().expect("the record"), vec![first, other]);
+}
+
+/// `c` reaches `a`'s file through a link to the file.
+// Unix only: the link is to a file.
+#[cfg(unix)]
+#[test]
+fn a_link_to_a_listed_file_is_listed_once_under_its_first_path() {
+    use std::os::unix::fs::symlink;
+
     let root = Root::new();
     let (a, b, c) = (root.dir("a"), root.dir("b"), root.dir("c"));
     let first = root.gglib("a/gglib");
-    // `b` reaches `a`'s file through a link to the directory, `c` through a
-    // link to the file; `a` is also on PATH twice.
-    let linked_dir = root.0.path().join("a-again");
-    symlink(&a, &linked_dir).expect("a directory link");
     symlink(&first, c.join("gglib")).expect("a file link");
     let other = root.gglib("b/gglib");
     let (read, _) = reader(&[(&first, "0.34.0"), (&other, "0.30.0")]);
 
-    let got = lines(
-        &search(path_of(&[&a, &a, &linked_dir, &c, &b]), None),
-        &read,
-    );
+    let got = lines(&search(path_of(&[&a, &c, &b]), None), &read);
 
     assert_eq!(
         got,
@@ -193,15 +232,39 @@ fn a_repeated_entry_or_a_link_to_a_listed_file_is_listed_once_under_its_first_pa
 }
 
 #[test]
-fn a_file_that_cannot_run_is_not_a_copy() {
+fn a_folder_named_as_the_program_is_not_a_copy() {
     let root = Root::new();
-    let (a, b, c) = (root.dir("a"), root.dir("b"), root.dir("c"));
-    root.script("a/gglib", "exit 0", 0o644);
-    root.dir("b/gglib");
-    let runnable = root.gglib("c/gglib");
+    let (a, b) = (root.dir("a"), root.dir("b"));
+    root.dir(&format!("a/{}", exe("gglib")));
+    let runnable = root.gglib("b/gglib");
     let (read, _) = reader(&[]);
 
-    let got = lines(&search(path_of(&[&a, &b, &c]), None), &read);
+    let got = lines(&search(path_of(&[&a, &b]), None), &read);
+
+    assert_eq!(
+        got[0],
+        format!(
+            "gglib_on_path_1 = {} (version unknown, runs as `gglib`)",
+            runnable.display()
+        )
+    );
+    assert_eq!(got.len(), 2, "{got:?}");
+}
+
+// Unix only: a file is told from a program by its execute bits.
+#[cfg(unix)]
+#[test]
+fn a_file_with_no_execute_bit_is_not_a_copy() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let root = Root::new();
+    let (a, b) = (root.dir("a"), root.dir("b"));
+    let plain = root.gglib("a/gglib");
+    std::fs::set_permissions(&plain, std::fs::Permissions::from_mode(0o644)).expect("its mode");
+    let runnable = root.gglib("b/gglib");
+    let (read, _) = reader(&[]);
+
+    let got = lines(&search(path_of(&[&a, &b]), None), &read);
 
     assert_eq!(
         got[0],
@@ -314,33 +377,54 @@ fn a_windows_install_folder_takes_the_version_of_the_gglib_inside() {
         got[1..],
         [format!("desktop_app_1 = {} (0.35.0)", folder.display())]
     );
+
+    // The copy inside is `gglib.exe` there: a `gglib` with no suffix beside
+    // the app is not taken for it, and nothing is asked of it.
+    if cfg!(windows) {
+        let bare = root.dir("Local/bare");
+        std::fs::write(bare.join("gglib"), b"never run").expect("a file");
+        let (read, asked) = reader(&[]);
+        machine.apps = Apps::Folders(vec![bare.clone()]);
+
+        let got = lines(&machine, &read);
+
+        assert_eq!(
+            got[1..],
+            [format!(
+                "desktop_app_1 = {} (version unknown)",
+                bare.display()
+            )]
+        );
+        assert!(asked.lock().expect("the record").is_empty());
+    }
 }
 
 #[test]
 fn a_copy_answers_its_version_and_anything_else_reads_as_unknown() {
     let root = Root::new();
-    let answers = root.script("ok/gglib", "echo 'gglib 0.34.0 (a1b2c3d4e5f6)'", 0o755);
-    let fails = root.script("fails/gglib", "echo 'gglib 0.34.0'; exit 1", 0o755);
-    let noise = root.script("noise/gglib", "echo 'usage: something else'", 0o755);
-    let reads = root.script(
-        "reads/gglib",
-        "if read -r line; then echo 'gglib 0.0.1'; else echo 'gglib 0.1.0'; fi",
-        0o755,
-    );
+    let answers = root.stand_in("ok", "print gglib 0.34.0 (a1b2c3d4e5f6)");
+    let fails = root.stand_in("fails", "print gglib 0.34.0\nexit 1");
+    let noise = root.stand_in("noise", "print usage: something else");
+    let reads = root.stand_in("reads", "read\nprint gglib 0.1.0");
     let wait = Duration::from_secs(5);
 
     assert_eq!(read_version(&answers, wait).as_deref(), Some("0.34.0"));
     assert_eq!(read_version(&fails, wait), None);
     assert_eq!(read_version(&noise, wait), None);
-    // Nothing on stdin: `read` meets the end of input at once.
+    // Nothing on stdin: `read` meets the end of input at once. With a stdin
+    // left open it would read until the wait was up, and have no version.
     assert_eq!(read_version(&reads, wait).as_deref(), Some("0.1.0"));
     assert_eq!(read_version(&root.0.path().join("missing"), wait), None);
 }
 
+/// The copy is a wrapper that starts a program and waits for it, as a
+/// `.cmd` shim does: killed, it leaves that program running with the
+/// output still open, and the wait ends all the same.
 #[test]
 fn a_copy_that_hangs_is_killed_and_reads_as_unknown() {
     let root = Root::new();
-    let hangs = root.script("hangs/gglib", "sleep 30", 0o755);
+    let sleeps = gglib_test_proc::install(&root.dir("hangs/behind"), "sleeps", "sleep 30");
+    let hangs = gglib_test_proc::wrap(&root.dir("hangs"), "gglib", &sleeps);
 
     let started = Instant::now();
     let got = read_version(&hangs, Duration::from_millis(300));
