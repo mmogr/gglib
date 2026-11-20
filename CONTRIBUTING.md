@@ -818,27 +818,34 @@ Docs are deployed to GitHub Pages by `release.yml`'s `deploy-docs` job, for each
 
 ## Issue & PR Labeling
 
-Every issue and PR needs at least one label from each of four categories: `component:`, `priority:`, `size:`, and `type:`. Most of this is automated — the manual part is smaller than it looks.
+Every issue needs at least one label from each of four categories: `component:`, `priority:`, `size:`, and `type:`. A PR needs the first three. Most of this is automated — the manual part is smaller than it looks.
 
 ### On issues
 
-Opening an issue through GitHub's "New Issue" form (`.github/ISSUE_TEMPLATE/issue.yml`) requires `component:`, `priority:`, `size:`, and `type:` before you can even submit — the fields are required dropdowns, and `component:`/`type:` allow selecting more than one (issues commonly span several crates, or are simultaneously e.g. a bug and a refactor).
+A new issue is a sentence, not a form to fill in. GitHub's "New Issue" form (`.github/ISSUE_TEMPLATE/issue.yml`) is one box of free text, for what happened or what is wanted, and `gh issue create` and the API ask for nothing more. A reporter is asked for no label, and nobody filing an issue is asked for a priority or a size.
 
-If an issue is created outside the form — a scripted `gh issue create`, or the raw API — the form's required fields can't apply, since GitHub only validates them in the web UI and `gh issue create`'s interactive prompts. `issue-labels.yml` is the actual backstop: it checks every issue for all four categories and applies `status: needs-triage` if any are missing, removing it automatically once the labels are added, by hand or by a reply (below). `is:issue is:open label:"status: needs-triage"` is the live worklist of anything that slipped through.
+Each category comes from somewhere else:
 
-When an issue is opened, `issue-labels.yml` also reads its title and description, and fills what the form left empty:
+- **`type:`** from the issue's own words when it is opened, from a reply, or by hand.
+- **`component:`** the same three ways.
+- **`priority:` and `size:`** from someone with write access, once the code has been read: by hand, or with a reply. They are never read from an issue's words, since each is an estimate.
+- **`platform:`**, which is not required, the same three ways as `type:` and `component:`.
+
+`issue-labels.yml` holds every issue to all four. It applies `status: needs-triage` while any is missing and removes it once none is, so a new issue carries it until its priority and size are set. `is:issue is:open label:"status: needs-triage"` is the worklist of issues still to be read and estimated. A fix cannot merge ahead of that: a PR titled `fix(…):` closes an issue that carries all four ([On PRs](#on-prs)), so a bug's `priority:` and `size:` are set before its fix passes `Label Check`.
+
+**What an issue's own words set.** When an issue is opened, `issue-labels.yml` reads its title and description:
 
 - **`type:` and `component:` from a conventional title.** `fix(cli): …` gets `type: bug` and `component: cli`. A scope that is not the name of a `component:` label is not guessed, and a title with several scopes has none of them applied.
 - **`component:` from the repository paths the description names**, through the path table the PR check reads (`.github/scripts/component-paths.cjs`), when it names at least two paths and all are in one component.
 - **`platform:` when the title names Windows or macOS** and no other platform.
 
-A label is applied only when the words point at exactly one. Otherwise the candidates are listed in the issue's triage comment and nothing is applied. A category that already has a label is left alone, so the form's answer and a label set by hand both win, and nothing is ever removed. `priority:` and `size:` are never read from words: each is an estimate someone makes after reading the code. The triage comment says what was set and from what, what is still missing, and that `status: needs-triage` clears once all four categories are present; it is removed when they are.
+A label is applied only when the words point at exactly one. Otherwise the candidates are listed in the issue's triage comment and nothing is applied. A category that already has a label is left alone, so a label set by hand wins, and nothing is ever removed. The triage comment says what was set and from what, what is still missing, and that `status: needs-triage` clears once all four categories are present; it is removed when they are. An issue whose title is a plain sentence and whose description names no paths gets nothing from its words: its comment lists all four as missing and shows the reply that adds one.
 
 The rules are in `.github/scripts/issue-words.cjs`. `scripts/backtest_issue_labels.mjs` measures each of them against the labels the repository's issues ended with, and a rule that is wrong more than rarely only suggests: `test:` and `ci:` titles, the scopes `ci` and `gui`, a single path, and Linux in a title are listed as candidates for that reason.
 
 **A reply can add a label.** A comment on an issue with a line that is `/label <label name>`, such as `/label component: cli`, adds that label. Anyone can give an issue its first `component:`, `type:` or `platform:` label this way: a reply from someone without write access fills a category that has no label, with one label, and is ignored for a category that has one, the rule `issue-labels.yml` itself follows when it reads an issue's words. Someone with write access (the repository's owner, a member or a collaborator, as GitHub reports the comment's author) can add any label of those three categories beside what is there, and `priority:` and `size:` labels. The line is the command and nothing else, outside a code block and a quotation, and the name is matched against the repository's labels whatever its letter case. A label that does not exist, one outside those five categories and one the commenter may not set are ignored without a word, as is the same line on a pull request. A comment that was acted on gets a thumbs-up, and the triage comment is rewritten to what is still missing, or removed when nothing is. A reply only adds a label; taking one off is done by hand.
 
-**Epics:** check the optional "Epic" box on the form (applies `type: epic`) only for an issue that itself tracks multi-phase work. Don't invent a new label per phase — use GitHub's native sub-issues (the "Create sub-issue" button on the epic) to link and order the phases. It gives the epic a live progress checklist for free and has no ceiling on phase count, unlike a per-letter label scheme.
+**Epics:** `type: epic` is for an issue that itself tracks multi-phase work. Set it by hand, or with the reply `/label type: epic`. Don't invent a new label per phase — use GitHub's native sub-issues (the "Create sub-issue" button on the epic) to link and order the phases. It gives the epic a live progress checklist for free and has no ceiling on phase count, unlike a per-letter label scheme.
 
 ### On PRs
 

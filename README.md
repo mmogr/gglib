@@ -39,7 +39,6 @@ them per model, per profile or per request.
 [![Status Card](https://github.com/mmogr/gglib/actions/workflows/status-card.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/status-card.yml)
 [![Label Check](https://github.com/mmogr/gglib/actions/workflows/label-check.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/label-check.yml)
 [![Issue Labels](https://github.com/mmogr/gglib/actions/workflows/issue-labels.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/issue-labels.yml)
-[![Check Issue Form](https://github.com/mmogr/gglib/actions/workflows/check-issue-form.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/check-issue-form.yml)
 
 ## Quick Start
 

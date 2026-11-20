@@ -1,20 +1,15 @@
 # Labels an issue, and holds every issue to at least one label in each of
 # component:, priority:, size: and type:.
 #
-# Four jobs:
-#   parse (`opened` only) reads the form's answers out of the issue body. The
-#     body is the form's own output at that moment and at no other: a later
-#     edit can mangle a heading, so it is not parsed on `edited`.
-#   apply (`opened` only) applies the form's answers, then what the issue's own
-#     words say to any category still empty: type: and component: from a
-#     title such as `fix(cli): …`, component: from the repository paths the
-#     description names, platform: from Windows or macOS in the title. The
-#     rules are .github/scripts/issue-words.cjs's. A label is applied only
-#     when the words point at exactly one; candidates go in the comment. A
-#     category that has a label is left alone, and nothing is ever removed, so
-#     the form's answer and a person's label both win. priority: and size:
-#     are never read from words: each is an estimate made after reading the
-#     code.
+# Three jobs:
+#   apply (`opened` only) applies what the issue's own words say: type: and
+#     component: from a title such as `fix(cli): …`, component: from the
+#     repository paths the description names, platform: from Windows or macOS
+#     in the title. The rules are .github/scripts/issue-words.cjs's. A label
+#     is applied only when the words point at exactly one; candidates go in
+#     the comment. A category that has a label is left alone, and nothing is
+#     ever removed, so a label a person set wins. priority: and size: are
+#     never read from words: each is an estimate made after reading the code.
 #   command (a new comment on an issue) adds the labels a reply asks for: a
 #     comment with a line that is `/label <label name>`. Without write access
 #     a reply gives the issue its first component:, type: or platform: label:
@@ -30,25 +25,25 @@
 #     and keeps one comment while a category is missing: what was set and from
 #     what, what is missing, the candidates the words give, and the reply that
 #     adds a label. Each run rewrites it to what is missing now, and removes
-#     it when nothing is. It is the fail-safe for the other three: if one
+#     it when nothing is. It is the fail-safe for the other two: if one
 #     breaks, the issue arrives unlabelled and is flagged for a person, never
 #     silently mislabelled. The words are read again here to word the
 #     comment, and applied only in `apply`, so a label a person removes stays
 #     removed.
 #
-# The form (.github/ISSUE_TEMPLATE/issue.yml) only validates in the web UI and `gh issue
-# create`'s interactive prompts — a scripted `gh issue create --title X --body Y` bypasses
-# it entirely, and GitHub has no issue-side equivalent of a required status check. `verify`
-# is the actual guarantee, not the form.
+# The issue form (.github/ISSUE_TEMPLATE/issue.yml) is one box of free text and
+# asks for no label, and an issue made with `gh issue create` or the API never
+# sees it. Nothing on GitHub requires a label of an issue, so `verify` is what
+# holds one to all four categories: an issue with no priority: or size: stays
+# flagged until someone with write access sets them.
 #
 # Concurrency is per job, not per workflow. An issue created with labels sends
 # `opened` and one `labeled` for each label at once, and a group over the whole
-# workflow lets those runs cancel the one that parses and applies, and would
-# let any comment cancel them too. `parse` and `apply` are in no group: an issue
-# is opened once. Nor is `command`: each reply adds its own labels, and adding
-# is all it does. `verify` runs one at a time for an issue, and a run that
-# waits gives way to a newer one, so the last to run reads the labels `apply`
-# or `command` set.
+# workflow lets those runs cancel the one that applies, and would let any
+# comment cancel it too. `apply` is in no group: an issue is opened once. Nor
+# is `command`: each reply adds its own labels, and adding is all it does.
+# `verify` runs one at a time for an issue, and a run that waits gives way to
+# a newer one, so the last to run reads the labels `apply` or `command` set.
 #
 # A comment is public input. Its text reaches label-command.cjs in the event's
 # payload and is only compared with the names of the repository's labels: it is
@@ -82,35 +77,11 @@ on:
 permissions: {}
 
 jobs:
-  parse:
-    name: Parse form (opened only)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    if: github.event_name == 'issues' && github.event.action == 'opened'
-    # The checkout, for the form the parser reads.
-    permissions:
-      contents: read
-    outputs:
-      json: ${{ steps.parse.outputs.jsonString }}
-    steps:
-      - uses: actions/checkout@v7
-      - name: Parse issue form
-        id: parse
-        # Pinned to a commit SHA, not a tag: this is a third-party action, unlike the
-        # actions/* ones elsewhere in this repo which are GitHub-maintained. Keys its
-        # output by the form's `id:` fields via template-path, not by scraping rendered
-        # markdown headings ourselves — anchors on identifiers we control.
-        uses: stefanbuck/github-issue-parser@cb6e97157cbf851e3a393ff8d57c93a484cc323f # v3.2.5
-        with:
-          template-path: .github/ISSUE_TEMPLATE/issue.yml
-
   apply:
     name: Apply labels (opened only)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    needs: parse
-    # Also when the parser failed: the words are read without it.
-    if: ${{ !cancelled() && github.event_name == 'issues' && github.event.action == 'opened' }}
+    if: github.event_name == 'issues' && github.event.action == 'opened'
     # The checkout of .github/scripts, and the issue's labels.
     permissions:
       contents: read
@@ -124,104 +95,10 @@ jobs:
           sparse-checkout: .github/scripts
           persist-credentials: false
 
-      - name: Apply the form's answers
-        uses: actions/github-script@v9
-        # PARSED_JSON is issue-body-derived (user-controlled) content. It MUST be passed
-        # via env, not interpolated straight into `script:` as `${{ needs.parse.outputs.json }}`
-        # — that form does raw textual substitution before the script is parsed, and
-        # JSON.stringify does not escape single quotes. An issue description containing an
-        # apostrophe ("don't", "it's" — routine, not contrived) would break out of a
-        # single-quoted string literal and execute as JS with issues: write permission.
-        # Reading process.env.PARSED_JSON is immune to this: env values are never
-        # substituted into script source text.
-        env:
-          PARSED_JSON: ${{ needs.parse.outputs.json }}
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const issue_number = context.payload.issue.number;
-
-            // These must match .github/ISSUE_TEMPLATE/issue.yml's field `id:`s exactly.
-            // scripts/check_issue_form_mapping.mjs fails CI if they ever drift apart.
-            const PREFIX_FIELDS = {
-              component: 'component: ',
-              priority: 'priority: ',
-              size: 'size: ',
-              type: 'type: ',
-            };
-
-            // --- Apply whatever the form parser found ---------------------------
-            const rawJson = process.env.PARSED_JSON || '';
-            if (rawJson) {
-              let parsed = null;
-              try { parsed = JSON.parse(rawJson); }
-              catch (e) { core.warning(`Could not parse form JSON, skipping apply: ${e}`); }
-
-              if (parsed) {
-                // Defensive: the parser may represent a multi-select as an array or as a
-                // comma-separated string depending on field type. Normalize either way.
-                const toTokens = (v) => {
-                  if (v == null) return [];
-                  if (Array.isArray(v)) return v.map(String);
-                  const s = String(v).trim();
-                  if (!s || s === '_No response_') return [];
-                  return s.split(',').map(t => t.trim()).filter(Boolean);
-                };
-
-                const toApply = new Set();
-                for (const [field, prefix] of Object.entries(PREFIX_FIELDS)) {
-                  for (const token of toTokens(parsed[field])) {
-                    toApply.add(prefix + token);
-                  }
-                }
-                // epic is a single optional checkbox, not a prefixed field — a non-empty
-                // selection means the box was ticked.
-                if (toTokens(parsed.epic).length > 0) {
-                  toApply.add('type: epic');
-                }
-
-                // Never let a form-option typo invent a label. The labels API CREATES a
-                // label that doesn't exist rather than erroring — verified directly:
-                // POSTing a nonexistent name returns 200 and yields a new label with
-                // default grey (#ededed) and no description. So a stray dropdown option
-                // (say `- clii`) would silently produce a junk `component: clii` label
-                // that then satisfies the gate and pollutes the taxonomy.
-                //
-                // Filter to labels that already exist and warn loudly about the rest.
-                // The issue then falls through to needs-triage in `verify` — flagged
-                // for a human, which is the correct failure direction.
-                if (toApply.size) {
-                  const repoLabels = new Set((await github.paginate(
-                    github.rest.issues.listLabelsForRepo, { owner, repo, per_page: 100 },
-                  )).map(l => l.name));
-
-                  const unknown = [...toApply].filter(l => !repoLabels.has(l));
-                  const known = [...toApply].filter(l => repoLabels.has(l));
-
-                  if (unknown.length) {
-                    core.warning(
-                      `Refusing to create nonexistent label(s): ${unknown.join(', ')}. `
-                      + `Check .github/ISSUE_TEMPLATE/issue.yml's dropdown options against `
-                      + `the repo's actual labels — an option with no matching label would `
-                      + `otherwise be auto-created as an untitled grey label.`);
-                  }
-                  if (known.length) {
-                    await github.rest.issues.addLabels({
-                      owner, repo, issue_number, labels: known,
-                    });
-                    core.info(`Applied from form: ${known.join(', ')}`);
-                  }
-                }
-              }
-            }
-
-      # After the form's answers, so a category the form filled is not read
-      # from the words; and when that step failed, since the words need
-      # nothing from it. The title and description never reach this script's
-      # text: issue-triage.cjs reads them from the API.
+      # The title and description never reach this script's text:
+      # issue-triage.cjs reads them from the API.
       - name: Apply what the issue's words say
         id: words
-        if: ${{ !cancelled() }}
         uses: actions/github-script@v9
         with:
           script: |
@@ -292,9 +169,9 @@ jobs:
 
       - name: Check the required categories
         uses: actions/github-script@v9
-        # The names of the labels `apply` set, through the environment as
-        # PARSED_JSON is. `verify` says a label was set only while the issue
-        # carries it.
+        # The names of the labels `apply` set, through the environment and
+        # not this script's text. `verify` says a label was set only while the
+        # issue carries it.
         env:
           APPLIED_JSON: ${{ needs.apply.outputs.applied }}
         with:

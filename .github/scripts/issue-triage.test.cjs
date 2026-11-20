@@ -79,9 +79,9 @@ test('the comment says what was set and from what, what is missing, and when tri
     '- `priority:`',
     '- `size:`',
     '',
-    '`priority:` and `size:` are never read from an issue\'s words: each is an estimate someone makes after reading the code.',
+    'Nobody is asked for `priority:` or `size:` when filing an issue: each is an estimate made after reading the code, and set by someone with write access.',
     '',
-    'A reply with the line `/label priority: medium` adds that label. Anyone can give an issue its first `component:`, `type:` or `platform:` label this way; `priority:` and `size:` take write access. `status: needs-triage` clears by itself once `component:`, `priority:`, `size:` and `type:` are all present.',
+    '`status: needs-triage` clears by itself once `component:`, `priority:`, `size:` and `type:` are all present.',
   ].join('\n'));
 });
 
@@ -106,18 +106,24 @@ test('a missing category lists its candidates, and a platform is offered without
     '',
     '`platform:` is not required. It may be `platform: windows`, from the platforms this issue names.',
     '',
-    'A reply with the line `/label component: proxy` adds that label. Anyone can give an issue its first `component:`, `type:` or `platform:` label this way; `priority:` and `size:` take write access. `status: needs-triage` clears by itself once `component:`, `priority:`, `size:` and `type:` are all present.',
+    'A reply with the line `/label component: proxy` adds that label. Anyone can give an issue its first `component:`, `type:` or `platform:` label this way. `status: needs-triage` clears by itself once `component:`, `priority:`, `size:` and `type:` are all present.',
   ].join('\n'));
 });
 
-test('the reply the comment shows asks for the first missing category', () => {
-  const shown = (missing, open = []) => /`(\/label [^`]+)`/.exec(triageComment({ missing, applied: [], open }))[1];
+test('the reply the comment shows adds a label anyone may add', () => {
+  const shown = (missing, open = []) => {
+    const m = /`(\/label [^`]+)`/.exec(triageComment({ missing, applied: [], open }));
+    return m && m[1];
+  };
   assert.equal(shown(['component:', 'size:']), '/label component: cli');
-  assert.equal(shown(['type:']), '/label type: bug');
-  assert.equal(shown(['size:']), '/label size: s');
+  assert.equal(shown(['priority:', 'type:']), '/label type: bug');
   assert.equal(shown(['type:'], [{ prefix: 'type:', labels: ['type: test'], from: '`test` in the title' }]), '/label type: test');
-  // A candidate for another category is not the example.
-  assert.equal(shown(['size:'], [{ prefix: 'platform:', labels: ['platform: linux'], from: 'x' }]), '/label size: s');
+  // With only priority: and size: missing there is nothing for a reporter to add,
+  assert.equal(shown(['priority:', 'size:']), null);
+  // unless the words name a platform.
+  assert.equal(shown(['size:'], [{ prefix: 'platform:', labels: ['platform: linux'], from: 'x' }]), '/label platform: linux');
+  // A platform is not the example while a required category is open to anyone.
+  assert.equal(shown(['component:'], [{ prefix: 'platform:', labels: ['platform: linux'], from: 'x' }]), '/label component: cli');
 });
 
 test('the comment holds no line that is itself a command', () => {
