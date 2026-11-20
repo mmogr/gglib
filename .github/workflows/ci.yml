@@ -5,11 +5,24 @@ name: CI
 # lines"). A push to either runs `release`, which tags a candidate. A line
 # runs this file as the line holds it, so a line cut from a tag older than a
 # change here does not have the change.
+#
+# Every night, and when started by hand, every job runs on main: there is
+# no change to compare, so `scope` leaves none out. That run is where main
+# saves the macOS and Windows Rust caches when they are missing. A push
+# saves them only when the lockfile moves, and GitHub deletes an entry
+# nothing has restored for seven days, so without it a quiet week leaves
+# every pull request compiling those six jobs from nothing. 17:00 UTC is
+# 03:00 in Brisbane, clear of the day's pull requests. It tags nothing and
+# updates no release pull request or badge: `release`, release-please.yml
+# and badges.yml each act on a push alone.
 on:
   push:
     branches: [main, 'release/**']
   pull_request:
     branches: [main, 'release/**']
+  schedule:
+    - cron: '0 17 * * *'
+  workflow_dispatch:
 
 # A pull request's runs share one group, and a newer run cancels the older:
 # after a force-push or an `@dependabot rebase` the older run is testing a
@@ -21,9 +34,11 @@ on:
 # `cancel-in-progress` says, so one group shared by a branch's pushes would
 # drop runs merged in quick succession, and the push run is the one that
 # runs `release`, which tags. The builds it dispatches run in release.yml
-# under a group of the tag's own, out of this workflow's reach.
+# under a group of the tag's own, out of this workflow's reach. The nightly
+# run and one started by hand are named by their event too, so neither
+# joins a push's group.
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-push-{0}', github.sha) }}
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-{0}-{1}', github.event_name, github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Read only. A job that needs more says so: `scope`, `cache-prune` and
@@ -254,11 +269,12 @@ jobs:
       # A shared-key per build configuration, and only main saves; the
       # rust-prelude action says why. A maintenance line restores main's
       # entries, as a pull request does, and saves none of its own: its few
-      # runs would crowd main's out. `large-packages` stays off because this
-      # job installs the GTK and appindicator packages it would purge.
+      # runs would crowd main's out. No disk is freed: the runner's own is
+      # enough, and the last step prints what was left.
       - name: Rust prelude
         uses: ./.github/actions/rust-prelude
         with:
+          free-disk: "false"
           apt-packages: >-
             libgtk-3-dev
             libwebkit2gtk-4.1-dev
@@ -340,6 +356,13 @@ jobs:
           path: rust-test-*.txt
           retention-days: 30
 
+      # No disk is freed before this job or the three beside it that print
+      # the same. This is the largest build of the four, so the first to
+      # show the runner's own disk no longer being enough.
+      - name: Disk left
+        if: always()
+        run: df -h /
+
   bindings:
     name: Bindings Freshness
     runs-on: ubuntu-24.04
@@ -370,6 +393,7 @@ jobs:
       - name: Rust prelude
         uses: ./.github/actions/rust-prelude
         with:
+          free-disk: "false"
           shared-key: "ci-bindings"
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
@@ -380,6 +404,10 @@ jobs:
       # `custom-protocol` feature is on, and `make bindings` excludes it.
       - name: Check generated TypeScript bindings are current
         run: make bindings-check
+
+      - name: Disk left
+        if: always()
+        run: df -h /
 
   rustdoc:
     name: Rustdoc
@@ -404,6 +432,7 @@ jobs:
       - name: Rust prelude
         uses: ./.github/actions/rust-prelude
         with:
+          free-disk: "false"
           shared-key: "ci-rustdoc"
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
@@ -422,6 +451,10 @@ jobs:
       # GitHub can break here with the step above green.
       - name: Check the links on each crate's front page
         run: python3 scripts/check_doc_links.py target/doc
+
+      - name: Disk left
+        if: always()
+        run: df -h /
 
   test-frontend:
     name: Test (Frontend)
@@ -556,6 +589,7 @@ jobs:
       - name: Rust prelude
         uses: ./.github/actions/rust-prelude
         with:
+          free-disk: "false"
           apt-packages: >-
             libgtk-3-dev
             libwebkit2gtk-4.1-dev
@@ -578,6 +612,10 @@ jobs:
 
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Disk left
+        if: always()
+        run: df -h /
 
   cli-cross-os:
     name: CLI Check (${{ matrix.target }})
@@ -612,8 +650,9 @@ jobs:
 
       # Its own shared-key per target, and only main saves; the rust-prelude
       # action says why. Main runs this job when Cargo.lock, the toolchain or
-      # .cargo/config.toml moves, so the key the next pull requests restore is
-      # saved there. The Linux leg builds one crate and needs no disk freed.
+      # .cargo/config.toml moves, and every night, so the key the next pull
+      # requests restore is saved there. The Linux leg builds one crate and
+      # needs no disk freed.
       - name: Rust prelude
         uses: ./.github/actions/rust-prelude
         with:
@@ -885,9 +924,9 @@ jobs:
   # printed no result, which crashed or was stopped by the step's time limit.
   #
   # As `clippy-cross-os`: when `scope` says so, and after ubuntu clippy. Main
-  # runs it when Cargo.lock, the toolchain or .cargo/config.toml moves, which
-  # is when its cache is saved, so the 90 minutes are for a pull request's
-  # cold build.
+  # runs it when Cargo.lock, the toolchain or .cargo/config.toml moves, and
+  # every night, which is when its cache is saved, so the 90 minutes are for
+  # a pull request's cold build.
   test-cross-os:
     name: Test (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
@@ -1019,7 +1058,8 @@ jobs:
   # compared with the commit its branch was at before it, since one push can
   # carry several commits; `before` is all zeros only when a branch is
   # created, and then the commit's parent stands in. The pull request count
-  # is for an admin's direct push, which no pull request CI has seen.
+  # is for an admin's direct push, which no pull request CI has seen. The
+  # nightly run, and one started by hand, compare nothing: every job runs.
   scope:
     name: Scope
     runs-on: ubuntu-24.04
@@ -1072,6 +1112,10 @@ jobs:
         run: |
           if [[ $EVENT == pull_request ]]; then
             ./scripts/ci_scope.py scope --base HEAD^1 --head HEAD >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ $EVENT != push ]]; then
+            ./scripts/ci_scope.py everything >> "$GITHUB_OUTPUT"
             exit 0
           fi
           base=HEAD^1

@@ -2,6 +2,7 @@
 """Decide which of CI's macOS and Windows jobs a change can reach.
 
     scripts/ci_scope.py scope --base <ref> --head <ref> [--event pull_request|push] [--pr-count N]
+    scripts/ci_scope.py everything
     scripts/ci_scope.py --self-test
 
 `scope` runs the self-test, then compares two commits and prints, on stdout
@@ -26,6 +27,12 @@ $GITHUB_OUTPUT. Its reasons go to stderr.
   when no pull request is behind the commit (`--pr-count 0`), since an admin
   can push to main without one and no pull request CI has seen it.
 * `apple`: `ffi`.
+
+`everything` runs the self-test, then prints the outputs for a run with no
+change to compare, CI's nightly run or one started by hand: every output that
+gates a job is true, and `version_only` and `lock`, which describe a change,
+are false. That run is where main saves the macOS and Windows caches when
+they are missing.
 
 What it does NOT decide, so that nobody reads more into a `false` than is there:
 
@@ -263,6 +270,11 @@ def decide(
     }
 
 
+def everything() -> dict[str, bool]:
+    """The outputs for a run with no change to compare: every gated job runs."""
+    return {name: name not in ("version_only", "lock") for name in OUTPUTS}
+
+
 # ---------------------------------------------------------------------------
 # Self-test
 
@@ -492,7 +504,9 @@ def self_test() -> bool:
                 failures.append(f"--event {event} with --pr-count {pr_count} was accepted")
             except ValueError:
                 pass
-    total = len(PATHS) + len(cases) + 2
+    if everything() != {name: name in "rust ffi ios cross_os apple".split() for name in OUTPUTS}:
+        failures.append(f"everything: {everything()}")
+    total = len(PATHS) + len(cases) + 3
     if not failures:
         print(f"✅ self-test: {total} planted cases, each as planted", file=sys.stderr)
         return True
@@ -511,16 +525,21 @@ def main() -> int:
     scope.add_argument("--head", required=True)
     scope.add_argument("--event", default="pull_request", choices=("pull_request", "push"))
     scope.add_argument("--pr-count", type=int)
+    commands.add_parser("everything", help="self-test, then print the outputs for a run with no change to compare")
     args = parser.parse_args()
-    if not args.self_test and args.command != "scope":
-        parser.error("give --self-test or scope")
+    if not args.self_test and args.command not in ("scope", "everything"):
+        parser.error("give --self-test, scope or everything")
     if not self_test():
         return 1
     if args.self_test:
         return 0
     say = lambda message: print(message, file=sys.stderr)  # noqa: E731
     try:
-        outputs = decide(REPO, args.base, args.head, args.event, args.pr_count, ffi_script, say)
+        if args.command == "everything":
+            say("everything: no change to compare, so every gated job runs")
+            outputs = everything()
+        else:
+            outputs = decide(REPO, args.base, args.head, args.event, args.pr_count, ffi_script, say)
     except (ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         detail = getattr(error, "stderr", None)
         print(f"❌ {error}" + (f"\n{detail.decode(errors='replace')}" if detail else ""), file=sys.stderr)
