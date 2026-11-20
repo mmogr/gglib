@@ -1,6 +1,7 @@
 /**
  * What changes the open conversation, from its title ▾: rename it, start it
- * over with the same prompt, export it, set its system prompt, delete it.
+ * over with the same prompt, export it with its images in the file, set its
+ * system prompt, delete it.
  * Each acts on this machine's daemon, so each does nothing on a far chat,
  * whose ids are the far machine's and could name a different chat here.
  * Every change reads the chat list again, so the sidebar says it at once.
@@ -15,6 +16,7 @@ import { getTransport } from '../../services/transport';
 import type { ConversationSummary } from '../../services/transport';
 import type { ModelRef } from '../../types/generated/ModelRef';
 import { formatError } from '../../utils/errors';
+import { withImageBytes } from './exportedImages';
 
 type Confirm = (options: {
   title: string;
@@ -110,7 +112,8 @@ export function useConversationActions({
   const exportChat = async () => {
     if (far || !activeConversation) return;
     try {
-      const { messages } = await getTransport().getThread(activeConversation.id);
+      const thread = await getTransport().getThread(activeConversation.id);
+      const { messages, unread } = await withImageBytes(thread.messages);
       const data = { conversation: activeConversation, messages };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -119,6 +122,13 @@ export function useConversationActions({
       anchor.download = `conversation-${activeConversation.id}.json`;
       anchor.click();
       URL.revokeObjectURL(url);
+      if (unread > 0) {
+        onError(
+          unread === 1
+            ? '1 image could not be read. It is in the file by its id only.'
+            : `${unread} images could not be read. They are in the file by their ids only.`,
+        );
+      }
     } catch (error) {
       onError(formatError(error));
     }
