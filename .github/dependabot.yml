@@ -245,10 +245,8 @@ updates:
     # would meet a new major first in a real release. Bumped by hand, Label
     # Check runs its whole script on the pull request.
     #
-    # peaceiris/actions-gh-pages (badges.yml, status-card.yml) and
-    # stefanbuck/github-issue-parser (issue-labels.yml) are not exercised
-    # either, but a failure there costs a badge or an issue label, not a
-    # release.
+    # peaceiris/actions-gh-pages (badges.yml, status-card.yml) is not
+    # exercised either, but a failure there costs a badge, not a release.
     ignore:
       - dependency-name: actions/attest-build-provenance
         update-types: ["version-update:semver-major"]

@@ -31,19 +31,22 @@ function either(items) {
   return `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
 }
 
-// A label of each required category, for the reply the comment shows.
-const EXAMPLES = {
+// The required categories anyone may add a label to with a reply, and a label
+// of each for the reply the comment shows. label-command.cjs holds the rule.
+const OPEN_EXAMPLES = {
   'component:': 'component: cli',
-  'priority:': 'priority: medium',
-  'size:': 'size: s',
   'type:': 'type: bug',
 };
 
-// The label the comment's example reply asks for: one of the first missing
-// category, a candidate for it when the words gave one.
+// The label the comment's example reply asks for: one anyone may add, of the
+// first missing category that is open to all, else of a platform the words
+// name; a candidate when the words gave one. Null when a reporter has
+// nothing to add.
 function example(missing, open) {
-  const candidates = open.find(o => o.prefix === missing[0]);
-  return candidates ? candidates.labels[0] : EXAMPLES[missing[0]];
+  const prefix = missing.find(p => p in OPEN_EXAMPLES) ?? open.find(o => o.prefix === 'platform:')?.prefix;
+  if (!prefix) return null;
+  const candidates = open.find(o => o.prefix === prefix);
+  return candidates ? candidates.labels[0] : OPEN_EXAMPLES[prefix];
 }
 
 // The comment's text. `missing` are the required prefixes with no label;
@@ -64,17 +67,20 @@ function triageComment({ missing, applied, open }) {
   for (const prefix of missing) lines.push(`- ${code(prefix)}${candidates(prefix)}`);
   lines.push('');
   if (missing.includes('priority:') || missing.includes('size:')) {
-    lines.push('`priority:` and `size:` are never read from an issue\'s words: each is an estimate'
-      + ' someone makes after reading the code.', '');
+    lines.push('Nobody is asked for `priority:` or `size:` when filing an issue: each is an estimate'
+      + ' made after reading the code, and set by someone with write access.', '');
   }
   const platform = open.find(o => o.prefix === 'platform:');
   if (platform) {
     lines.push(`\`platform:\` is not required. It may be ${either(platform.labels.map(code))}, from ${platform.from}.`, '');
   }
   // Inside a sentence, so that this comment is never itself a command.
-  lines.push(`A reply with the line ${code(`/label ${example(missing, open)}`)} adds that label.`
-    + ' Anyone can give an issue its first `component:`, `type:` or `platform:` label this way; `priority:` and `size:` take write access.'
-    + ` ${code(TRIAGE)} clears by itself once`
+  const label = example(missing, open);
+  const reply = label
+    ? `A reply with the line ${code(`/label ${label}`)} adds that label.`
+      + ' Anyone can give an issue its first `component:`, `type:` or `platform:` label this way. '
+    : '';
+  lines.push(`${reply}${code(TRIAGE)} clears by itself once`
     + ` ${REQUIRED_PREFIXES.slice(0, -1).map(code).join(', ')} and ${code(REQUIRED_PREFIXES[REQUIRED_PREFIXES.length - 1])}`
     + ' are all present.');
   return lines.join('\n');
