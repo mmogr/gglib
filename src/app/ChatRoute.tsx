@@ -7,9 +7,11 @@
  * just opened the chat on (a first send, a branch, Start over, before a run
  * has named it); for an empty chat, `?far=` or `?model=`. Failing those
  * (a chat that has not run, or `/chat/new` alone): the last one used, else
- * the default model, each while the library has it, else the first loaded;
- * with none of those, the library. A new chat keeps the model it opened on
- * when its first send makes the conversation.
+ * the default model, each while the library has it, else the first loaded,
+ * else the library's only chat model; with none of those the route says
+ * what to do, with the way to the library, and opens the chat once one of
+ * them holds. A new chat keeps the model it opened on when its first send
+ * makes the conversation.
  *
  * A chat on this machine's model opens whether or not the model is running:
  * a send loads it, and the run says so while it waits. The port it answers
@@ -40,7 +42,7 @@ import type { GgufModel } from '../types';
 import type { ConversationSummary } from '../services/transport';
 import type { Machine } from '../types/generated/Machine';
 import { clearChatHandoff, peekChatHandoff, wasHanded, type ChatHandoff } from './chatHandoff';
-import { CHAT_LOADING, ChatUnread, ChatWaitFailed } from './chatLoading';
+import { CHAT_LOADING, ChatNoModel, ChatUnread, ChatWaitFailed } from './chatLoading';
 import { PairedChat } from './PairedChat';
 import { chatAddress, paths } from './paths';
 import { useChatSwitch } from './useChatSwitch';
@@ -48,13 +50,14 @@ import { useChatSwitch } from './useChatSwitch';
 // Lazy: the chat brings assistant-ui, which the library does not need.
 const ChatPlace = lazy(() => import('../places/chat/ChatPlace'));
 
-/** Where a chat opens: on a model, or (`to`) somewhere else entirely. */
-type Target = { kind: 'local'; id: number } | { kind: 'paired'; id: number; machine?: Machine } | { kind: 'go'; to: string };
+/** Where a chat opens: on a model, or (`none`) on none, the library holding `several` chat models or no chat model. */
+type Target = { kind: 'local'; id: number } | { kind: 'paired'; id: number; machine?: Machine } | { kind: 'none'; several: boolean };
 
 /**
  * The model for a chat that names none: the last used, then the default,
  * whichever the library still has, loaded or not; else the first loaded;
- * else the library.
+ * else the library's only chat model (image models are not counted), loaded
+ * or not; else none.
  */
 function fallback(
   list: readonly ConversationSummary[],
@@ -65,8 +68,10 @@ function fallback(
   const kept = (id: number | null) => id !== null && library.some((m) => m.id === id);
   const wanted = [lastUsedModel(list), defaultId].find(kept);
   const running = servers.find((s) => s.status === 'running')?.modelId;
-  const id = wanted ?? running;
-  return id === undefined || id === null ? { kind: 'go', to: paths.library() } : { kind: 'local', id };
+  const chatModels = library.filter((m) => m.imageFamily === undefined);
+  const only = chatModels.length === 1 ? chatModels[0].id : undefined;
+  const id = wanted ?? running ?? only;
+  return id === undefined || id === null ? { kind: 'none', several: chatModels.length > 1 } : { kind: 'local', id };
 }
 
 function targetOf(model: ChatModel): Target | null {
@@ -204,7 +209,7 @@ export function ChatRoute() {
     }
     target = fallback(list, settings?.defaultModelId ?? null, servers, library.models);
   }
-  if (target.kind === 'go') return <Navigate to={target.to} replace />;
+  if (target.kind === 'none') return <ChatNoModel several={target.several} onLibrary={() => navigate(paths.library())} />;
 
   const on = target;
   const onOpened = (id: number) => {
