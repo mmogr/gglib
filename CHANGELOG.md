@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.39.0-rc.2](https://github.com/mmogr/gglib/compare/v0.39.0-rc.1...v0.39.0-rc.2) (2026-11-20)
+
+
+### What gglib now does
+
+* **cli:** a gglib too old for the library hands the command to one that opens it ([#2130](https://github.com/mmogr/gglib/issues/2130)) ([100e83f](https://github.com/mmogr/gglib/commit/100e83fe1ad1758159af3d46f0a6fd97f69bf610))
+
+
+### What it stopped getting wrong
+
+* **cli:** a question whose model could not load ends with why, and nothing after it ([#2122](https://github.com/mmogr/gglib/issues/2122)) ([e375082](https://github.com/mmogr/gglib/commit/e3750823367495a453185ddb7c936acf9c6bf378))
+
+
+### Documentation
+
+* **contributing:** a dev build beside an installed gglib needs its own endpoint port too ([#2120](https://github.com/mmogr/gglib/issues/2120)) ([1bdf05c](https://github.com/mmogr/gglib/commit/1bdf05c6aef54ce164c78e9801798545d37615d2))
+
+
+### Internal
+
+* **deps:** bump taiki-e/install-action ([#2129](https://github.com/mmogr/gglib/issues/2129)) ([be60327](https://github.com/mmogr/gglib/commit/be60327467aaa4ccd2dccff2b2b02c3e83c52929))
+* **promote:** a blank Promote takes the newest candidate, past candidates that can never ship ([#2126](https://github.com/mmogr/gglib/issues/2126)) ([3ee3c47](https://github.com/mmogr/gglib/commit/3ee3c47229c9c02f456433b668ffd9c0914958e1))
+* **promote:** the stable release is tagged from its candidate again, and main stays a candidate ([#2125](https://github.com/mmogr/gglib/issues/2125)) ([02efb76](https://github.com/mmogr/gglib/commit/02efb76be86d07ab223b56824281ae84ea4749d5))
+* **release:** a newly opened release PR is found, so its lockfiles and links are put right ([#2124](https://github.com/mmogr/gglib/issues/2124)) ([aedfb55](https://github.com/mmogr/gglib/commit/aedfb55d769f6ba8cd861d969de86f99cea001c2))
+* **release:** a stable version set by hand is held to the newest, released as the latest, and stable follows it ([#2127](https://github.com/mmogr/gglib/issues/2127)) ([9b5efe2](https://github.com/mmogr/gglib/commit/9b5efe2cc88bf5b99ddaa2f2f76158d831a7c594))
+* **runtime:** a render waiting behind a waiting render is told so ([#2121](https://github.com/mmogr/gglib/issues/2121)) ([33b74cf](https://github.com/mmogr/gglib/commit/33b74cfd7c5a760ba828f98ab583c324e07fd18e))
+
 ## [0.39.0-rc.1](https://github.com/mmogr/gglib/compare/v0.38.0-rc.2...v0.39.0-rc.1) (2026-11-19)
 
 
