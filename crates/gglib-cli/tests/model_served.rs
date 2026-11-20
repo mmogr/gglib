@@ -9,24 +9,17 @@
 //!
 //! No llama-server runs. A pid file counts while its pid is a running
 //! llama-server of the data root's, which is asked of the pid's executable,
-//! so the server here is `sleep`, with the root's llama-server path linked
-//! to it.
-//!
-//! Unix-only for that link and for `sleep`, not for the behaviour.
-
-#![cfg(unix)]
+//! so the server here is the stand-in program (`gglib-test-proc`), installed
+//! at the root's llama-server path and told to sleep.
 
 #[path = "support/library.rs"]
 mod library;
 
 use gglib_core::utils::process::cmd;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Output, Stdio};
 
 use library::{data_root, gglib, library, resource_root, run, write_gguf};
-
-/// The program a stand-in server runs.
-const SLEEP: &str = "/bin/sleep";
 
 /// What `gglib model remove` prints when it removes the library's one model
 /// without asking.
@@ -42,20 +35,19 @@ const REFUSED: &str = "Model 'qwen.Q8_0' (ID 1) is being served by a llama-serve
 const NOT_UPGRADED: &str =
     "conflict: Model 'qwen.Q8_0' is being served on port 9001. Stop its server first.";
 
-/// A running process that `gglib` takes for a llama-server of any root
-/// [`takes_sleep_for_llama_server`] was called on. Stopped when dropped.
+/// A running [`llama_server`], which `gglib` takes for a llama-server of
+/// the root it was installed under. Stopped when dropped.
 struct StandIn(Child);
 
 impl StandIn {
-    fn start() -> Self {
+    fn start(server: &Path) -> Self {
         Self(
-            cmd(SLEEP)
-                .arg("120")
+            cmd(server)
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .spawn()
-                .expect("sleep starts"),
+                .expect("the stand-in starts"),
         )
     }
 
@@ -71,13 +63,18 @@ impl Drop for StandIn {
     }
 }
 
-/// Link the llama-server path of the library in `root` to `sleep`, so a
-/// running `sleep` is, to `gglib` there, a running llama-server of its own.
-fn takes_sleep_for_llama_server(root: &Path) {
-    let bin = resource_root(root).join(".llama").join("bin");
+/// Where the library in `root` keeps its llama-server.
+fn llama_bin(root: &Path) -> PathBuf {
+    resource_root(root).join(".llama").join("bin")
+}
+
+/// Install a stand-in at the llama-server path of the library in `root`
+/// that sleeps, so that running it is, to `gglib` there, a running
+/// llama-server of its own.
+fn llama_server(root: &Path) -> PathBuf {
+    let bin = llama_bin(root);
     std::fs::create_dir_all(&bin).expect("the bin directory");
-    let sleep = gglib_core::paths::canonical(SLEEP).expect("sleep is installed");
-    std::os::unix::fs::symlink(sleep, bin.join("llama-server")).expect("the link");
+    gglib_test_proc::install(&bin, "llama-server", "sleep 120")
 }
 
 /// Record under `root`, as whatever starts a server records it, that model
@@ -89,9 +86,12 @@ fn record_a_server(root: &Path, pid: u32) {
     std::fs::write(pids.join("1.pid"), format!("{pid}\n9001\n")).expect("the pid file");
 }
 
-/// The pid of a process that has run and been reaped, so it names nothing.
+/// The pid of a process that has run and been reaped, so it names nothing:
+/// a stand-in with no instructions, which exits at once.
 fn pid_of_a_process_that_is_gone() -> u32 {
-    let mut child = cmd(SLEEP).arg("0").spawn().expect("sleep starts");
+    let dir = tempfile::tempdir().expect("a directory for it");
+    let ends = gglib_test_proc::install(dir.path(), "ends", "");
+    let mut child = cmd(ends).spawn().expect("the stand-in starts");
     let pid = child.id();
     child.wait().expect("it ends");
     pid
@@ -117,8 +117,7 @@ fn holds_the_model(root: &Path) -> bool {
 fn a_model_served_under_this_data_root_is_refused_and_told_how_to_stop_it() {
     let root = tempfile::tempdir().expect("temp data dir");
     let weights = library(root.path());
-    takes_sleep_for_llama_server(root.path());
-    let server = StandIn::start();
+    let server = StandIn::start(&llama_server(root.path()));
     record_a_server(root.path(), server.pid());
 
     for args in [
@@ -166,8 +165,7 @@ fn a_server_for_one_model_does_not_block_the_removal_of_another() {
         ],
         "",
     );
-    takes_sleep_for_llama_server(root.path());
-    let server = StandIn::start();
+    let server = StandIn::start(&llama_server(root.path()));
     record_a_server(root.path(), server.pid());
 
     let removed = gglib(root.path(), &["model", "remove", "2", "--yes"], "");
@@ -187,7 +185,7 @@ fn a_server_for_one_model_does_not_block_the_removal_of_another() {
 fn a_record_whose_process_is_gone_does_not_block_a_removal() {
     let root = tempfile::tempdir().expect("temp data dir");
     library(root.path());
-    takes_sleep_for_llama_server(root.path());
+    llama_server(root.path());
     record_a_server(root.path(), pid_of_a_process_that_is_gone());
 
     let removed = gglib(root.path(), &["model", "remove", "1", "--yes"], "");
@@ -202,7 +200,7 @@ fn a_record_whose_process_is_gone_does_not_block_a_removal() {
 fn a_record_whose_pid_is_another_program_does_not_block_a_removal() {
     let root = tempfile::tempdir().expect("temp data dir");
     library(root.path());
-    takes_sleep_for_llama_server(root.path());
+    llama_server(root.path());
     record_a_server(root.path(), std::process::id());
 
     let removed = gglib(root.path(), &["model", "remove", "1", "--yes"], "");
@@ -212,18 +210,21 @@ fn a_record_whose_pid_is_another_program_does_not_block_a_removal() {
 }
 
 /// Two data roots, each with a model 1, and one server, recorded under
-/// `there`. Both take it for a llama-server of their own, so only where it
-/// is recorded tells them apart: `here` removes its model 1, and `there`
-/// refuses to remove its own.
+/// `there`. Both take it for a llama-server of their own, since `here`'s
+/// llama.cpp folder is a link to `there`'s, so only where it is recorded
+/// tells them apart: `here` removes its model 1, and `there` refuses to
+/// remove its own.
 #[test]
 fn a_server_recorded_under_another_data_root_does_not_block_a_removal_here() {
     let here = tempfile::tempdir().expect("temp data dir");
     let there = tempfile::tempdir().expect("temp data dir");
     for root in [here.path(), there.path()] {
         library(root);
-        takes_sleep_for_llama_server(root);
     }
-    let server = StandIn::start();
+    let server = StandIn::start(&llama_server(there.path()));
+    let shared = llama_bin(here.path());
+    std::fs::create_dir_all(shared.parent().expect("its parent")).expect("the folder above it");
+    gglib_core::paths::link_folder(llama_bin(there.path()), &shared);
     record_a_server(there.path(), server.pid());
 
     let removed = gglib(here.path(), &["model", "remove", "1", "--yes"], "");
@@ -246,8 +247,7 @@ fn a_server_recorded_under_another_data_root_does_not_block_a_removal_here() {
 fn an_upgrade_of_a_model_served_under_this_data_root_is_refused_first() {
     let root = tempfile::tempdir().expect("temp data dir");
     library(root.path());
-    takes_sleep_for_llama_server(root.path());
-    let server = StandIn::start();
+    let server = StandIn::start(&llama_server(root.path()));
     record_a_server(root.path(), server.pid());
 
     for args in [
