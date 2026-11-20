@@ -6,8 +6,10 @@
  * figures tests from known traffic: recent requests with the rate the proxy
  * computed for each, beside the words `rate_words` says it in, the cache's
  * reuse with its percents and its sentence, and the loop-guard trips total.
- * The page must say the same rate words, show the sentence verbatim, and
- * read the total, dividing and summing nothing itself.
+ * One request carries an image, with the words the proxy serves for its
+ * cost. The page must say the same rate words, show the sentence and the
+ * image's cost verbatim, and read the total, dividing and summing nothing
+ * itself.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -53,9 +55,21 @@ describe('dashboard figures contract', () => {
       'phi-4 100 tokens · 10 t/s',
       'Qwen3-8B',
       'Qwen3-8B 1 token',
-      'gemma-3-12b 1,200 tokens · 8.5 t/s',
+      'gemma-3-12b 1,200 tokens · 8.5 t/s · 1 image ~3,600 tokens · 3,646 prompt tokens',
       'Qwen3-8B 812 tokens · 34 t/s',
     ]);
+  });
+
+  it("says an image request's cost in the words the proxy served, after what it wrote", () => {
+    const served = FIGURES.recent_requests[1].image_words;
+    expect(served).toBe('1 image ~3,600 tokens · 3,646 prompt tokens');
+    const row = recentRows(FRAME, 6).find((r) => r.model === 'gemma-3-12b');
+    expect(row?.figures).toBe(`1,200 tokens · 8.5 t/s · ${served}`);
+    // A turn still running has no tokens or rate yet: the served words alone.
+    const running = dashboardSnapshot({
+      recent_requests: [{ ...FIGURES.recent_requests[3], images: 2, image_tokens: 7200, image_words: '2 images ~7,200 tokens' }],
+    });
+    expect(recentRows(running)[0].figures).toBe('2 images ~7,200 tokens');
   });
 
   it("names a model's newest recorded rate, passing over requests with none", () => {
