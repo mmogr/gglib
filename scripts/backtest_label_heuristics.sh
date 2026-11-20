@@ -21,6 +21,8 @@
 set -euo pipefail
 
 REPO="mmogr/gglib"
+# The path table label-check.yml derives component: with.
+COMPONENT_PATHS="$(cd "$(dirname "$0")/.." && pwd)/.github/scripts/component-paths.cjs"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -117,21 +119,10 @@ while IFS=$'\t' read -r num human; do
   i=$((i + 1))
   [ $((i % 20)) -eq 0 ] && echo "  ...$i/$CTOTAL" >&2
   derived=$(gh api "repos/$REPO/pulls/$num/files" --paginate --jq '.[].filename' 2>/dev/null \
-    | node --input-type=module -e "
-        import { readFileSync } from 'node:fs';
-        const paths = readFileSync(0, 'utf8').trim().split('\n').filter(Boolean);
-        const MAP = [
-          [/^crates\/gglib-cli\//, 'cli'], [/^crates\/gglib-core\//, 'core'],
-          [/^crates\/gglib-axum\//, 'axum'], [/^crates\/gglib-runtime\//, 'runtime'],
-          [/^crates\/gglib-proxy\//, 'proxy'], [/^crates\/gglib-db\//, 'db'],
-          [/^crates\/gglib-download\//, 'downloads'], [/^crates\/gglib-hf\//, 'hf'],
-          [/^crates\/gglib-mcp\//, 'mcp'], [/^crates\/gglib-broadcast\//, 'broadcast'],
-          [/^crates\/gglib-app-services\//, 'gui'],
-          [/^src-tauri\//, 'tauri'], [/^src\//, 'frontend'], [/^web_ui\//, 'frontend'],
-          [/^\.github\//, 'ci'], [/^scripts\//, 'ci'],
-        ];
-        const s = new Set();
-        for (const p of paths) for (const [re, c] of MAP) if (re.test(p)) s.add('component: ' + c);
+    | COMPONENT_PATHS="$COMPONENT_PATHS" node --input-type=commonjs -e "
+        const { componentOfPath } = require(process.env.COMPONENT_PATHS);
+        const paths = require('node:fs').readFileSync(0, 'utf8').trim().split('\n').filter(Boolean);
+        const s = new Set(paths.map(componentOfPath).filter(Boolean));
         process.stdout.write([...s].sort().join('|'));
       ")
   printf '%s\t%s\t%s\n' "$num" "$human" "$derived" >> "$WORKDIR/comp_results.tsv"

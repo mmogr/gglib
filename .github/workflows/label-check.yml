@@ -64,7 +64,8 @@ jobs:
       pull-requests: write
       issues: read # to fetch labels from issues linked via Closes/Fixes/Resolves
     steps:
-      # The fix rule both jobs apply, in .github/scripts/fix-issue-rule.cjs.
+      # The fix rule both jobs apply, in .github/scripts/fix-issue-rule.cjs, and
+      # the path table, in component-paths.cjs.
       - name: Checkout the shared rule
         uses: actions/checkout@v7
         with:
@@ -164,30 +165,14 @@ jobs:
             const excluded = files.length - real.length;
 
             // --- component: derived from changed paths --------------------------
-            const COMPONENT_MAP = [
-              [/^crates\/gglib-cli\//,          'component: cli'],
-              [/^crates\/gglib-core\//,         'component: core'],
-              [/^crates\/gglib-axum\//,         'component: axum'],
-              [/^crates\/gglib-runtime\//,      'component: runtime'],
-              [/^crates\/gglib-proxy\//,        'component: proxy'],
-              [/^crates\/gglib-db\//,           'component: db'],
-              [/^crates\/gglib-download\//,     'component: downloads'],
-              [/^crates\/gglib-hf\//,           'component: hf'],
-              [/^crates\/gglib-mcp\//,          'component: mcp'],
-              [/^crates\/gglib-broadcast\//,    'component: broadcast'],
-              [/^crates\/gglib-app-services\//, 'component: gui'],
-              [/^src-tauri\//,                  'component: tauri'],
-              [/^src\//,                        'component: frontend'],
-              [/^web_ui\//,                     'component: frontend'],
-              [/^\.github\//,                   'component: ci'],
-              [/^scripts\//,                    'component: ci'],
-            ];
+            // The path table is .github/scripts/component-paths.cjs, which
+            // issue-labels.yml reads an issue's description through as well.
+            const { componentOfPath } = require('./.github/scripts/component-paths.cjs');
 
             const derived = new Set();
             for (const f of files) {
-              for (const [re, label] of COMPONENT_MAP) {
-                if (re.test(f.filename)) derived.add(label);
-              }
+              const label = componentOfPath(f.filename);
+              if (label) derived.add(label);
             }
 
             // Auto-apply ONLY when derivation is unambiguous (exactly one component).
@@ -205,10 +190,10 @@ jobs:
             if (derived.size === 1) {
               toAdd = [...derived].filter(l => !names.includes(l));
               if (toAdd.length) {
-                // Never let a stale COMPONENT_MAP entry invent a label. The labels API
-                // CREATES a nonexistent label rather than erroring (verified: POSTing an
-                // unknown name returns 200 and yields a default-grey, description-less
-                // label), so a renamed crate whose map row wasn't updated would silently
+                // Never let a stale row of component-paths.cjs invent a label. The labels
+                // API CREATES a nonexistent label rather than erroring (verified: POSTing
+                // an unknown name returns 200 and yields a default-grey, description-less
+                // label), so a renamed crate whose row wasn't updated would silently
                 // manufacture junk. Filter to labels that exist; anything else warns and
                 // falls through to the ask-comment below, which is the safe direction.
                 //
@@ -221,8 +206,8 @@ jobs:
                 const unknown = toAdd.filter(l => !repoLabels.has(l));
                 if (unknown.length) {
                   core.warning(
-                    `COMPONENT_MAP refers to nonexistent label(s): ${unknown.join(', ')}. `
-                    + `Not creating them — update the map or create the labels.`);
+                    `component-paths.cjs refers to nonexistent label(s): ${unknown.join(', ')}. `
+                    + `Not creating them — update the table or create the labels.`);
                 }
                 toAdd = toAdd.filter(l => repoLabels.has(l));
 

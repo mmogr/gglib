@@ -826,6 +826,16 @@ Opening an issue through GitHub's "New Issue" form (`.github/ISSUE_TEMPLATE/issu
 
 If an issue is created outside the form — a scripted `gh issue create`, or the raw API — the form's required fields can't apply, since GitHub only validates them in the web UI and `gh issue create`'s interactive prompts. `issue-labels.yml` is the actual backstop: it checks every issue for all four categories and applies `status: needs-triage` if any are missing, removing it automatically once the labels are added by hand. `is:issue is:open label:"status: needs-triage"` is the live worklist of anything that slipped through.
 
+When an issue is opened, `issue-labels.yml` also reads its title and description, and fills what the form left empty:
+
+- **`type:` and `component:` from a conventional title.** `fix(cli): …` gets `type: bug` and `component: cli`. A scope that is not the name of a `component:` label is not guessed, and a title with several scopes has none of them applied.
+- **`component:` from the repository paths the description names**, through the path table the PR check reads (`.github/scripts/component-paths.cjs`), when it names at least two paths and all are in one component.
+- **`platform:` when the title names Windows or macOS** and no other platform.
+
+A label is applied only when the words point at exactly one. Otherwise the candidates are listed in the issue's triage comment and nothing is applied. A category that already has a label is left alone, so the form's answer and a label set by hand both win, and nothing is ever removed. `priority:` and `size:` are never read from words: each is an estimate someone makes after reading the code. The triage comment says what was set and from what, what is still missing, and that `status: needs-triage` clears once all four categories are present; it is removed when they are.
+
+The rules are in `.github/scripts/issue-words.cjs`. `scripts/backtest_issue_labels.mjs` measures each of them against the labels the repository's issues ended with, and a rule that is wrong more than rarely only suggests: `test:` and `ci:` titles, the scopes `ci` and `gui`, a single path, and Linux in a title are listed as candidates for that reason.
+
 **Epics:** check the optional "Epic" box on the form (applies `type: epic`) only for an issue that itself tracks multi-phase work. Don't invent a new label per phase — use GitHub's native sub-issues (the "Create sub-issue" button on the epic) to link and order the phases. It gives the epic a live progress checklist for free and has no ceiling on phase count, unlike a per-letter label scheme.
 
 ### On PRs

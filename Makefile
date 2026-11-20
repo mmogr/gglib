@@ -367,6 +367,11 @@ enforce: ## Run the architecture enforcement checks
 	@# starts no jobs at all in a workflow file it will not parse. Local is the
 	@# only place that case gets caught before the push.
 	@./scripts/check_workflow_yaml.sh
+	@# issue-labels.yml and label-check.yml take their rules from
+	@# .github/scripts, and issue-labels.yml runs only from main, on an issue,
+	@# so a break in a rule first shows on someone's issue. The tests beside
+	@# the rules run here instead.
+	@node --test --test-reporter=dot .github/scripts/*.test.cjs
 	@# promote.py runs only when someone presses Promote, so a break in it would
 	@# first show in a stable release. Its fixtures run here instead.
 	@./scripts/promote.py --self-test
