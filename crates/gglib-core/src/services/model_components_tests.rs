@@ -544,33 +544,29 @@ async fn a_link_is_stored_canonical_and_none_clears_it() {
     assert_eq!(links(&repo), cleared.components);
 }
 
-/// A link made through a symlinked folder.
-#[cfg(unix)]
-mod through_a_symlink {
-    use super::*;
+/// A link made through a linked folder is stored under the path the folder
+/// resolves to.
+#[tokio::test]
+async fn a_link_through_a_linked_folder_is_stored_canonical() {
+    let dir = tempfile::tempdir().unwrap();
+    let real = dir.path().join("real");
+    std::fs::create_dir(&real).unwrap();
+    let vae = write_golden(&real, Golden::FluxVae);
+    let via = dir.path().join("via");
+    crate::paths::link_folder(&real, &via);
+    let (service, repo) = service(&dir.path().join("flux.gguf"), Some(ImageFamily::Flux1));
 
-    #[tokio::test]
-    async fn a_link_through_a_symlinked_folder_is_stored_canonical() {
-        let dir = tempfile::tempdir().unwrap();
-        let real = dir.path().join("real");
-        std::fs::create_dir(&real).unwrap();
-        let vae = write_golden(&real, Golden::FluxVae);
-        let via = dir.path().join("via");
-        std::os::unix::fs::symlink(&real, &via).unwrap();
-        let (service, repo) = service(&dir.path().join("flux.gguf"), Some(ImageFamily::Flux1));
+    service
+        .set_component(
+            1,
+            ComponentRole::Vae,
+            Some(&via.join("ae.safetensors")),
+            &GoldenParser,
+        )
+        .await
+        .unwrap();
 
-        service
-            .set_component(
-                1,
-                ComponentRole::Vae,
-                Some(&via.join("ae.safetensors")),
-                &GoldenParser,
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(links(&repo)[0].path, canonical(&vae));
-    }
+    assert_eq!(links(&repo)[0].path, canonical(&vae));
 }
 
 // ── The projector's link reads the header only ──────────────────────────────
