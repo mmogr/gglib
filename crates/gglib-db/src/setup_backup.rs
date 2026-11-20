@@ -24,14 +24,14 @@ use super::generation::{SCHEMA_GENERATION, stored};
 /// Copy the file `pool` opens to its backup, if this open is about to
 /// upgrade it: it holds a schema, stamped below this build's generation, and
 /// has no backup of that generation yet. A new, empty file has nothing to
-/// keep.
-pub(super) async fn before_upgrade(pool: &SqlitePool, db_path: &Path) -> Result<()> {
+/// keep. Gives the generation the file is being upgraded from, when it is.
+pub(super) async fn before_upgrade(pool: &SqlitePool, db_path: &Path) -> Result<Option<i64>> {
     let objects: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master")
         .fetch_one(pool)
         .await?;
     let generation = stored(pool).await?;
     if objects == 0 || generation >= SCHEMA_GENERATION {
-        return Ok(());
+        return Ok(None);
     }
     let backup = backup_path(db_path, generation);
     if !is_file(&backup) {
@@ -50,7 +50,7 @@ pub(super) async fn before_upgrade(pool: &SqlitePool, db_path: &Path) -> Result<
             tracing::warn!(path = %older.display(), error = %e, "could not remove an older backup");
         }
     }
-    Ok(())
+    Ok(Some(generation))
 }
 
 /// The backup beside `db_path`, and the generation it holds. Of several, the

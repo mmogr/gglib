@@ -34,7 +34,7 @@ use sqlx::SqlitePool;
 /// column, an index, or a new step in `setup_migrations.rs`, and when the
 /// form of what a row stores changes, as 11 did. Then rewrite the snapshot
 /// with `GGLIB_UPDATE_SCHEMA_SNAPSHOT=1 cargo test -p gglib-db schema_snapshot`.
-pub(super) const SCHEMA_GENERATION: i64 = 11;
+pub const SCHEMA_GENERATION: i64 = 11;
 
 /// The first generation whose builds store every path in the form
 /// `gglib_core::paths::canonical` writes it. Builds before it stored a path
@@ -105,20 +105,58 @@ pub(super) async fn stored(pool: &SqlitePool) -> Result<i64> {
     )
 }
 
-/// Refuse a database a newer build has written, naming the backup from
-/// before it was upgraded when there is one. Called before anything creates
-/// or alters a table.
-pub(super) async fn refuse_newer(pool: &SqlitePool, db_path: &Path) -> Result<()> {
-    let found = stored(pool).await?;
-    if found > SCHEMA_GENERATION {
-        let restore = super::backup::how_to_restore(db_path).unwrap_or_default();
-        bail!(
+/// A library a newer build has written, which this build refuses.
+///
+/// It reads as the whole refusal. A caller that can do better than refuse,
+/// as the CLI does when another gglib on the machine opens the library,
+/// finds it in the error with `downcast_ref`.
+#[derive(Debug)]
+pub struct NewerLibrary {
+    /// The generation the library is stamped with.
+    pub found: i64,
+    /// The backup this build opens and how to put it back, when there is
+    /// one: a sentence that starts with a space.
+    pub restore: Option<String>,
+}
+
+impl std::fmt::Display for NewerLibrary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (found, restore) = (self.found, self.restore.as_deref().unwrap_or_default());
+        write!(
+            f,
             "this gglib library was last opened by a newer gglib (schema generation {found}; \
              this build knows {SCHEMA_GENERATION}). Run the newer gglib, or upgrade this one. \
              To keep a development build's library apart from your installed one, set \
              GGLIB_DATA_DIR and GGLIB_DAEMON_PORT for it.{restore}"
-        );
+        )
     }
+}
+
+impl std::error::Error for NewerLibrary {}
+
+/// Refuse a database a newer build has written, with [`NewerLibrary`],
+/// naming the backup from before it was upgraded when there is one. Called
+/// before anything creates or alters a table.
+pub(super) async fn refuse_newer(pool: &SqlitePool, db_path: &Path) -> Result<()> {
+    let found = stored(pool).await?;
+    if found > SCHEMA_GENERATION {
+        let restore = super::backup::how_to_restore(db_path);
+        return Err(NewerLibrary { found, restore }.into());
+    }
+    Ok(())
+}
+
+/// Restamps the library at `db_path` one generation below this build's, so
+/// the next open upgrades it, for a test of what an upgrade does.
+#[cfg(any(test, feature = "test-utils"))]
+pub async fn restamp_older(db_path: &Path) -> Result<()> {
+    let options = sqlx::sqlite::SqliteConnectOptions::new().filename(db_path);
+    let pool = SqlitePool::connect_with(options).await?;
+    sqlx::query("UPDATE schema_generation SET generation = ?")
+        .bind(SCHEMA_GENERATION - 1)
+        .execute(&pool)
+        .await?;
+    pool.close().await;
     Ok(())
 }
 

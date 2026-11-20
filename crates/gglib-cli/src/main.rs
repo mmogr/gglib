@@ -4,7 +4,9 @@
 //! before anything else is set up, then initialises the tracing subscriber,
 //! runs the commands that read nothing from the library before it is
 //! opened, then bootstraps the composition root and delegates to the
-//! command dispatcher.
+//! command dispatcher. A library a newer gglib upgraded is not opened: the
+//! command is handed to a gglib on `PATH` that opens it, or refused
+//! ([`gglib_cli::refused`]).
 //!
 //! A command that fails exits 1 with its error printed after `Error:`,
 //! unless it is [`AlreadySaid`]: that command has printed why itself.
@@ -17,6 +19,7 @@ use std::process::ExitCode;
 
 use gglib_cli::{
     AlreadySaid, bootstrap, dispatch, dispatch_without_library, leaves_nothing_behind, parse,
+    refused,
 };
 
 #[tokio::main]
@@ -38,6 +41,9 @@ async fn run() -> anyhow::Result<()> {
     let Some(command) = dispatch_without_library(cli.command).await? else {
         return Ok(());
     };
-    let ctx = bootstrap().await?;
+    let ctx = match bootstrap().await {
+        Ok(ctx) => ctx,
+        Err(e) => return Err(refused(e, &command)),
+    };
     dispatch(&ctx, command, cli.verbose, remote).await
 }

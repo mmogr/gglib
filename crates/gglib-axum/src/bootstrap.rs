@@ -158,6 +158,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         gguf_parser,
         repos,
         pool,
+        upgraded_from: _,
     } = CoreBootstrap::build(bootstrap_config, emitter).await?;
 
     // 3. Bootstrap capabilities for existing models (idempotent; fine to run

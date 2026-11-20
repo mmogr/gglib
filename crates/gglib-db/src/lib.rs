@@ -40,6 +40,8 @@ pub use daemon_startup::repair_at_daemon_start;
 pub use header_facts_pass::fill_header_facts_once;
 
 // Re-export setup functions for convenient access
-pub use setup::{backup_beside, setup_database};
+pub use setup::{
+    NewerLibrary, SCHEMA_GENERATION, backup_beside, setup_database, setup_database_upgrading,
+};
 #[cfg(any(test, feature = "test-utils"))]
-pub use setup::{setup_test_database, write_newer_database};
+pub use setup::{restamp_older, setup_test_database, write_newer_database};

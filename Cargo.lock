@@ -2706,6 +2706,7 @@ dependencies = [
  "gglib-proxy",
  "gglib-runtime",
  "gglib-test-http",
+ "gglib-test-proc",
  "indicatif",
  "open",
  "qrcode",
