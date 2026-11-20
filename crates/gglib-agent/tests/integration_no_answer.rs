@@ -185,3 +185,37 @@ async fn a_final_reply_with_no_words_after_tools_ran_is_no_answer() {
     assert_no_answer(&ended, &events, "after a tool round");
     assert!(has_tool_complete_with_success(&events, true), "{events:?}");
 }
+
+/// A reply through the proxy whose stream ended with no finish frame and
+/// showed nothing arrives as the proxy's notice, then a `Done` with no
+/// reason. The notice is not the model's reply, so the run is no answer.
+#[tokio::test]
+async fn a_reply_that_is_only_the_proxys_notice_is_no_answer() {
+    use gglib_core::LlmStreamEvent;
+
+    let notice = "⚠️ [proxy] The model produced no output for this request. The upstream server \
+                  may be overloaded or degraded — retry, and if it persists restart the model. \
+                  (finish_reason: none)";
+    let llm = Arc::new(MockLlmPort::new().push_events(vec![
+        LlmStreamEvent::TextDelta {
+            content: notice.into(),
+        },
+        LlmStreamEvent::Done {
+            finish_reason: None,
+        },
+    ]));
+    let agent = AgentLoop::build(llm, Arc::new(MockToolExecutorPort::new()), None);
+    let (tx, rx) = mpsc::channel(64);
+
+    let ended = agent
+        .run(
+            vec![AgentMessage::user("find it")],
+            AgentConfig::default(),
+            tx,
+        )
+        .await;
+    let events = collect_events(rx).await;
+
+    assert_no_answer(&ended, &events, "the proxy's notice");
+    assert!(!sent_as_text(&events, notice), "{events:?}");
+}

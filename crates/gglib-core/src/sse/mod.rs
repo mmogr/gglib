@@ -2,6 +2,7 @@
 pub(crate) mod decoder;
 pub(crate) mod encoder;
 pub(crate) mod frames;
+pub mod notice;
 pub mod parser;
 
 pub use decoder::{SseItem, SseStreamDecoder};

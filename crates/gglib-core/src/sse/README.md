@@ -7,7 +7,7 @@ streams.
 
 This module reads the `OpenAI` `chat.completion.chunk` SSE wire format
 into the typed [`crate::LlmStreamEvent`] domain values, and writes the few
-frames gglib adds to a reply. It contains four pieces:
+frames gglib adds to a reply. It contains five pieces:
 
 | Submodule | Role |
 |-----------|------|
@@ -15,6 +15,7 @@ frames gglib adds to a reply. It contains four pieces:
 | [`parser`] | One `data:` payload → its JSON → typed events (`events_of`) |
 | [`decoder`] | Stateful byte-stream → `SseItem`s (each comment, each frame with its text, JSON and events, and `[DONE]`), or events alone, one complete line from [`frames`] at a time |
 | [`encoder`] | gglib's own frames: a notice as text, a repair's tool calls, a finish, an error frame |
+| [`notice`] | The two notices a proxy sends as text in place of a reply that showed nothing, defined once for the proxy that writes them and the agent that must not read one as the model's reply (`is_proxy_notice`) |
 
 Promoting the codec to `gglib-core` lets every adapter (runtime, proxy,
 future GUIs) share a single, well-tested implementation rather than
