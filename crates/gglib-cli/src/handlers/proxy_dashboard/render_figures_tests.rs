@@ -48,8 +48,11 @@ fn the_recorded_figures_print_as_the_proxy_says_them() {
         "{out}"
     );
     assert!(
-        recent[4].ends_with("gemma-3-12b              1,200 tokens \u{b7} 8.5 t/s"),
-        "{out}"
+        recent[4].ends_with(
+            "gemma-3-12b              1,200 tokens \u{b7} 8.5 t/s \u{b7} 1 image ~3,600 tokens \u{b7} \
+             3,646 prompt tokens"
+        ),
+        "the image request says its cost as the proxy recorded it: {out}"
     );
     // Every recorded rate in the words the proxy recorded beside it.
     let said: Vec<serde_json::Value> = figures["recent_requests"]

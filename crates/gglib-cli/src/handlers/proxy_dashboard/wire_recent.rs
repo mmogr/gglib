@@ -1,6 +1,6 @@
 //! The recent-requests rows of the dashboard frame, as this dashboard reads
-//! them: the model, when, what it wrote and how fast, and what gglib did, in
-//! the daemon's words.
+//! them: the model, when, what it wrote and how fast, what its images cost
+//! and what gglib did, the last two in the daemon's words.
 
 use serde::Deserialize;
 
@@ -18,6 +18,10 @@ pub(super) struct RecentRequest {
     /// and on a proxy older than the field.
     #[serde(default)]
     pub(super) tokens_per_second: Option<f64>,
+    /// What its images cost, in the proxy's words; `None` with no image, and
+    /// on a proxy older than the field.
+    #[serde(default)]
+    pub(super) image_words: Option<String>,
     /// What gglib did to it, each with its word. `default` on a proxy older
     /// than the field.
     #[serde(default)]
