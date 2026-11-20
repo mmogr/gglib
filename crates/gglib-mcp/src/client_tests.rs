@@ -1,7 +1,7 @@
 //! The JSON-RPC shapes, and a request's wait for its own reply: over an
 //! in-process pipe standing in for the server, so the server's every line
 //! and its silence are the test's to choose. What a server that exits
-//! printed is read from a real child process, a shell script.
+//! printed is read from a real child process, a `gglib-test-proc` program.
 
 use std::time::Instant;
 
@@ -134,30 +134,32 @@ async fn a_server_that_closes_its_output_is_a_closed_connection() {
     );
 }
 
-/// A client connected to `sh -c script`, waiting `reply_timeout` for each
-/// reply.
-#[cfg(unix)]
-async fn connect_to_script(
-    script: &str,
+/// A client connected to a program installed in `dir` that follows
+/// `instructions`, waiting `reply_timeout` for each reply.
+async fn connect_to_program(
+    dir: &std::path::Path,
+    instructions: &str,
     reply_timeout: Duration,
 ) -> (McpClient, Result<InitializeResult, McpClientError>) {
+    let program = gglib_test_proc::install(dir, "server", instructions);
     let mut client = McpClient::new();
     client.reply_timeout = reply_timeout;
-    let args = ["-c".to_string(), script.to_string()];
     let connected = client
-        .connect_stdio("/bin/sh", &args, None, None, &[])
+        .connect_stdio(program.to_str().unwrap(), &[], None, None, &[])
         .await;
     (client, connected)
 }
 
 /// A server that exits before it replies is an error that ends with what it
 /// printed on stderr: the reason it gives for not starting.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_server_that_exits_says_what_it_printed() {
-    let script = "echo 'Error accessing directory /path/to/allowed:' >&2; \
-                  echo 'ENOENT: no such file or directory' >&2; exit 1";
-    let (_client, connected) = connect_to_script(script, Duration::from_secs(5)).await;
+    let dir = tempfile::tempdir().unwrap();
+    let instructions = "eprint Error accessing directory /path/to/allowed:\n\
+                        eprint ENOENT: no such file or directory\n\
+                        exit 1";
+    let (_client, connected) =
+        connect_to_program(dir.path(), instructions, Duration::from_secs(5)).await;
 
     let got = connected.unwrap_err().to_string();
     assert!(
@@ -171,10 +173,11 @@ async fn a_server_that_exits_says_what_it_printed() {
 
 /// A server that exits having printed nothing is a closed connection and
 /// nothing more.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_server_that_exits_silently_is_a_closed_connection() {
-    let (_client, connected) = connect_to_script("exit 1", Duration::from_secs(5)).await;
+    let dir = tempfile::tempdir().unwrap();
+    let (_client, connected) =
+        connect_to_program(dir.path(), "exit 1", Duration::from_secs(5)).await;
 
     let got = connected.unwrap_err().to_string();
     assert!(got.ends_with("Server closed connection"), "{got}");
@@ -304,7 +307,6 @@ async fn a_server_with_no_tools_that_ignores_the_ping_lists_none() {
 
 /// A server that prints far more on stderr than a pipe holds before it
 /// replies still has its reply read: the print never blocks it.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_chatty_server_still_starts() {
     let reply = json!({
@@ -318,11 +320,11 @@ async fn a_chatty_server_still_starts() {
     });
     // 256 KiB on stderr, four times what a Linux pipe holds, then the reply
     // to `initialize`, then stdin read to its end.
-    let script = format!(
-        "i=0; while [ $i -lt 256 ]; do printf '%01024d' 0 >&2; i=$((i+1)); done; \
-         read -r request; echo '{reply}'; exec cat >/dev/null"
-    );
-    let (_client, connected) = connect_to_script(&script, Duration::from_secs(10)).await;
+    let line = format!("eprint {}\n", "0".repeat(1024));
+    let instructions = format!("{}print {reply}\nread", line.repeat(256));
+    let dir = tempfile::tempdir().unwrap();
+    let (_client, connected) =
+        connect_to_program(dir.path(), &instructions, Duration::from_secs(10)).await;
 
     let initialized = connected.unwrap();
     assert_eq!(initialized.protocol_version, "2024-11-05");

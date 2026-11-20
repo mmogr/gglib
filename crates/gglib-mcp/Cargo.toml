@@ -6,6 +6,12 @@ description = "MCP (Model Context Protocol) server management for gglib"
 license.workspace = true
 publish = false
 
+[features]
+# `StandIn`, an MCP server a test starts, the same program on every OS. Other
+# crates enable it from `[dev-dependencies]` only, so no ordinary build has
+# it or the two crates it needs.
+test-utils = ["dep:gglib-test-proc", "dep:tempfile"]
+
 [dependencies]
 # Core domain types and ports only - no sqlx
 gglib-build-info.workspace = true
@@ -40,6 +46,10 @@ thiserror = { workspace = true }
 # Logging
 tracing = { workspace = true }
 
+# `test-utils` only: the stand-in MCP server's program, and its folder.
+gglib-test-proc = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
+
 [dev-dependencies]
 # `test-utils` so a test here is refused the user's own data folder (#2088).
 gglib-core = { workspace = true, features = ["test-utils"] }
@@ -47,8 +57,9 @@ gglib-core = { workspace = true, features = ["test-utils"] }
 # never answers is waited out on the virtual clock.
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
 tempfile = { workspace = true }
-# A stand-in server behind a shim, and whether the process behind it still
-# runs once the client has stopped it (client_stop_tests.rs).
+# The stand-in MCP server (`stand_in.rs`), a server that exits or prints
+# (client_tests.rs), and one behind a shim, with whether the process behind
+# it still runs once the client has stopped it (client_stop_tests.rs).
 gglib-test-proc = { workspace = true }
 sysinfo = { workspace = true }
 
