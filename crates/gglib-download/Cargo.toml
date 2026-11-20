@@ -60,3 +60,5 @@ tempfile.workspace = true
 gglib-core = { workspace = true, features = ["test-utils"] }
 # The connection a fake server answers on, with the request already read.
 gglib-test-http = { workspace = true }
+# The stand-in interpreter and builder the environment tests run, on every OS.
+gglib-test-proc = { workspace = true }

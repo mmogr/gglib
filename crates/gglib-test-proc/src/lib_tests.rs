@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use super::{Instruction, executable, instructions_path, parse};
+use super::{BUSY_RETRIES, Instruction, executable, instructions_path, once_not_busy, parse};
 
 #[test]
 fn each_instruction_is_read_from_its_line() {
@@ -91,4 +91,99 @@ fn a_message_without_an_executable_names_none() {
     ] {
         assert_eq!(executable(line), None, "{line}");
     }
+}
+
+/// A program the kernel calls busy is run again until a run starts, and what
+/// that run answers is handed back.
+#[test]
+fn a_busy_program_is_run_again_until_it_starts() {
+    let mut runs = 0;
+
+    let outcome = once_not_busy(|| {
+        runs += 1;
+        if runs < 3 {
+            Err(std::io::ErrorKind::ExecutableFileBusy.into())
+        } else {
+            Ok(runs)
+        }
+    });
+
+    assert_eq!(outcome.expect("the third run starts"), 3);
+}
+
+/// Only a busy program is waited for: any other failure is the answer.
+#[test]
+fn a_program_that_fails_for_another_reason_is_not_run_again() {
+    let mut runs = 0;
+
+    let outcome = once_not_busy(|| -> std::io::Result<()> {
+        runs += 1;
+        Err(std::io::ErrorKind::NotFound.into())
+    });
+
+    assert_eq!(
+        outcome.expect_err("it does not start").kind(),
+        std::io::ErrorKind::NotFound
+    );
+    assert_eq!(runs, 1);
+}
+
+/// A program that stays busy is not waited for without end: after the last
+/// retry its refusal is the answer.
+#[test]
+fn a_program_that_stays_busy_is_given_up_on() {
+    let mut runs = 0;
+
+    let outcome = once_not_busy(|| -> std::io::Result<()> {
+        runs += 1;
+        Err(std::io::ErrorKind::ExecutableFileBusy.into())
+    });
+
+    assert_eq!(
+        outcome.expect_err("it never starts").kind(),
+        std::io::ErrorKind::ExecutableFileBusy
+    );
+    assert_eq!(runs, BUSY_RETRIES + 1);
+}
+
+/// A copy another thread still has open for writing is not handed back
+/// until that thread lets go of it. macOS runs such a file, and there is
+/// nothing to wait out there, so the test ends early.
+// Unix only: only Linux refuses to start a file open for writing.
+#[cfg(unix)]
+#[test]
+fn a_copy_still_open_for_writing_is_waited_out() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let dir = tempfile::tempdir().unwrap();
+    let program = dir.path().join("server");
+    std::fs::copy(super::built(), &program).unwrap();
+    let held = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&program)
+        .unwrap();
+    let refused = super::command(&program)
+        .stdin(std::process::Stdio::null())
+        .output();
+    if !matches!(&refused, Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy) {
+        return;
+    }
+    let let_go = Arc::new(AtomicBool::new(false));
+    let holder = std::thread::spawn({
+        let let_go = Arc::clone(&let_go);
+        move || {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let_go.store(true, Ordering::SeqCst);
+            drop(held);
+        }
+    });
+
+    super::run_once(&program);
+
+    assert!(
+        let_go.load(Ordering::SeqCst),
+        "handed back while still open for writing"
+    );
+    holder.join().unwrap();
 }

@@ -906,7 +906,7 @@ fn notify(notice: Option<&NoticeCallback>, bar_message: &str, console_message: &
 
 /// Build the `CreateEnvFailed` reason for a failed environment build,
 /// including captured stderr when there is any. Pulled out of `create_env`
-/// so the formatting is testable without spawning a real process.
+/// so the formatting is testable without running a real builder.
 ///
 /// `builder` names which tool failed: "uv exited with 2" and "venv exited
 /// with 2" want different things installed, and a reader of the error should
@@ -1492,53 +1492,5 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("virtualenv"));
         assert!(msg.contains("permission denied"));
-    }
-
-    /// `create_env` now runs `python -m venv` via `.output()` instead of
-    /// `.status()` specifically so its stderr can be captured into the
-    /// error instead of being inherited straight to the terminal (where it
-    /// could corrupt a live `MultiProgress` redraw). This is the formatting
-    /// half of that change, tested without spawning a process: a fake
-    /// `ExitStatus` plus captured stderr bytes.
-    #[cfg(unix)]
-    #[test]
-    fn venv_failure_reason_includes_captured_stderr() {
-        use std::os::unix::process::ExitStatusExt;
-
-        let status = std::process::ExitStatus::from_raw(1 << 8); // exit code 1
-        let reason = create_env_failure_reason("venv", status, b"NotADirectoryError: [Errno 20]\n");
-
-        assert!(reason.contains("exited with"));
-        assert!(reason.contains("NotADirectoryError"));
-    }
-
-    /// Which builder failed decides what the user has to go fix, so the
-    /// message names it rather than always saying `venv`.
-    #[cfg(unix)]
-    #[test]
-    fn create_env_failure_reason_names_the_builder() {
-        use std::os::unix::process::ExitStatusExt;
-
-        let status = std::process::ExitStatus::from_raw(2 << 8);
-        let reason = create_env_failure_reason("uv", status, b"no interpreter found\n");
-
-        assert!(reason.starts_with("uv exited with"), "{reason}");
-        assert!(reason.contains("no interpreter found"), "{reason}");
-    }
-
-    /// Empty stderr (e.g. the process was killed by a signal before writing
-    /// anything) must not produce a dangling ": " with nothing after it.
-    #[cfg(unix)]
-    #[test]
-    fn venv_failure_reason_omits_colon_when_stderr_is_empty() {
-        use std::os::unix::process::ExitStatusExt;
-
-        let status = std::process::ExitStatus::from_raw(1 << 8);
-        let reason = create_env_failure_reason("venv", status, b"");
-
-        // No trailing ": " separator (which would precede an empty stderr
-        // section) — just the bare "exited with <status>" whatever ExitStatus's
-        // own Display happens to contain.
-        assert_eq!(reason, format!("venv exited with {status}"));
     }
 }

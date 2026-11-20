@@ -2,7 +2,7 @@
 # Written by scripts/check_unix_only_tests.py --update.
 crates/gglib-core 16
 crates/gglib-db 8
-crates/gglib-download 9
+crates/gglib-download 0
 crates/gglib-gguf 0
 crates/gglib-bootstrap 0
 crates/gglib-app-services 5
@@ -15,7 +15,7 @@ crates/gglib-agent 0
 crates/gglib-engine-llama 0
 crates/gglib-broadcast 0
 crates/gglib-test-http 0
-crates/gglib-test-proc 0
+crates/gglib-test-proc 1
 crates/gglib-cli 29
 crates/gglib-axum 0
 crates/gglib-ffi 0
