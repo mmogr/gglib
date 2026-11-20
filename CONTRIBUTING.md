@@ -653,6 +653,15 @@ A test gated to Unix (`#[cfg(unix)]`, `not(windows)`, a Unix `target_os`, a `cfg
 ./scripts/check_unix_only_tests.py --update   # rewrite the baseline
 ```
 
+### A test names its data root
+
+A build made for tests never answers a test with your real gglib data folder. There, `gglib_core::paths::data_root()` and everything built on it (the database, the pidfile directory, the llama.cpp and image-engine installs, the logs) panic in a test that has named no root, and the message names the fix. It is a panic and not an error because the code under test can take an error for "nothing is installed", and the test then passes on the wrong grounds:
+
+- **A test that reaches any of them starts with `gglib_core::paths::isolate_data_root()`.** It gives the test binary a temporary root for the life of its process. gglib-core's own unit tests set `GGLIB_DATA_DIR` with `EnvVarGuard` under `ENV_LOCK` instead, because a root for the whole process would override theirs. A test that starts `gglib` as a child sets `GGLIB_DATA_DIR` on the command: the child is a program, and a program is not refused.
+- **The refusal is certain for a test run alone, and depends on order in a full run.** The root is set once for a process, so a test that names none is refused when it runs before the first test in its binary that names one, and passes after it, on that test's root. It reaches your folder in neither case. When CI fails with "A test asked for the user's own gglib data folder" in a test your change did not add, the test was always missing the line and this run put it first: add `isolate_data_root()` at its top in the same pull request.
+- **Where it is compiled.** In gglib-core's unit tests, and in any build with gglib-core's `test-utils` feature. Every crate that depends on gglib-core turns the feature on in its `[dev-dependencies]`, so `cargo test -p <crate>` is held as the workspace run is; a new crate does the same. An ordinary build has none of it.
+- **Only a program's `main` calls `gglib_core::paths::this_is_a_gglib_program()`.** It is how a `gglib` that a test run built still serves your folder, and `clippy.toml` refuses the call anywhere else.
+
 ### Lockfile discipline
 
 `Cargo.lock` is committed and must stay consistent. Before anything builds, the `test` job runs `cargo metadata --locked` for the workspace and for `src-tauri`, which fails when the lock does not already satisfy every manifest. After editing a `Cargo.toml`, run `make check`, which records the change in the lock, and commit the result. To move one third-party crate, run `cargo update -p <crate> --precise <version>`, and name in the PR every version the lock diff moves. Never run `cargo generate-lockfile`: it re-resolves every dependency against whatever the registry holds that minute, so its diff carries third-party upgrades nobody reviewed.

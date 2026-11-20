@@ -26,6 +26,13 @@ or cleaning a checkout changes nothing.
 llama.cpp and sd-server installs alone. A build with a folder of its own also
 wants a daemon of its own, on the port `GGLIB_DAEMON_PORT` names.
 
+A build made for tests answers a test with neither the per-user folder nor
+anything under it: `data_root` refuses a test that has named no root, with
+a panic that says how to name one, before the folder is looked for. A test
+names one with `isolate_data_root` or `GGLIB_DATA_DIR`. A gglib program such
+a build produced says what it is with `this_is_a_gglib_program`, the first
+line of its `main`, and resolves as any other build does.
+
 `source_checkout` says whether this binary was built from a checkout that is
 still there. It decides nothing about data: only whether
 `gglib config check-deps` holds this gglib to what building it needs (an

@@ -21,6 +21,11 @@ use tauri::menu::Menu;
 use tracing::{debug, error, info};
 
 fn main() {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "this is the desktop app's `main`"
+    )]
+    gglib_core::paths::this_is_a_gglib_program();
     gglib_core::utils::process::host::prepare();
 
     // Initialize shared tracing (idempotent; safe to call from multiple entry points)

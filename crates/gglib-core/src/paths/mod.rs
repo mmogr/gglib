@@ -29,7 +29,9 @@ pub use error::PathError;
 pub use canonical::{canonical, child, drive_root, inside, inside_on, is_verbatim, join};
 
 // Platform detection and roots
-pub use platform::{data_root, data_root_source, resource_root, source_checkout};
+pub use platform::{
+    data_root, data_root_source, resource_root, source_checkout, this_is_a_gglib_program,
+};
 
 // A test binary's own data root, which only the `test-utils` feature compiles
 #[cfg(feature = "test-utils")]

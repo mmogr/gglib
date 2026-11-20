@@ -30,6 +30,8 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 
 [dev-dependencies]
+# `test-utils` so a test here is refused the user's own data folder (#2088).
+gglib-core = { workspace = true, features = ["test-utils"] }
 tempfile = { workspace = true }
 
 [lints]
