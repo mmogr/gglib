@@ -15,6 +15,8 @@ pub(crate) mod opened;
 pub(crate) mod path;
 pub(crate) mod resolver;
 pub(crate) mod service;
+#[cfg(any(test, feature = "test-utils"))]
+pub(crate) mod stand_in;
 pub(crate) mod stderr_tail;
 pub(crate) mod tool_executor;
 pub(crate) mod tool_images;
@@ -32,4 +34,7 @@ pub use builtin::{
 pub use client::SERVER_EXIT_GRACE;
 pub use combined::CombinedToolExecutor;
 pub use service::{McpServerInfo, McpService};
+// An MCP server for a test to start, in this crate or another.
+#[cfg(any(test, feature = "test-utils"))]
+pub use stand_in::StandIn;
 pub use tool_images::describe_item;

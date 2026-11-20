@@ -53,36 +53,45 @@ fn a_file_is_created_only_where_nothing_is() {
     assert_eq!(std::fs::read(&path).unwrap(), b"downloaded");
 }
 
-/// A folder that is a link to another is refused, and so is a file that
-/// is one: the name must mean the thing itself.
-// Unix-only: it tests the symbolic-link branch `refuse_a_link` has off
-// Windows. Its Windows twin is the junction test below.
-#[cfg(unix)]
+/// A folder that is a link to another is refused: the name must mean the
+/// folder itself. A file is no folder either.
 #[test]
-fn a_link_is_refused_on_unix() {
+fn a_linked_folder_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let real = dir.path().join("real");
     std::fs::create_dir(&real).unwrap();
     std::fs::write(real.join("installer"), b"x").unwrap();
     let linked = dir.path().join("linked");
-    std::os::unix::fs::symlink(&real, &linked).unwrap();
-    let file_link = dir.path().join("file-link");
-    std::os::unix::fs::symlink(real.join("installer"), &file_link).unwrap();
+    crate::paths::link_folder(&real, &linked);
 
     assert!(hold_folder(&real).is_ok());
     assert!(hold_folder(&linked).is_err());
-    assert!(hold_unchanged(&file_link).is_err());
     assert!(
         hold_folder(&real.join("installer")).is_err(),
         "a file is not a folder"
     );
 }
 
-/// A junction in a folder's place is refused, and a folder held cannot be
-/// renamed or deleted while files are still made in it.
+/// A file that is a link to another is refused, and the file itself is
+/// held.
+// Unix only: a file link, which `refuse_a_link` reads with `symlink_metadata` off Windows.
+#[cfg(unix)]
+#[test]
+fn a_linked_file_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let installer = dir.path().join("installer");
+    std::fs::write(&installer, b"x").unwrap();
+    let file_link = dir.path().join("file-link");
+    std::os::unix::fs::symlink(&installer, &file_link).unwrap();
+
+    assert!(hold_unchanged(&installer).is_ok());
+    assert!(hold_unchanged(&file_link).is_err());
+}
+
+/// A folder held cannot be renamed while files are still made in it.
 #[cfg(windows)]
 #[test]
-fn a_held_folder_stays_put_and_a_junction_is_refused_on_windows() {
+fn a_held_folder_stays_put_on_windows() {
     let dir = tempfile::tempdir().unwrap();
     let folder = dir.path().join("install");
     std::fs::create_dir(&folder).unwrap();
@@ -92,16 +101,6 @@ fn a_held_folder_stays_put_and_a_junction_is_refused_on_windows() {
     assert!(std::fs::rename(&folder, dir.path().join("moved")).is_err());
     drop(held);
     std::fs::remove_file(folder.join("made-inside")).unwrap();
-
-    let junction = dir.path().join("junction");
-    let made = super::super::cmd("cmd")
-        .args(["/C", "mklink", "/J"])
-        .arg(&junction)
-        .arg(&folder)
-        .status()
-        .unwrap();
-    assert!(made.success(), "mklink /J needs no privilege");
-    assert!(hold_folder(&junction).is_err());
 }
 
 /// While it is held, another open to write it, its deletion and its
