@@ -28,7 +28,14 @@
 # refuse and that names a file by a second string; the owner writes it as a
 # plain path where one can be written. `allow-invalid` on tokio's, which a
 # crate without tokio's `fs` feature cannot resolve.
+#
+# Only a gglib program's `main` says it is one (#2088). In a build made for
+# tests, gglib_core::paths::data_root refuses a test the user's own data
+# folder and tells a test from a program by that call, so a test that made it
+# would read and write the real folder. `allow-invalid` for the crates that
+# do not depend on gglib-core.
 disallowed-methods = [
+    { path = "gglib_core::paths::this_is_a_gglib_program", reason = "only a gglib program's main says it is one; a test names its data root with gglib_core::paths::isolate_data_root or GGLIB_DATA_DIR", allow-invalid = true },
     { path = "std::process::Command::new", reason = "start a program with gglib_core::utils::process::cmd, which opens no console window on Windows" },
     { path = "tokio::process::Command::new", reason = "start a program with gglib_core::utils::process::async_cmd, which opens no console window on Windows", allow-invalid = true },
     { path = "std::os::windows::process::CommandExt::creation_flags", reason = "the creation flags are set in gglib_core::utils::process only", allow-invalid = true },
