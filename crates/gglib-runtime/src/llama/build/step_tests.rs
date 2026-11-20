@@ -1,18 +1,20 @@
-//! The configure and compile steps, run against `sh` standing in for cmake.
+//! The configure and compile steps, run against the stand-in program in
+//! place of cmake.
 
 use super::{run_compile, run_configure};
 use crate::llama::build_events::BuildEvent;
 use gglib_core::utils::process::cmd;
-use std::io::Write;
 use std::process::Command;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-/// `sh -c <script>`, the command a step is handed in place of cmake.
-fn stand_in(script: &str) -> Command {
-    let mut command = cmd("sh");
-    command.args(["-c", script]);
-    command
+/// The command a step is handed in place of cmake: a program that follows
+/// `instructions`, with the folder it is in, which lasts as long as the
+/// caller holds it.
+fn stand_in(instructions: &str) -> (tempfile::TempDir, Command) {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let program = gglib_test_proc::install(dir.path(), "cmake", instructions);
+    (dir, cmd(program))
 }
 
 /// One event as a short line, so a run reads as a list of strings.
@@ -45,8 +47,8 @@ fn take(events: &mut Vec<String>, line: &str) {
 
 #[tokio::test]
 async fn a_step_reports_each_line_while_its_command_is_still_running() {
-    let (stdin, mut release) = std::io::pipe().expect("a pipe");
-    let mut command = stand_in("echo from-stdout; read _; echo from-stderr >&2");
+    let (stdin, release) = std::io::pipe().expect("a pipe");
+    let (_dir, mut command) = stand_in("print from-stdout\nread\neprint from-stderr");
     command.stdin(stdin);
     let (tx, mut rx) = mpsc::channel(64);
     let step = tokio::task::spawn_blocking(move || run_configure(command, &tx));
@@ -54,7 +56,7 @@ async fn a_step_reports_each_line_while_its_command_is_still_running() {
     // The stand-in is now waiting on its stdin, so its first line can only be
     // here if the step passed it on before the command exited.
     let first = tokio::time::timeout(Duration::from_secs(30), rx.recv()).await;
-    release.write_all(b"\n").expect("let the stand-in go on");
+    // The stand-in reads until its stdin ends.
     drop(release);
 
     assert_eq!(
@@ -78,11 +80,10 @@ async fn a_step_reports_each_line_while_its_command_is_still_running() {
 fn a_configure_step_that_exits_nonzero_says_cmake_configuration_failed() {
     let (tx, mut rx) = mpsc::channel(64);
 
-    let err = run_configure(
-        stand_in("echo checking; echo; echo '   '; echo 'no compiler' >&2; exit 3"),
-        &tx,
-    )
-    .expect_err("the stand-in exits 3");
+    // A line of nothing and a line of spaces are among what it prints.
+    let (_dir, command) = stand_in("print checking\nprint\nprint    \neprint no compiler\nexit 3");
+
+    let err = run_configure(command, &tx).expect_err("the stand-in exits 3");
 
     assert_eq!(err.to_string(), "CMake configuration failed");
     let mut events = sent(&mut rx);
@@ -94,14 +95,12 @@ fn a_configure_step_that_exits_nonzero_says_cmake_configuration_failed() {
 fn a_compile_step_that_exits_nonzero_reports_the_exit_code() {
     let (tx, mut rx) = mpsc::channel(64);
 
-    let err = run_compile(
-        stand_in(
-            "echo '[ 50%] Building CXX object a.o'; echo 'scanning dependencies'; \
-             echo '[100%] Linking CXX executable x'; echo 'ld: fatal error' >&2; exit 2",
-        ),
-        &tx,
-    )
-    .expect_err("the stand-in exits 2");
+    let (_dir, command) = stand_in(
+        "print [ 50%] Building CXX object a.o\nprint scanning dependencies\n\
+         print [100%] Linking CXX executable x\neprint ld: fatal error\nexit 2",
+    );
+
+    let err = run_compile(command, &tx).expect_err("the stand-in exits 2");
 
     assert_eq!(err.to_string(), "Build failed (exit code: 2)");
     let mut events = sent(&mut rx);
@@ -122,8 +121,11 @@ fn a_compile_step_that_exits_nonzero_reports_the_exit_code() {
 fn a_step_whose_command_exits_zero_succeeds() {
     let (tx, mut rx) = mpsc::channel(64);
 
-    run_configure(stand_in("echo configured"), &tx).expect("the stand-in exits 0");
-    run_compile(stand_in("echo '[3/4] Building C object b.o'"), &tx).expect("the stand-in exits 0");
+    let (_configure_dir, configure) = stand_in("print configured");
+    let (_compile_dir, compile) = stand_in("print [3/4] Building C object b.o");
+
+    run_configure(configure, &tx).expect("the stand-in exits 0");
+    run_compile(compile, &tx).expect("the stand-in exits 0");
 
     assert_eq!(
         sent(&mut rx),
