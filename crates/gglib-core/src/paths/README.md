@@ -33,6 +33,10 @@ names one with `isolate_data_root` or `GGLIB_DATA_DIR`. A gglib program such
 a build produced says what it is with `this_is_a_gglib_program`, the first
 line of its `main`, and resolves as any other build does.
 
+The same builds have `link_folder(target, link)`, for a test that needs a
+folder reached under a second name: a symbolic link on macOS and Linux, a
+junction on Windows, so the test runs on all three.
+
 `source_checkout` says whether this binary was built from a checkout that is
 still there. It decides nothing about data: only whether
 `gglib config check-deps` holds this gglib to what building it needs (an

@@ -13,6 +13,8 @@ mod remote;
 mod resolver;
 mod sd;
 mod slots;
+#[cfg(any(test, feature = "test-utils"))]
+mod test_links;
 #[cfg(feature = "test-utils")]
 mod test_root;
 pub mod user_path;
@@ -36,6 +38,11 @@ pub use platform::{
 // A test binary's own data root, which only the `test-utils` feature compiles
 #[cfg(feature = "test-utils")]
 pub use test_root::isolate_data_root;
+
+// A folder link a test makes the same way on every OS, compiled in this
+// crate's tests and with the `test-utils` feature
+#[cfg(any(test, feature = "test-utils"))]
+pub use test_links::link_folder;
 
 // Database
 pub use database::database_path;
