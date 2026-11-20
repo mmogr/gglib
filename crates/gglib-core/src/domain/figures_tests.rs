@@ -1,7 +1,9 @@
 //! Each figure from known inputs, and each in the words the GUI says it in
 //! (`readings/turnFigures.ts`, `readings/rate.ts`).
 
-use super::{count_words, rate_words, seconds_words, tokens_per_second, tokens_words};
+use super::{
+    count_words, image_cost_words, rate_words, seconds_words, tokens_per_second, tokens_words,
+};
 
 #[test]
 fn a_rate_is_tokens_over_the_seconds_writing() {
@@ -68,4 +70,33 @@ fn one_token_is_a_token() {
     assert_eq!(tokens_words(1), "1 token");
     assert_eq!(tokens_words(2), "2 tokens");
     assert_eq!(tokens_words(2_100), "2,100 tokens");
+}
+
+/// The estimate is said as the chat page says an image's (`~3,600 tokens`),
+/// and the prompt only once it has been counted.
+#[test]
+fn an_image_cost_says_the_images_their_estimate_and_then_the_prompt() {
+    assert_eq!(
+        image_cost_words(1, 3_600, None).as_deref(),
+        Some("1 image ~3,600 tokens")
+    );
+    assert_eq!(
+        image_cost_words(1, 3_600, Some(3_646)).as_deref(),
+        Some("1 image ~3,600 tokens \u{b7} 3,646 prompt tokens")
+    );
+    assert_eq!(
+        image_cost_words(2, 7_200, Some(7_451)).as_deref(),
+        Some("2 images ~7,200 tokens \u{b7} 7,451 prompt tokens")
+    );
+    assert_eq!(
+        image_cost_words(1, 1, Some(1)).as_deref(),
+        Some("1 image ~1 token \u{b7} 1 prompt token")
+    );
+}
+
+/// A request with no image has no image cost, whatever its prompt was.
+#[test]
+fn a_request_with_no_image_has_no_image_cost() {
+    assert_eq!(image_cost_words(0, 0, None), None);
+    assert_eq!(image_cost_words(0, 0, Some(812)), None);
 }

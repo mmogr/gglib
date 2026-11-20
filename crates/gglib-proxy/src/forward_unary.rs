@@ -66,8 +66,8 @@ pub(crate) async fn forward_unary(
     // fail; a `None` only means the turn falls open to its first answer.
     let again = req_builder.try_clone();
     let request = req_builder.body(body.clone());
-    let residue_sink = Some((metrics, snapshot_seq));
-    let (content_type, answer) = match exchange(request, total, cache_metrics, residue_sink).await {
+    let snapshot = Some((metrics, snapshot_seq));
+    let (content_type, answer) = match exchange(request, total, cache_metrics, snapshot).await {
         Exchange::Answered(content_type, answer) => (content_type, answer),
         Exchange::Respond(response) => return Ok(response),
         Exchange::SendFailed(e) if e.is_connect() || e.is_timeout() => {

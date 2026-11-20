@@ -29,7 +29,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use gglib_core::domain::defects::LoopGuardTrip;
-use gglib_core::domain::figures::tokens_per_second;
+use gglib_core::domain::figures::{image_cost_words, tokens_per_second};
 use gglib_core::domain::{Intervention, InterventionKind};
 
 use crate::generation::TurnGeneration;
@@ -68,6 +68,29 @@ pub struct ContextSnapshot {
     /// `true` when the hard-abort budget check triggered and an HTTP 400 was
     /// returned to the client instead of forwarding the request.
     pub was_clamped: bool,
+    /// How many images the request carries, over every message: counted on
+    /// the body sent on to the model, after trimming, and on the body as it
+    /// arrived for a request refused as longer than the context. Zero on a
+    /// run the loop guard ended.
+    pub images: usize,
+    /// The prompt tokens those images were estimated at: the sum of
+    /// `gglib_core::request_pipeline::image_url_tokens` over them, which is
+    /// what the context budget counted them at.
+    pub image_tokens: usize,
+    /// `usage.prompt_tokens` as the upstream reported it: the whole prompt,
+    /// text, template and images together. `None` until the turn's usage is
+    /// read, when [`ContextMetricsStore::flag_prompt_tokens`] writes it, and
+    /// on a turn that ended without one being read.
+    ///
+    /// Streamed: from the first generation's `Usage` frame. Non-streaming:
+    /// from the first answer's body. A re-issue's count is not read.
+    pub prompt_tokens: Option<u32>,
+    /// What the images cost, in the words every surface shows
+    /// (`gglib_core::domain::figures::image_cost_words`): the images and
+    /// their estimate, then the prompt tokens once they are written. `None`
+    /// with no image. The store writes it where the request is recorded and
+    /// again when its prompt tokens land; a value a caller passes is replaced.
+    pub image_words: Option<String>,
     /// `true` when dialect residue — tool-call markup llama-server left
     /// unparsed — reached this request's client-visible output (see
     /// `gglib_core::normalize::residue`). Back-patched after the response
@@ -256,6 +279,11 @@ impl ContextMetricsStore {
     pub fn record(&self, mut snapshot: ContextSnapshot) -> u64 {
         let seq = self.total_requests.fetch_add(1, Ordering::Relaxed);
         snapshot.seq = seq;
+        snapshot.image_words = image_cost_words(
+            snapshot.images,
+            snapshot.image_tokens,
+            snapshot.prompt_tokens,
+        );
 
         if let Some(ledger) = &self.ledger {
             if let Some(which) = snapshot.loop_guard_trip {
@@ -401,6 +429,24 @@ impl ContextMetricsStore {
             snapshot.generation_ms = generation.generation_ms;
             snapshot.tokens_per_second =
                 tokens_per_second(generation.completion_tokens, generation.generation_ms);
+        }
+    }
+
+    /// Write the prompt tokens the upstream counted for the request recorded
+    /// with `seq` onto its snapshot, and say its images' cost again with
+    /// them.
+    ///
+    /// Does nothing when that snapshot has left the ring buffer. It counts
+    /// nothing: no total, and nothing in the ledger.
+    pub fn flag_prompt_tokens(&self, seq: u64, prompt_tokens: u32) {
+        let mut guard = self
+            .snapshots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Some(snapshot) = guard.iter_mut().find(|s| s.seq == seq) {
+            snapshot.prompt_tokens = Some(prompt_tokens);
+            snapshot.image_words =
+                image_cost_words(snapshot.images, snapshot.image_tokens, Some(prompt_tokens));
         }
     }
 

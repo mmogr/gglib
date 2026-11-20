@@ -70,7 +70,7 @@ pub(crate) async fn exchange(
     request: reqwest::RequestBuilder,
     total: Duration,
     cache_metrics: &CacheMetricsStore,
-    residue_sink: Option<(&ContextMetricsStore, u64)>,
+    snapshot: Option<(&ContextMetricsStore, u64)>,
 ) -> Exchange {
     let exchange = async {
         let response = match request.send().await {
@@ -81,7 +81,7 @@ pub(crate) async fn exchange(
         if !status.is_success() {
             return Exchange::Respond(relayed(status, response).await);
         }
-        match read_non_streaming_body(response, cache_metrics, residue_sink).await {
+        match read_non_streaming_body(response, cache_metrics, snapshot).await {
             Ok((content_type, body)) => Exchange::Answered(content_type, body),
             Err(e) => Exchange::Respond(unreadable_upstream(&e)),
         }
@@ -181,9 +181,10 @@ fn usage_from_response_body(body: &[u8]) -> Option<(u32, Option<u32>)> {
 /// Read a non-streaming answer whole: the content type to answer under, and
 /// the body.
 ///
-/// `residue_sink` — the metrics store and this request's snapshot sequence
-/// number — receives the drift-alarm flag when a choice's content carries
-/// tool-call markup. `None` for paths that record no snapshot (embeddings).
+/// `snapshot` — the metrics store and this request's snapshot sequence
+/// number — is given the prompt tokens the body reports, and the drift-alarm
+/// flag when a choice's content carries tool-call markup. `None` for paths
+/// that record no snapshot (embeddings).
 ///
 /// # Errors
 ///
@@ -192,7 +193,7 @@ fn usage_from_response_body(body: &[u8]) -> Option<(u32, Option<u32>)> {
 async fn read_non_streaming_body(
     response: reqwest::Response,
     cache_metrics: &CacheMetricsStore,
-    residue_sink: Option<(&ContextMetricsStore, u64)>,
+    snapshot: Option<(&ContextMetricsStore, u64)>,
 ) -> reqwest::Result<(HeaderValue, Bytes)> {
     // Collect upstream headers we want to preserve
     let content_type = response
@@ -209,8 +210,11 @@ async fn read_non_streaming_body(
     // never change what the client receives.
     if let Some((prompt_tokens, cached_tokens)) = usage_from_response_body(&body_bytes) {
         cache_metrics.record(prompt_tokens, cached_tokens);
+        if let Some((metrics, seq)) = snapshot {
+            metrics.flag_prompt_tokens(seq, prompt_tokens);
+        }
     }
-    if let Some((metrics, seq)) = residue_sink
+    if let Some((metrics, seq)) = snapshot
         && let Some(marker) = content_residue(&body_bytes)
     {
         warn!(

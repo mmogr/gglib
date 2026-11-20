@@ -280,6 +280,9 @@ pub(crate) fn spawn_and_return(
                 // Calibrate this model's chars-per-token ratio from the
                 // real prompt-token count the upstream reported.
                 if let Some(prompt_tokens) = outcome.prompt_tokens {
+                    // Onto this request's dashboard snapshot too, where an
+                    // image request's row says it beside the estimate.
+                    context_metrics.flag_prompt_tokens(snapshot_seq, prompt_tokens);
                     calibration.record(&model_name_owned, forwarded_chars, prompt_tokens);
                     // Prompt-cache telemetry. Recorded only alongside a real
                     // prompt-token count, so a request that never produced a

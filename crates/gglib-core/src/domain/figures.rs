@@ -1,5 +1,5 @@
 //! The figures every surface says the same way: how fast a model wrote, how
-//! long something took, and a count.
+//! long something took, a count, and what a request's images cost.
 //!
 //! A writing rate is computed here once, for a proxied request
 //! (`ContextSnapshot::tokens_per_second`) and for an agent turn
@@ -9,6 +9,7 @@
 //! are pinned on both sides by `contracts/runs/turn_made.json` and
 //! `contracts/proxy/figures.json`.
 
+use std::fmt::Write as _;
 use std::time::Duration;
 
 /// Tokens written per second of writing: `tokens` over `ms`.
@@ -99,6 +100,44 @@ pub fn count_words(count: u64) -> String {
         out.push(ch);
     }
     out
+}
+
+/// What a request's images cost, as every surface says it; `None` for a
+/// request with no image.
+///
+/// First how many there are and the prompt tokens they were estimated at,
+/// "1 image ~3,600 tokens". Then, once the model's server has counted it, the
+/// whole prompt, text and images together: "2 images ~7,200 tokens · 7,451
+/// prompt tokens".
+///
+/// The proxy serves these words on each request's record
+/// (`ContextSnapshot::image_words`), and `gglib proxy dashboard` and the GUI
+/// print them as served.
+#[must_use]
+pub fn image_cost_words(
+    images: usize,
+    image_tokens: usize,
+    prompt_tokens: Option<u32>,
+) -> Option<String> {
+    if images == 0 {
+        return None;
+    }
+    let wide = |count: usize| u64::try_from(count).unwrap_or(u64::MAX);
+    let unit = if images == 1 { "image" } else { "images" };
+    let mut words = format!(
+        "{} {unit} ~{}",
+        count_words(wide(images)),
+        tokens_words(wide(image_tokens))
+    );
+    if let Some(prompt) = prompt_tokens {
+        let unit = if prompt == 1 { "token" } else { "tokens" };
+        let _ = write!(
+            words,
+            " \u{b7} {} prompt {unit}",
+            count_words(u64::from(prompt))
+        );
+    }
+    Some(words)
 }
 
 #[cfg(test)]

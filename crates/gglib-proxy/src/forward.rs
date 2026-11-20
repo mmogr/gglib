@@ -75,8 +75,8 @@ use tracing::{debug, error, info, warn};
 
 use gglib_core::LlmStreamEvent;
 use gglib_core::request_pipeline::{
-    self, ContextBudget, ModelContext, SamplingDecision, SamplingLayers, TruncationError,
-    TruncationReport,
+    self, ContextBudget, ModelContext, RequestImages, SamplingDecision, SamplingLayers,
+    TruncationError, TruncationReport,
 };
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseItem};
 
@@ -411,6 +411,15 @@ fn context_length_exceeded_response() -> Response {
         .into_response()
 }
 
+/// A request [`shape_request_body`] could not make fit.
+#[derive(Debug)]
+struct OverBudget {
+    /// Why it does not fit.
+    error: TruncationError,
+    /// The images it arrived with.
+    images: RequestImages,
+}
+
 /// What [`shape_request_body`] did, for the caller that reports it.
 #[derive(Debug)]
 struct ShapedRequest {
@@ -419,8 +428,8 @@ struct ShapedRequest {
     body: Bytes,
     /// Zeroed when nothing was measured.
     truncation: TruncationReport,
-    /// Whether any message carries an image; `false` for a body never read.
-    carries_images: bool,
+    /// The images the body to forward carries; none for a body never read.
+    images: RequestImages,
     /// What the sampling stage resolved, when it ran at all.
     ///
     /// `None` on a body that was never JSON: the pipeline did not execute, so
@@ -445,31 +454,38 @@ struct ShapedRequest {
 ///
 /// # Errors
 ///
-/// [`TruncationError`] when the conversation cannot be made to fit
-/// `budget`.  The caller maps it to the wire contract.
+/// [`OverBudget`] when the conversation cannot be made to fit `budget`.  The
+/// caller maps it to the wire contract.
 fn shape_request_body(
     body: Bytes,
     ctx: &ModelContext,
     layers: &SamplingLayers,
     budget: Option<ContextBudget>,
-) -> Result<ShapedRequest, TruncationError> {
+) -> Result<ShapedRequest, OverBudget> {
     let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
         return Ok(ShapedRequest {
             body,
             truncation: TruncationReport::default(),
-            carries_images: false,
+            images: RequestImages::default(),
             sampling: None,
         });
     };
 
-    let report = request_pipeline::apply(&mut value, ctx, layers, budget)?;
-    let carries_images = request_pipeline::has_images(&value);
+    // Counted before the pipeline runs, which may leave a body it refuses
+    // partly trimmed.
+    let arrived = RequestImages::of(&value);
+    let report =
+        request_pipeline::apply(&mut value, ctx, layers, budget).map_err(|error| OverBudget {
+            error,
+            images: arrived,
+        })?;
+    let images = RequestImages::of(&value);
 
     match serde_json::to_vec(&value) {
         Ok(v) => Ok(ShapedRequest {
             body: Bytes::from(v),
             truncation: report.truncation,
-            carries_images,
+            images,
             sampling: Some(report.sampling),
         }),
         Err(e) => {
@@ -483,7 +499,7 @@ fn shape_request_body(
             Ok(ShapedRequest {
                 body,
                 truncation: TruncationReport::default(),
-                carries_images,
+                images,
                 sampling: Some(sampling),
             })
         }
@@ -666,7 +682,7 @@ pub(crate) async fn forward_chat_completion(
 
     let shaped = match shape_request_body(body, &context, &sampling, budget) {
         Ok(shaped) => shaped,
-        Err(e) => {
+        Err(OverBudget { error: e, images }) => {
             // Hard abort: the conversation cannot be trimmed to fit. Record a
             // clamped snapshot — the zeroed char counts are how the dashboard
             // tells a clamped request from a measured one — then reject with
@@ -679,6 +695,10 @@ pub(crate) async fn forward_chat_completion(
                 payload_chars_after: 0,
                 messages_truncated: 0,
                 was_clamped: true,
+                images: images.count,
+                image_tokens: images.tokens,
+                prompt_tokens: None,
+                image_words: None,
                 dialect_residue: false,
                 tool_repaired: false,
                 completion_tokens: None,
@@ -704,7 +724,7 @@ pub(crate) async fn forward_chat_completion(
     let ShapedRequest {
         body,
         truncation: report,
-        carries_images,
+        images,
         sampling: decision,
     } = shaped;
 
@@ -738,6 +758,10 @@ pub(crate) async fn forward_chat_completion(
         payload_chars_after: report.payload_chars_after,
         messages_truncated: report.messages_truncated,
         was_clamped: false,
+        images: images.count,
+        image_tokens: images.tokens,
+        prompt_tokens: None,
+        image_words: None,
         dialect_residue: false,
         tool_repaired: false,
         completion_tokens: None,
@@ -802,7 +826,7 @@ pub(crate) async fn forward_chat_completion(
         // Bytes forwarded upstream, paired with the usage frame's prompt-token
         // count to calibrate this model's chars-per-token ratio. `None` with
         // an image aboard, whose tokens come from its pixels, not its length.
-        let forwarded_chars = (!carries_images).then_some(body.len());
+        let forwarded_chars = (images.count == 0).then_some(body.len());
 
         // Phase 1 — TCP probe (1 s timeout).
         let probe_addr = host_port_from_url(upstream_url);

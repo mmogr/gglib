@@ -14,6 +14,10 @@ fn make_snapshot(model: &str) -> ContextSnapshot {
         payload_chars_after: 800,
         messages_truncated: 1,
         was_clamped: false,
+        images: 0,
+        image_tokens: 0,
+        prompt_tokens: None,
+        image_words: None,
         dialect_residue: false,
         tool_repaired: false,
         completion_tokens: None,
@@ -327,5 +331,54 @@ fn what_was_done_to_a_request_is_said_in_words() {
     assert_eq!(
         words(store.recent(1)[0].interventions.clone()),
         ["Repaired a tool call"]
+    );
+}
+
+/// An image request's cost is said where it is recorded, and again with the
+/// prompt tokens once the upstream has counted them.
+#[test]
+fn prompt_tokens_land_on_the_snapshot_and_in_its_image_words() {
+    let store = ContextMetricsStore::new();
+    let seq = store.record(ContextSnapshot {
+        images: 2,
+        image_tokens: 7_200,
+        ..make_snapshot("sees")
+    });
+    let text = store.record(make_snapshot("sees"));
+    assert_eq!(
+        store.recent(2)[0].image_words.as_deref(),
+        Some("2 images ~7,200 tokens")
+    );
+
+    store.flag_prompt_tokens(seq, 7_451);
+    store.flag_prompt_tokens(text, 812);
+
+    let recent = store.recent(2);
+    assert_eq!(recent[0].prompt_tokens, Some(7_451));
+    assert_eq!(
+        recent[0].image_words.as_deref(),
+        Some("2 images ~7,200 tokens \u{b7} 7,451 prompt tokens")
+    );
+    assert_eq!(recent[1].prompt_tokens, Some(812));
+    assert_eq!(recent[1].image_words, None, "no image, no image words");
+}
+
+/// Prompt tokens for a snapshot already out of the ring are dropped, and
+/// reach no other snapshot.
+#[test]
+fn prompt_tokens_for_an_evicted_snapshot_change_nothing() {
+    let store = ContextMetricsStore::new();
+    let first = store.record(make_snapshot("a"));
+    for _ in 0..MAX_SNAPSHOTS {
+        store.record(make_snapshot("b"));
+    }
+
+    store.flag_prompt_tokens(first, 99);
+
+    assert!(
+        store
+            .recent(usize::MAX)
+            .iter()
+            .all(|row| row.prompt_tokens.is_none())
     );
 }

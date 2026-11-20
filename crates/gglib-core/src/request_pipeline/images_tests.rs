@@ -73,6 +73,29 @@ fn a_requests_images_are_every_messages_in_order_history_included() {
     assert!(has_images(&body));
 }
 
+/// A request's images are counted and charged together: one whose size is
+/// read at its estimate, one whose size cannot be read at the cap.
+#[test]
+fn a_requests_images_are_counted_and_their_estimates_summed() {
+    let screenshot = data_url("image/png", &png(2560, 1440));
+    let body = json!({"messages": [
+        {"role": "user", "content": [image_part(&screenshot)]},
+        {"role": "assistant", "content": "a cat"},
+        {"role": "user", "content": [image_part("https://example.com/a.png")]},
+    ]});
+    assert_eq!(
+        RequestImages::of(&body),
+        RequestImages {
+            count: 2,
+            tokens: 3600 + MAX_IMAGE_TOKENS
+        }
+    );
+    assert_eq!(
+        RequestImages::of(&json!({"messages": [{"role": "user", "content": "image_url"}]})),
+        RequestImages::default()
+    );
+}
+
 #[test]
 fn a_request_with_no_image_part_has_no_images() {
     for body in [

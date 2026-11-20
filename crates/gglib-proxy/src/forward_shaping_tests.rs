@@ -103,9 +103,10 @@ fn shaping_reports_the_error_when_the_budget_cannot_be_met() {
     .expect_err("nothing left to trim, still over");
 
     assert!(matches!(
-        err,
+        err.error,
         TruncationError::ExceedsBudgetAfterTruncation { .. }
     ));
+    assert_eq!(err.images, RequestImages::default(), "it arrived with none");
 }
 
 /// The wire contract clients branch on. Asserted field by field because
@@ -129,9 +130,11 @@ async fn the_context_length_contract_is_400_with_both_codes_set() {
     );
 }
 
-/// What calibration is skipped by: an image anywhere in the messages.
+/// What calibration is skipped by, and what the request's record says: the
+/// images anywhere in the messages, each at the cap when its size cannot be
+/// read.
 #[test]
-fn shaping_says_whether_the_request_carries_an_image() {
+fn shaping_says_the_images_the_request_carries() {
     let shape = |body: &'static str| {
         shape_request_body(
             Bytes::from(body),
@@ -140,18 +143,26 @@ fn shaping_says_whether_the_request_carries_an_image() {
             Some(chars(20_000)),
         )
         .expect("under the budget")
-        .carries_images
+        .images
     };
-    assert!(shape(
-        r#"{"model":"m","messages":[
+    let one_at_the_cap = RequestImages {
+        count: 1,
+        tokens: gglib_core::request_pipeline::MAX_IMAGE_TOKENS,
+    };
+    assert_eq!(
+        one_at_the_cap,
+        shape(
+            r#"{"model":"m","messages":[
             {"role":"user","content":[{"type":"image_url","image_url":{"url":"https://example.com/a.png"}}]},
             {"role":"assistant","content":"a cat"},
             {"role":"user","content":"and now?"}]}"#
-    ));
-    assert!(!shape(
-        r#"{"model":"m","messages":[{"role":"user","content":"image_url"}]}"#
-    ));
-    assert!(!shape("not json"));
+        )
+    );
+    assert_eq!(
+        RequestImages::default(),
+        shape(r#"{"model":"m","messages":[{"role":"user","content":"image_url"}]}"#)
+    );
+    assert_eq!(RequestImages::default(), shape("not json"));
 }
 
 /// A plain chat request whose history holds a drawn picture and whose tools
