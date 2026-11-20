@@ -124,6 +124,7 @@ async fn a_key_directory_that_cannot_be_made_refuses_the_join() {
 /// others have. A user no mode binds, such as root, would mint the key and
 /// dial, so the test first shows that this one cannot write there, and
 /// makes no join if it can.
+// Unix only: the folder is made unwritable by its mode.
 #[cfg(unix)]
 #[tokio::test]
 async fn a_first_key_that_cannot_be_written_refuses_the_join_with_nothing_to_delete() {

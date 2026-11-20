@@ -136,6 +136,7 @@ async fn a_key_file_that_holds_no_key_refuses_the_join_and_is_kept() {
 /// reason carries the remedy. The file holds a key, so its mode is the only
 /// fault, and it is dialled with a code, so the refusal comes back through
 /// `pair`.
+// Unix only: modelpipe refuses a key file by its mode.
 #[cfg(unix)]
 #[tokio::test]
 async fn a_key_file_others_can_read_refuses_the_join_and_is_kept() {
@@ -184,6 +185,7 @@ async fn a_key_file_others_can_read_refuses_the_join_and_is_kept() {
 /// modelpipe reads only a regular file. The link points at nothing, so a
 /// look that followed it would find no file and tell the person to fix the
 /// reason, when what is there to fix or delete is the link.
+// Unix only: a file link.
 #[cfg(unix)]
 #[tokio::test]
 async fn a_symlink_at_the_key_path_refuses_the_join_and_is_kept() {
