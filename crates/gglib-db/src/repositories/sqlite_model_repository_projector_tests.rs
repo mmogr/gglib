@@ -103,8 +103,7 @@ async fn update_stores_the_projector_path_resolved() {
 
 /// A download registered through the real repository, by a path that is not
 /// the resolved one the repository stores.
-#[cfg(unix)]
-mod through_a_symlink {
+mod through_a_linked_folder {
     use std::path::Path;
     use std::sync::Arc;
 
@@ -144,16 +143,16 @@ mod through_a_symlink {
         }
     }
 
-    /// The models directory is reached through a symlink. The model's owner
+    /// The models directory is reached through a link. The model's owner
     /// linked another projector by hand; downloading the model again, as a
     /// repair does, finds the model it already holds and keeps that link.
     #[tokio::test]
-    async fn a_model_downloaded_again_through_a_symlink_keeps_its_chosen_link() {
+    async fn a_model_downloaded_again_through_a_linked_folder_keeps_its_chosen_link() {
         let dir = tempfile::tempdir().unwrap();
         let real = dir.path().join("real");
         std::fs::create_dir(&real).unwrap();
         let models = dir.path().join("models");
-        std::os::unix::fs::symlink(&real, &models).unwrap();
+        gglib_core::paths::link_folder(&real, &models);
         let weights = models.join("zeta.Q8_0.gguf");
         let projector = models.join("mmproj-F16.gguf");
         std::fs::write(&weights, b"x").unwrap();

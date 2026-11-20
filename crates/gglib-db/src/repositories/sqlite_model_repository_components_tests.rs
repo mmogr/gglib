@@ -314,18 +314,17 @@ async fn a_delete_cascades_and_a_shared_path_survives() {
     assert_eq!(read_by_every_door(&repo, dev.id).await, vec![shared]);
 }
 
-/// Paths stored resolved, as the projector's is, through a symlinked folder.
-#[cfg(unix)]
-mod through_a_symlink {
+/// Paths stored resolved, as the projector's is, through a linked folder.
+mod through_a_linked_folder {
     use super::*;
 
-    /// A folder `real` holding a VAE, and `via`, a symlink to it.
+    /// A folder `real` holding a VAE, and `via`, a link to it.
     fn folders(dir: &std::path::Path) -> (PathBuf, PathBuf) {
         let real = dir.join("real");
         std::fs::create_dir(&real).unwrap();
         std::fs::write(real.join("ae.safetensors"), b"vae").unwrap();
         let via = dir.join("via");
-        std::os::unix::fs::symlink(&real, &via).unwrap();
+        gglib_core::paths::link_folder(&real, &via);
         (real, via)
     }
 
