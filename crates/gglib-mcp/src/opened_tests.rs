@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use gglib_core::ports::{McpRepositoryError, McpServerRepository};
 use gglib_core::{DeviceServers, McpServer, McpServiceError, NewMcpServer};
 
+use crate::StandIn;
 use crate::service::McpService;
 use crate::service::tests::{service, stdio};
 
@@ -41,29 +42,12 @@ impl McpServerRepository for Unreadable {
     }
 }
 
-/// The stand-in MCP server under `name`, as `gglib mcp add` stores one: a
-/// bare command, lazy, valid.
-#[cfg(unix)]
-fn stand_in(name: &str) -> gglib_core::NewMcpServer {
-    gglib_core::NewMcpServer::new_stdio(
-        name,
-        "sh",
-        vec![
-            "-c".to_owned(),
-            crate::service::tests::STAND_IN_SERVER.to_owned(),
-        ],
-        None,
-    )
-}
-
-#[cfg(unix)]
-async fn running(service: &crate::McpService, id: i64) -> bool {
+async fn running(service: &McpService, id: i64) -> bool {
     service.get_server_status(id).await == gglib_core::McpServerStatus::Running
 }
 
 /// `new` added and opened to paired devices, as `gglib mcp add` then
 /// `allow-remote` leave it.
-#[cfg(unix)]
 async fn opened(service: &McpService, new: NewMcpServer) -> McpServer {
     let added = service.add_server(new).await.unwrap();
     service.set_allow_remote(added.id, true).await.unwrap()
@@ -71,12 +55,12 @@ async fn opened(service: &McpService, new: NewMcpServer) -> McpServer {
 
 /// An open lazy server that is not running is started, and its tools are
 /// offered by the id the agent loop calls them by, never by its name.
-#[cfg(unix)]
 #[tokio::test]
 async fn an_open_lazy_server_is_started_and_its_tools_named_by_its_id() {
+    let stand_in = StandIn::install();
     let (service, _) = service();
     service.add_server(stdio("fs", "npx")).await.unwrap();
-    let tavily = opened(&service, stand_in("tavily")).await;
+    let tavily = opened(&service, stand_in.server("tavily")).await;
     assert!(!running(&service, tavily.id).await);
 
     let offered = service.opened_tools(&DeviceServers::All).await;
@@ -88,12 +72,12 @@ async fn an_open_lazy_server_is_started_and_its_tools_named_by_its_id() {
 
 /// A server running for some other reason is not offered unless it is open
 /// to paired devices.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_running_server_not_open_is_not_offered() {
+    let stand_in = StandIn::install();
     let (service, _) = service();
-    let tavily = opened(&service, stand_in("tavily")).await;
-    let shell = service.add_server(stand_in("shell")).await.unwrap();
+    let tavily = opened(&service, stand_in.server("tavily")).await;
+    let shell = service.add_server(stand_in.server("shell")).await.unwrap();
     service.start_server(shell.id).await.unwrap();
 
     let offered = service.opened_tools(&DeviceServers::All).await;
@@ -104,14 +88,14 @@ async fn a_running_server_not_open_is_not_offered() {
 
 /// A disabled server is neither started nor offered, though it is open and
 /// would start; the one opened after it still is.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_disabled_server_is_skipped() {
+    let stand_in = StandIn::install();
     let (service, _) = service();
-    let mut off = stand_in("off");
+    let mut off = stand_in.server("off");
     off.enabled = false;
     let off = opened(&service, off).await;
-    let tavily = opened(&service, stand_in("tavily")).await;
+    let tavily = opened(&service, stand_in.server("tavily")).await;
 
     let offered = service.opened_tools(&DeviceServers::All).await;
 
@@ -125,19 +109,17 @@ async fn a_disabled_server_is_skipped() {
 
 /// A server whose command cannot be found, and one that exits before its
 /// handshake, are skipped, and the servers opened after them still offered.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_server_that_fails_to_start_is_skipped_and_the_rest_offered() {
+    let stand_in = StandIn::install();
     let (service, _) = service();
     opened(&service, stdio("ghost", "gglib-no-such-command")).await;
-    let exits = gglib_core::NewMcpServer::new_stdio(
-        "exits",
-        "sh",
-        vec!["-c".to_owned(), "exit 1".to_owned()],
-        None,
-    );
+    let dir = tempfile::tempdir().unwrap();
+    gglib_test_proc::install(dir.path(), "gglib-test-exits", "exit 1");
+    let folder = dir.path().to_string_lossy().into_owned();
+    let exits = NewMcpServer::new_stdio("exits", "gglib-test-exits", vec![], Some(folder));
     opened(&service, exits).await;
-    let tavily = opened(&service, stand_in("tavily")).await;
+    let tavily = opened(&service, stand_in.server("tavily")).await;
 
     let offered = service.opened_tools(&DeviceServers::All).await;
 
@@ -147,13 +129,13 @@ async fn a_server_that_fails_to_start_is_skipped_and_the_rest_offered() {
 
 /// This machine's run starts every enabled server it may use, at once: one
 /// that cannot start is skipped and the rest still start.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_run_here_starts_the_rest_when_one_cannot_start() {
+    let stand_in = StandIn::install();
     let (service, _) = service();
     opened(&service, stdio("ghost", "gglib-no-such-command")).await;
-    let tavily = opened(&service, stand_in("tavily")).await;
-    let exa = opened(&service, stand_in("exa")).await;
+    let tavily = opened(&service, stand_in.server("tavily")).await;
+    let exa = opened(&service, stand_in.server("exa")).await;
     assert!(
         !running(&service, tavily.id).await,
         "nothing runs before the run asks"
@@ -169,18 +151,18 @@ async fn a_run_here_starts_the_rest_when_one_cannot_start() {
 /// A server stamped invalid when it was added, its working folder missing
 /// then, is skipped as that verdict says, though the folder exists now and
 /// it would start; the server opened after it is still offered.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_server_stamped_invalid_is_skipped_though_it_would_start_now() {
+    let stand_in = StandIn::install();
     let (service, _) = service();
     let dir = tempfile::tempdir().unwrap();
     let later = dir.path().join("later");
-    let mut stale = stand_in("stale");
+    let mut stale = stand_in.server("stale");
     stale.config.working_dir = Some(later.to_string_lossy().into_owned());
     let stale = opened(&service, stale).await;
     assert!(!stale.is_valid, "stamped invalid when added");
     std::fs::create_dir(&later).unwrap();
-    let tavily = opened(&service, stand_in("tavily")).await;
+    let tavily = opened(&service, stand_in.server("tavily")).await;
 
     let offered = service.opened_tools(&DeviceServers::All).await;
 
@@ -194,13 +176,13 @@ async fn a_server_stamped_invalid_is_skipped_though_it_would_start_now() {
 
 /// Two servers sharing a name are each opened by their own flag: both are
 /// started and both offered, each by its own id.
-#[cfg(unix)]
 #[tokio::test]
 async fn two_servers_of_one_name_are_each_offered_when_open() {
+    let stand_in = StandIn::install();
     let (service, repo) = service();
     // An older database can hold two of one name; the service refuses it now.
-    let first = repo.insert(stand_in("tavily")).await.unwrap();
-    let second = repo.insert(stand_in("tavily")).await.unwrap();
+    let first = repo.insert(stand_in.server("tavily")).await.unwrap();
+    let second = repo.insert(stand_in.server("tavily")).await.unwrap();
     service.initialize().await.unwrap();
     for id in [first.id, second.id] {
         service.set_allow_remote(id, true).await.unwrap();
@@ -218,12 +200,12 @@ async fn two_servers_of_one_name_are_each_offered_when_open() {
 
 /// Of the open servers, only those a device's run chose are started and
 /// offered; another open one stays stopped.
-#[cfg(unix)]
 #[tokio::test]
 async fn only_the_chosen_open_servers_are_started_and_offered() {
+    let stand_in = StandIn::install();
     let (service, _) = service();
-    let tavily = opened(&service, stand_in("tavily")).await;
-    let shell = opened(&service, stand_in("shell")).await;
+    let tavily = opened(&service, stand_in.server("tavily")).await;
+    let shell = opened(&service, stand_in.server("shell")).await;
 
     let offered = service
         .opened_tools(&DeviceServers::Only([tavily.id].into()))
@@ -241,12 +223,12 @@ async fn only_the_chosen_open_servers_are_started_and_offered() {
 /// An id a device's run chose that is not open, a server here but closed or
 /// no server at all, is never started or offered; the open one chosen
 /// beside it still is.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_chosen_id_that_is_not_open_is_never_started_or_offered() {
+    let stand_in = StandIn::install();
     let (service, _) = service();
-    let tavily = opened(&service, stand_in("tavily")).await;
-    let shell = service.add_server(stand_in("shell")).await.unwrap();
+    let tavily = opened(&service, stand_in.server("tavily")).await;
+    let shell = service.add_server(stand_in.server("shell")).await.unwrap();
     let nowhere = shell.id + 100;
 
     let chosen = DeviceServers::Only([tavily.id, shell.id, nowhere].into());
@@ -259,11 +241,11 @@ async fn a_chosen_id_that_is_not_open_is_never_started_or_offered() {
 
 /// A device's run that chose no server starts none and is offered nothing,
 /// though one is open.
-#[cfg(unix)]
 #[tokio::test]
 async fn choosing_none_starts_nothing() {
+    let stand_in = StandIn::install();
     let (service, _) = service();
-    let tavily = opened(&service, stand_in("tavily")).await;
+    let tavily = opened(&service, stand_in.server("tavily")).await;
 
     let offered = service.opened_tools(&DeviceServers::none()).await;
 
@@ -274,13 +256,13 @@ async fn choosing_none_starts_nothing() {
 
 /// Two open servers sharing a name are chosen apart by their ids: the one
 /// named is started and offered, the other is not.
-#[cfg(unix)]
 #[tokio::test]
 async fn two_servers_sharing_a_name_are_chosen_apart_by_id() {
+    let stand_in = StandIn::install();
     let (service, repo) = service();
     // An older database can hold two of one name; the service refuses it now.
-    let first = repo.insert(stand_in("tavily")).await.unwrap();
-    let second = repo.insert(stand_in("tavily")).await.unwrap();
+    let first = repo.insert(stand_in.server("tavily")).await.unwrap();
+    let second = repo.insert(stand_in.server("tavily")).await.unwrap();
     service.initialize().await.unwrap();
     for id in [first.id, second.id] {
         service.set_allow_remote(id, true).await.unwrap();
@@ -298,14 +280,14 @@ async fn two_servers_sharing_a_name_are_chosen_apart_by_id() {
 
 /// What a device's run is offered is exactly what the agent loop's MCP
 /// executor lists for that server: one naming rule.
-#[cfg(unix)]
 #[tokio::test]
 async fn qualified_is_what_the_executor_lists() {
     use gglib_core::ports::ToolExecutorPort as _;
 
+    let stand_in = StandIn::install();
     let (service, _) = service();
     service.add_server(stdio("fs", "npx")).await.unwrap();
-    opened(&service, stand_in("tavily")).await;
+    opened(&service, stand_in.server("tavily")).await;
     let service = std::sync::Arc::new(service);
 
     let offered = service.opened_tools(&DeviceServers::All).await;
@@ -332,11 +314,11 @@ async fn open(service: &McpService, id: i64) -> bool {
 /// A server running when it is opened, and when it is closed again, is still
 /// running after each: the flag's write does not go through an update,
 /// which stops a running server.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_running_server_keeps_running_when_opened_and_closed() {
+    let stand_in = StandIn::install();
     let (service, _) = service();
-    let tavily = service.add_server(stand_in("tavily")).await.unwrap();
+    let tavily = service.add_server(stand_in.server("tavily")).await.unwrap();
     service.start_server(tavily.id).await.unwrap();
 
     let opened = service.set_allow_remote(tavily.id, true).await.unwrap();

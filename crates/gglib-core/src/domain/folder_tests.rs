@@ -82,14 +82,13 @@ fn home_is_recognised_by_where_it_resolves_not_how_it_is_spelled() {
     assert_eq!(launched_in(home.path(), Some(&spelled)), None);
 }
 
-#[cfg(unix)]
 #[test]
 fn a_home_reached_through_a_link_is_still_home() {
     let dir = tempfile::tempdir().unwrap();
     let real = dir.path().join("real");
     std::fs::create_dir(&real).unwrap();
     let link = dir.path().join("link");
-    std::os::unix::fs::symlink(&real, &link).unwrap();
+    crate::paths::link_folder(&real, &link);
 
     assert_eq!(launched_in(&real, Some(&link)), None);
 }

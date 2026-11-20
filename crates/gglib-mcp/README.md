@@ -64,6 +64,9 @@ This crate provides MCP server lifecycle management, including:
 │  opened.rs: the servers open to paired devices              │
 │                                                             │
 │  path: Validation & PATH building utilities                 │
+│                                                             │
+│  stand_in.rs: StandIn, an MCP server for a test to start    │
+│    (`test-utils` only)                                      │
 └─────────────────────────────────────────────────────────────┘
                            │
            depends on (no sqlx!)
@@ -118,6 +121,7 @@ This enables:
 - **`tool_images.rs`** — An MCP tool's content split into the text the model reads and the images stored through `AttachmentService`, each named in the text, never sent as bytes ([ADR 0016](../../docs/adr/0016-a-tools-image-is-an-attachment-on-its-tool-row.md))
 - **`builtin/`** — In-process builtin tools (filesystem, time, and `generate_image`, offered only for a message sent to draw: Draw pressed, or `/draw` in `gglib chat`) with optional sandbox
 - **`resolver/`** — Cross-platform executable path resolution with 6-step search strategy
+- **`stand_in.rs`** — `StandIn`, behind the `test-utils` feature: an MCP server a test starts, the same program on every OS. `StandIn::install()` puts it in a temporary folder, `server(name)` is the row `gglib mcp add` would store for it, and `program()` is the path that row resolves to. It answers `initialize` and `tools/list` and offers one tool, `echo`, which cannot be called. Another crate takes it with `gglib-mcp = { workspace = true, features = ["test-utils"] }` under `[dev-dependencies]`
 
 
 ### `McpClient`
@@ -204,4 +208,4 @@ async fn example(repo: impl McpServerRepository + 'static) {
 
 ## Testing
 
-The crate uses trait-based testing: `McpService` is tested over a repository held in memory (`service_tests.rs`). The client's wait for its reply (matched by id, timed out, ended by EOF) is pinned over an in-process pipe standing in for the server, and what a server that exits printed over a shell script (`client_tests.rs`), what is kept of a server's stderr over a pipe standing in for it (`stderr_tail_tests.rs`), and what a tool's content items become over an attachment store held in memory (`tool_images_tests.rs`). The order the resolver tries candidates in, and the attempts it records, are pinned case by case over a mock environment and filesystem (`resolver/resolve_order_tests.rs`), Windows's rules over real files in a temporary folder on every OS (`resolver/platform_tests.rs`), and where Node's version managers are found on Windows over a Windows environment passed in as a value (`resolver/node_managers_tests.rs`). See `gglib-db` for `SqliteMcpRepository`'s own tests, which run on the schema production creates.
+The crate uses trait-based testing: `McpService` is tested over a repository held in memory (`service_tests.rs`), and a test that starts a server starts `StandIn` (`stand_in.rs`), on every OS. The client's wait for its reply (matched by id, timed out, ended by EOF) is pinned over an in-process pipe standing in for the server, and what a server that exits printed over a `gglib-test-proc` program (`client_tests.rs`), what is kept of a server's stderr over a pipe standing in for it (`stderr_tail_tests.rs`), and what a tool's content items become over an attachment store held in memory (`tool_images_tests.rs`). The order the resolver tries candidates in, and the attempts it records, are pinned case by case over a mock environment and filesystem (`resolver/resolve_order_tests.rs`), Windows's rules over real files in a temporary folder on every OS (`resolver/platform_tests.rs`), and where Node's version managers are found on Windows over a Windows environment passed in as a value (`resolver/node_managers_tests.rs`). See `gglib-db` for `SqliteMcpRepository`'s own tests, which run on the schema production creates.

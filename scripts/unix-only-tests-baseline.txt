@@ -1,6 +1,6 @@
 # <member> <tests compiled only on Unix>
 # Written by scripts/check_unix_only_tests.py --update.
-crates/gglib-core 18
+crates/gglib-core 16
 crates/gglib-db 8
 crates/gglib-download 9
 crates/gglib-gguf 0
@@ -8,7 +8,7 @@ crates/gglib-bootstrap 0
 crates/gglib-app-services 5
 crates/gglib-hf 0
 crates/gglib-build-info 0
-crates/gglib-mcp 35
+crates/gglib-mcp 15
 crates/gglib-proxy 0
 crates/gglib-runtime 48
 crates/gglib-agent 0
