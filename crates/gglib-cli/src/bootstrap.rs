@@ -79,12 +79,19 @@ pub struct CliContext {
 pub async fn bootstrap() -> Result<CliContext> {
     // Resolve paths/env up-front so BootstrapConfig holds only resolved data.
     let bootstrap_config = BootstrapConfig::for_db(database_path()?);
-    bootstrap_with(bootstrap_config).await
+    let (ctx, upgraded_from) = bootstrap_with(bootstrap_config).await?;
+    if upgraded_from.is_some() {
+        crate::hand_over::say_who_is_left_behind();
+    }
+    Ok(ctx)
 }
 
 /// [`bootstrap`] over the database `bootstrap_config` names, so a test can
-/// point it at a temporary directory.
-pub(crate) async fn bootstrap_with(bootstrap_config: BootstrapConfig) -> Result<CliContext> {
+/// point it at a temporary directory. With the context, the schema
+/// generation the library was upgraded from, when this upgraded it.
+pub(crate) async fn bootstrap_with(
+    bootstrap_config: BootstrapConfig,
+) -> Result<(CliContext, Option<i64>)> {
     // The console owns the progress bars and routes log lines around them.
     // The CLI subscribes to no application events: a download monitor reads
     // the queue snapshot it draws, from the daemon or from the download
@@ -99,6 +106,7 @@ pub(crate) async fn bootstrap_with(bootstrap_config: BootstrapConfig) -> Result<
         gguf_parser,
         repos,
         pool,
+        upgraded_from,
     } = CoreBootstrap::build(bootstrap_config, emitter).await?;
 
     let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool.clone()));
@@ -106,7 +114,7 @@ pub(crate) async fn bootstrap_with(bootstrap_config: BootstrapConfig) -> Result<
 
     let mcp = Arc::new(McpService::new(repos.mcp_servers.clone()));
 
-    Ok(CliContext {
+    let ctx = CliContext {
         app,
         mcp,
         downloads,
@@ -119,7 +127,8 @@ pub(crate) async fn bootstrap_with(bootstrap_config: BootstrapConfig) -> Result<
         settings_repo: repos.settings,
         console,
         library_changes: Arc::default(),
-    })
+    };
+    Ok((ctx, upgraded_from))
 }
 
 /// [`bootstrap_with`] over a fresh database in `dir`, for a test.
@@ -128,4 +137,5 @@ pub(crate) async fn test_context(dir: &std::path::Path) -> CliContext {
     bootstrap_with(BootstrapConfig::for_db(dir.join("gglib.db")))
         .await
         .expect("the database opens")
+        .0
 }

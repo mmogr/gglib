@@ -13,7 +13,9 @@ inspection.
 `PATH` in the order a shell tries them, which one `gglib` runs and which
 one is running, and the desktop app, each with its version. Another copy
 is asked only `--version`, by `copy_version`, with a two-second wait; the
-app is never launched.
+app is never launched. `paths` also prints `schema_generation`, the newest
+library this build opens, and `copy_generation` reads that line from
+another copy from 0.38.0 on, for `hand_over`.
 
 `path_entry` is `config path-entry add|remove`, hidden from `--help`: the
 desktop app's Windows installer runs it to put the folder this `gglib.exe`

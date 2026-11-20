@@ -232,6 +232,10 @@ fn the_old_lines_come_first_and_each_copy_on_path_follows() {
 
     assert_eq!(keys[..OLD_KEYS.len()], OLD_KEYS, "{stdout}");
     let mut rest = &pairs[OLD_KEYS.len()..];
+    let (key, generation) = rest[0];
+    assert_eq!(key, "schema_generation", "{stdout}");
+    assert!(generation.parse::<i64>().is_ok(), "{stdout}");
+    rest = &rest[1..];
     if rest
         .first()
         .is_some_and(|(key, _)| *key == "database_backup")

@@ -176,6 +176,17 @@ pub(crate) fn lines(search: &Search, version_of: &dyn Fn(&Path) -> Option<String
     out
 }
 
+/// Whether the running binary is one of the `gglib`s on `PATH`, and every
+/// other one there, in `PATH` order, each once.
+pub(crate) fn others_on_path(search: &Search) -> (bool, Vec<PathBuf>) {
+    let running = search.running.as_deref().map(canonical);
+    let (this, others): (Vec<_>, Vec<_>) = on_path(&search.path, "gglib")
+        .into_iter()
+        .partition(|(_, real)| running.as_ref() == Some(real));
+    let others = others.into_iter().map(|(shown, _)| shown).collect();
+    (!this.is_empty(), others)
+}
+
 /// Each desktop app found, with its version if one could be read.
 fn desktop_apps(
     search: &Search,

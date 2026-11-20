@@ -16,6 +16,9 @@ use gglib_core::ports::GgufParserPort;
 
 pub use attachments::sweep_unlinked_attachments;
 pub use backup::backup_beside;
+#[cfg(any(test, feature = "test-utils"))]
+pub use generation::restamp_older;
+pub use generation::{NewerLibrary, SCHEMA_GENERATION};
 
 #[path = "setup_attachments.rs"]
 mod attachments;
@@ -182,6 +185,20 @@ pub async fn setup_database(
     db_path: &Path,
     gguf_parser: &dyn GgufParserPort,
 ) -> Result<SqlitePool> {
+    Ok(setup_database_upgrading(db_path, gguf_parser).await?.0)
+}
+
+/// [`setup_database`], and the schema generation the library was upgraded
+/// from, when this open upgraded it.
+///
+/// # Errors
+///
+/// As [`setup_database`]; a library a newer build wrote is refused with
+/// [`NewerLibrary`].
+pub async fn setup_database_upgrading(
+    db_path: &Path,
+    gguf_parser: &dyn GgufParserPort,
+) -> Result<(SqlitePool, Option<i64>)> {
     // Private before SQLite opens it; `database_file::prepare` says why then.
     crate::database_file::prepare(db_path)?;
     crate::sqlite_init::ensure_initialised().await?;
@@ -200,11 +217,11 @@ pub async fn setup_database(
 
     generation::refuse_newer(&pool, db_path).await?; // before anything is created or altered
     generation::refuse_verbatim_paths(&pool, db_path).await?; // and before the backup
-    backup::before_upgrade(&pool, db_path).await?;
+    let upgraded_from = backup::before_upgrade(&pool, db_path).await?;
     create_schema_reading(&pool, gguf_parser).await?;
     generation::stamp(&pool).await?;
 
-    Ok(pool)
+    Ok((pool, upgraded_from))
 }
 
 /// Sets up an in-memory `SQLite` database for testing.

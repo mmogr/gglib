@@ -24,7 +24,7 @@ const HEALTHY_OID: &str = "9a129038d9a00aed0cf6a7ea059ca50a813449061ab87848cf1a1
 async fn a_repair_leaves_a_running_download() {
     let dir = tempfile::tempdir().unwrap();
     let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
-    let pool = setup_database(&dir.path().join("gglib.db"), gguf_parser.as_ref())
+    let pool = gglib_db::setup_database(&dir.path().join("gglib.db"), gguf_parser.as_ref())
         .await
         .unwrap();
     let models_dir = dir.path().join("models");

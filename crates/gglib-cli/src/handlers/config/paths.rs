@@ -15,7 +15,9 @@ use super::{copies, copy_version};
 /// every resolved path, in `key = value` format. The first lines answer the
 /// question a machine with a packaged install and a build from a checkout
 /// raises: which binary is this, and is it on the default data root or one
-/// named by `GGLIB_DATA_DIR`. Then the database's backup from before an
+/// named by `GGLIB_DATA_DIR`. Then `schema_generation`, the newest library
+/// this build opens, which another copy reads to learn whether to hand a
+/// command over (`copy_generation`), and the database's backup from before an
 /// upgrade, when there is one. Last, every other gglib a user might run
 /// here, each `gglib` on `PATH` and the desktop app, which all share this
 /// data root (see [`copies`]).
@@ -28,6 +30,7 @@ pub(crate) fn execute() -> Result<()> {
     println!("daemon_port = {}", gglib_core::daemon_port());
     let paths = ResolvedPaths::resolve()?;
     println!("{paths}");
+    println!("schema_generation = {}", gglib_db::SCHEMA_GENERATION);
     if let Some((_, backup)) = gglib_db::backup_beside(&paths.database_path) {
         println!("database_backup = {}", backup.display());
     }

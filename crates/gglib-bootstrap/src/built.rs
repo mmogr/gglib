@@ -30,4 +30,8 @@ pub struct BuiltCore {
     /// benchmark repository in the Axum adapter) can use this pool
     /// directly rather than re-opening the database.
     pub pool: SqlitePool,
+    /// The schema generation the library was upgraded from, when opening it
+    /// here upgraded it. The CLI then says which other gglib on the machine
+    /// can no longer open it.
+    pub upgraded_from: Option<i64>,
 }

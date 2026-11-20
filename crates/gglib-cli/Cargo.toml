@@ -68,6 +68,9 @@ gglib-test-http = { workspace = true }
 # The routes the tunnel carries, which `target_tunnel_tests` holds to the
 # commands that reach them.
 gglib-proxy = { workspace = true, features = ["test-support"] }
+# The other `gglib` on `PATH` in `tests/library_hand_over.rs`, the same
+# program on every OS.
+gglib-test-proc = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]

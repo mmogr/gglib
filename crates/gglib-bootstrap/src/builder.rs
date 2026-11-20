@@ -10,7 +10,7 @@ use gglib_core::ports::{
 };
 use gglib_core::services::AppCore;
 use gglib_core::{ModelRegistrar, hf_token};
-use gglib_db::{CoreFactory, setup_database};
+use gglib_db::{CoreFactory, setup_database_upgrading};
 use gglib_download::{DownloadManagerDeps, build_download_manager};
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_gguf::GgufParser;
@@ -135,7 +135,8 @@ impl CoreBootstrap {
         // read of an image model's weights, capability detection, and what
         // verification reads each of a model's files to be.
         let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
-        let pool = setup_database(&config.db_path, gguf_parser.as_ref()).await?;
+        let (pool, upgraded_from) =
+            setup_database_upgrading(&config.db_path, gguf_parser.as_ref()).await?;
 
         let Holders {
             client_config: _,
@@ -157,7 +158,7 @@ impl CoreBootstrap {
                 download_config.max_queue_size
             ),
         }
-        let built = wire(
+        let mut built = wire(
             pool,
             repos,
             hf_client,
@@ -166,6 +167,7 @@ impl CoreBootstrap {
             core_token,
             emitter,
         );
+        built.upgraded_from = upgraded_from;
 
         tracing::debug!(
             db_path = %config.db_path.display(),
@@ -229,6 +231,7 @@ fn wire(
         gguf_parser,
         repos,
         pool,
+        upgraded_from: None,
     }
 }
 

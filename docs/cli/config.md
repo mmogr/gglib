@@ -253,6 +253,10 @@ desktop_app_1 = /Applications/gglib.app (0.30.1)
   gglib shares it unless `GGLIB_DATA_DIR` names another. This recording
   ran with `GGLIB_DATA_DIR` and `GGLIB_MODELS_DIR` set.
 - `daemon_port` is the daemon's management port, not the endpoint's.
+- `schema_generation`, after `models_source` and newer than this
+  recording, is the newest library this build opens. Another copy reads it
+  to learn whether to hand a command over (see
+  [compatibility](../compatibility.md)).
 - `gglib_on_path_N` lists each `gglib` on `PATH` in the order a shell
   tries them, once each however many entries or links reach it. The first
   is the one `gglib` runs; the rest are shadowed. `this one` marks the
