@@ -27,6 +27,7 @@ async fn unlinked(pool: &sqlx::SqlitePool, bytes: &[u8], age: &str) -> Attachmen
 /// which may be a turn's in flight, is still there.
 #[tokio::test]
 async fn bootstrap_deletes_an_old_unlinked_image_and_keeps_a_fresh_one() {
+    gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().unwrap();
     let db_path = dir.path().join("gglib.db");
     let config = || ServerConfig {

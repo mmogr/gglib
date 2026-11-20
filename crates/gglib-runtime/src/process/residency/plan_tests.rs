@@ -52,6 +52,7 @@ fn plan(set: &ResidentSet, spec: &ModelLaunchSpec) -> LaunchPlan {
 /// `qwen2.5` and not a plan of `llama-3-8b` (id 7), and never refuses one.
 #[test]
 fn a_pins_overrides_reach_a_plan_of_the_pinned_model_only() {
+    gglib_core::paths::isolate_data_root();
     let set = ResidentSet::unobserved(
         Arc::new(StubCatalog),
         ServerConfigOptions::default(),
@@ -197,6 +198,7 @@ async fn the_other_slots_residents_are_netted_out_of_the_plans_ram_cache() {
 /// sd-server.
 #[test]
 fn a_plan_names_the_engine_the_manager_launches_from() {
+    gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().unwrap();
     let binaries = RuntimeBinaries {
         llama: dir.path().join("llama-server"),
@@ -230,6 +232,7 @@ fn a_plan_names_the_engine_the_manager_launches_from() {
 /// cache) plans with it, as it launches with it.
 #[test]
 fn a_runtime_with_its_own_cache_setting_plans_with_it() {
+    gglib_core::paths::isolate_data_root();
     let manager = Arc::new(ProcessManager::new(
         9000,
         RuntimeBinaries::stand_in(),
@@ -270,6 +273,7 @@ fn a_runtime_with_its_own_cache_setting_plans_with_it() {
 /// place and unloads nothing.
 #[test]
 fn a_plan_says_which_loaded_model_it_would_unload() {
+    gglib_core::paths::isolate_data_root();
     let set = ResidentSet::unobserved(
         Arc::new(StubCatalog),
         ServerConfigOptions::default(),

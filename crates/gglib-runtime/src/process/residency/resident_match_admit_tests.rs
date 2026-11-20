@@ -107,6 +107,7 @@ async fn an_admission_is_served_by_a_resident_launched_with_the_linked_projector
 /// before the model was linked is recycled, and the request goes on to launch.
 #[tokio::test]
 async fn an_admission_recycles_a_resident_launched_before_its_model_was_linked() {
+    gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().unwrap();
     let (weights, projector) = files(&dir);
     let set = set_for(&weights, Some(&projector));
@@ -118,6 +119,7 @@ async fn an_admission_recycles_a_resident_launched_before_its_model_was_linked()
 /// The other direction: unlinked since launch.
 #[tokio::test]
 async fn an_admission_recycles_a_resident_launched_before_its_model_was_unlinked() {
+    gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().unwrap();
     let (weights, projector) = files(&dir);
     let set = set_for(&weights, None);

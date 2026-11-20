@@ -165,6 +165,7 @@ fn cache_flag_carries_the_slot_dir_into_launch_options() {
 /// silently disabling persistence.
 #[test]
 fn cache_flag_without_slot_dir_uses_the_default_directory() {
+    gglib_core::paths::isolate_data_root();
     let cfg = unified(
         ServerConfigOptions::default(),
         GlobalDefaults {

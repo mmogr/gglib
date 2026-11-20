@@ -78,11 +78,13 @@ async fn resolved_base_port(saved: Option<u16>, base_port: Option<u16>) -> Strin
 
 #[test]
 fn the_defaults_leave_the_base_port_to_the_saved_setting() {
+    gglib_core::paths::isolate_data_root();
     assert_eq!(ServerConfig::with_defaults().unwrap().base_port, None);
 }
 
 #[tokio::test]
 async fn the_daemon_config_starts_llama_servers_from_the_saved_base_port() {
+    gglib_core::paths::isolate_data_root();
     let daemon = ServerConfig::with_defaults().unwrap().base_port;
 
     let resolved = resolved_base_port(Some(19_400), daemon).await;
@@ -93,6 +95,7 @@ async fn the_daemon_config_starts_llama_servers_from_the_saved_base_port() {
 
 #[tokio::test]
 async fn a_base_port_the_caller_names_beats_the_saved_one() {
+    gglib_core::paths::isolate_data_root();
     let resolved = resolved_base_port(Some(19_400), Some(19_500)).await;
 
     assert!(resolved.contains("port=19500"), "{resolved}");
@@ -101,6 +104,7 @@ async fn a_base_port_the_caller_names_beats_the_saved_one() {
 
 #[tokio::test]
 async fn with_neither_the_daemon_starts_llama_servers_from_the_default() {
+    gglib_core::paths::isolate_data_root();
     let daemon = ServerConfig::with_defaults().unwrap().base_port;
 
     let resolved = resolved_base_port(None, daemon).await;
