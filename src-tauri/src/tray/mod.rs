@@ -6,6 +6,8 @@ mod handlers;
 mod icon;
 mod ids;
 mod items;
+// Linux only: Wayland's layer shell places the panel by edge and margin,
+// through gtk-layer-shell.
 #[cfg(target_os = "linux")]
 #[allow(
     unsafe_code,

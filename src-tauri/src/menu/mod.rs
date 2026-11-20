@@ -1,10 +1,16 @@
 #![doc = include_str!("README.md")]
+// macOS only: the application menu is built only there; every other system
+// is given an empty one.
 #[cfg(target_os = "macos")]
 mod build;
 
+// macOS only: the application menu is built only there; every other system
+// is given an empty one.
 #[cfg(target_os = "macos")]
 pub(crate) mod handlers;
 
+// macOS only: the application menu is built only there; every other system
+// is given an empty one.
 #[cfg(target_os = "macos")]
 pub(crate) mod ids;
 pub(crate) mod state_sync;
@@ -110,6 +116,8 @@ impl AppMenu {
     }
 }
 
+// macOS only: the application menu is built only there; every other system
+// is given an empty one.
 #[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
