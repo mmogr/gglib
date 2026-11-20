@@ -259,6 +259,12 @@ The Builder pattern is a creational design pattern that separates the constructi
 - `start -m <model> "<prompt>"` names the model as the proxy does;
   `--follow` prints the reply as it arrives instead of the id. `show -f`
   keeps printing until the run ends.
+- `start --image <path>` sends a PNG or JPEG with the prompt, and may be
+  repeated. One file may be 8 MiB and all of them 16 MiB together; a file
+  that is missing, is neither format or is over a limit is refused by its
+  path before the run starts. The image goes inside the request and is
+  stored nowhere. A model with no projector linked fails the run with the
+  proxy's reason, which `show` prints.
 - A run is what the chat page and a paired device start too, which is why
   `chat --continue` names one when the chat it wants is still being
   answered.

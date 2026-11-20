@@ -25,7 +25,7 @@ mod settings_cache;
 mod settings_service;
 
 pub use app_core::AppCore;
-pub use attachments::AttachmentService;
+pub use attachments::{AttachmentService, checked_image};
 pub use catalog::{
     CatalogPortImpl, model_to_launch_spec, resident_bytes, total_model_bytes, weights_paths,
 };

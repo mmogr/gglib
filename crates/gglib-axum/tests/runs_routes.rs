@@ -9,6 +9,7 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
+use gglib_core::contracts::http::MAX_BODY_BYTES;
 use gglib_core::contracts::http::daemon::{RUNS_PATH, run_cancel_path, run_events_path, run_path};
 use gglib_core::domain::runs::{RunInfo, RunList, RunStatus};
 use gglib_core::ports::{RunScope, RunsPort};
@@ -146,6 +147,48 @@ async fn refusals_use_the_daemons_error_body_with_the_runs_code() {
         assert_eq!(error["status"], json!(status));
         assert!(error["error"].is_string());
     }
+}
+
+/// A run's body carries its images inline, so the door reads one as long
+/// as the proxy's own run door does, and refuses a longer one with the
+/// proxy's code.
+#[tokio::test]
+async fn a_put_reads_a_body_long_enough_for_images() {
+    let (_, app) = test_state_and_app(CorsConfig::AllowAll).await;
+    let chat_of = |megabytes: usize| {
+        let url = format!("data:image/png;base64,{}", "A".repeat(megabytes << 20));
+        json!({
+            "model": "qwen",
+            "messages": [{ "role": "user", "content": [
+                { "type": "text", "text": "what is this?" },
+                { "type": "image_url", "image_url": { "url": url } },
+            ]}],
+        })
+    };
+
+    let (status, text) = call(&app, Method::PUT, &run_path("r-big"), Some(chat_of(22))).await;
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "{}",
+        &text[..text.len().min(300)]
+    );
+
+    assert_eq!(MAX_BODY_BYTES, 32 << 20);
+    let (status, text) = call(&app, Method::PUT, &run_path("r-over"), Some(chat_of(33))).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "{text}");
+    let error: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(error["type"], json!("request_too_large"), "{text}");
+    assert_eq!(
+        error["error"],
+        json!("The request body is over the 32 MiB limit.")
+    );
+    let (status, _) = call(&app, Method::GET, &run_path("r-over"), None).await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "a refused body started a run"
+    );
 }
 
 #[tokio::test]
