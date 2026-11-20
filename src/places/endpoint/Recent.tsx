@@ -1,8 +1,10 @@
 /**
  * Recent: the last five requests, newest first: when, which model, the
- * tokens it wrote and how fast, and what gglib did to it in the proxy's
- * words. Not drawn before the first request. All › opens Diagnostics ›
- * Live, which lists every request the proxy keeps.
+ * tokens it wrote and how fast, and, in the proxy's words, what its images
+ * cost and what gglib did to it. A row too long for the column wraps under
+ * its time and model, whose name stays whole. Not drawn before the first
+ * request. All › opens Diagnostics › Live, which lists every request the
+ * proxy keeps.
  *
  * @module places/endpoint/Recent
  */
@@ -27,7 +29,7 @@ export const Recent: FC<{ snapshot: DashboardSnapshot; onAll: () => void }> = ({
     >
       <ul aria-label="Recent requests" className="m-0 flex list-none flex-col p-0">
         {rows.map((r) => (
-          <li key={r.key} className="flex items-baseline gap-md px-md py-xs text-xs text-text-secondary tabular-nums">
+          <li key={r.key} className="flex flex-wrap items-baseline gap-x-md px-md py-xs text-xs text-text-secondary tabular-nums">
             <span className="shrink-0">{r.time}</span>
             <span className="min-w-0 truncate text-text">{r.model}</span>
             {r.figures && <span className="shrink-0">{r.figures}</span>}

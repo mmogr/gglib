@@ -157,7 +157,8 @@ impl Target {
     /// The model a turn is for, when the command line may have named none.
     ///
     /// `here` is what this machine does about an empty name — `q` looks up
-    /// the default model, `chat` refuses — and runs only locally. On the
+    /// the default model, else the library's only chat model, `chat`
+    /// refuses — and runs only locally. On the
     /// paired machine the answer is the model this machine last asked it
     /// for, remembered against the pairing once a turn has resolved it
     /// ([`resolve_turn`](Self::resolve_turn)), so the next turn need not

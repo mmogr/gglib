@@ -18,6 +18,7 @@ mod model_service;
 mod model_verification;
 mod model_verification_health;
 mod model_verification_remote;
+mod only_chat_model;
 mod projector_choices;
 mod secrets;
 mod settings_cache;

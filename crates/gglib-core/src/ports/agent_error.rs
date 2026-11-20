@@ -102,6 +102,14 @@ pub enum AgentError {
         completion_tokens: Option<u32>,
     },
 
+    /// The run's final reply was no answer
+    /// ([`no_answer`](crate::normalize::no_answer)): it had no words, or it
+    /// started with a tool call written as text on a turn that offered no
+    /// tools. The loop emitted these words as its last `error` event. What
+    /// the model wrote, its thinking included, was sent before it.
+    #[error("The model gave no answer.")]
+    NoAnswer,
+
     /// The model's endpoint refused the request with a code of its own
     /// ([`UpstreamRefusal`](crate::ports::UpstreamRefusal)). The loop emitted
     /// `message` as its last `error` event, with `code` beside it.

@@ -11,12 +11,12 @@
 //!
 //! The run ends as it did before this request, with an `error` event and
 //! [`AgentError::MaxIterationsReached`], when the reply is no use: the
-//! request fails, its text is empty, or its text starts with a known
-//! tool-call marker ([`KNOWN_RESIDUE_MARKERS`]), which is what a model that
-//! tries a call with no tools offered writes. A run with a demanded first
-//! call (`AgentConfig::first_call`) makes no closing request.
+//! request fails, or its text is no answer ([`no_answer`]) on a turn that
+//! offered no tools, having no words or starting with a tool call written
+//! as text. A run with a demanded first call (`AgentConfig::first_call`)
+//! makes no closing request.
 
-use gglib_core::normalize::residue::KNOWN_RESIDUE_MARKERS;
+use gglib_core::normalize::{NoAnswer, no_answer};
 use gglib_core::ports::{AgentError, AgentRunOutput, LlmCompletionPort};
 use gglib_core::{AgentConfig, AgentEvent, AgentMessage};
 use tokio::sync::mpsc;
@@ -136,17 +136,18 @@ async fn closing_reply(
             "a reply that was offered no tools called some; none is run"
         );
     }
-    let text = reply.content.trim();
-    if text.is_empty() {
-        warn!("the closing reply at the step limit had no text");
-        return None;
+    match no_answer(&reply.content, false) {
+        Some(NoAnswer::Wordless) => {
+            warn!("the closing reply at the step limit had no text");
+            None
+        }
+        Some(NoAnswer::ToolCall(marker)) => {
+            warn!(
+                marker,
+                "the closing reply at the step limit was a tool call in its text"
+            );
+            None
+        }
+        None => Some(reply),
     }
-    if let Some(marker) = KNOWN_RESIDUE_MARKERS.iter().find(|m| text.starts_with(**m)) {
-        warn!(
-            marker,
-            "the closing reply at the step limit was a tool call in its text"
-        );
-        return None;
-    }
-    Some(reply)
 }

@@ -27,5 +27,7 @@ serde_json   = { workspace = true }
 workspace = true
 
 [dev-dependencies]
+# `test-utils` so a test here is refused the user's own data folder (#2088).
+gglib-core = { workspace = true, features = ["test-utils"] }
 # `test-util` for the virtual clock the tool-deadline tests run on.
 tokio               = { workspace = true, features = ["rt-multi-thread", "macros", "test-util"] }

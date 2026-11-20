@@ -1,7 +1,7 @@
 /**
  * A chat as the app draws it: the real routes, the sidebar and the place.
  * The sidebar's + opens an empty chat on the model the route picks, with no
- * dialog; its first send makes the conversation, the address becomes it
+ * dialog, loaded or not; its first send makes the conversation, the address becomes it
  * (replaced, so Back does not return to an empty chat) and the sidebar lists
  * and marks it; leaving it for the library unloads nothing (CH-10).
  */
@@ -90,5 +90,28 @@ describe('a chat in the window', () => {
     await user.click(screen.getByRole('button', { name: /^Library/ }));
     expect(app.at()).toBe('/library');
     expect(stopServer).not.toHaveBeenCalled();
+  });
+
+  // Right after setup: one model in the library, nothing loaded, no chat and no default.
+  it("+ with nothing loaded opens an empty chat on the library's only chat model", { timeout: 20_000 }, async () => {
+    const user = userEvent.setup();
+    cleanupServerEvents();
+    cleanupModelEvents();
+    act(() => ingestServerEvent({ type: 'stopped', modelId: '41', port: 5041, updatedAt: Date.now() + 1 }));
+    forgetServerList();
+    transport.current.listServers = vi.fn(async () => []);
+    transport.current.listModels = vi.fn(async () => [{ id: 52, name: 'gemma-3-4b', tags: [], isServing: false }]);
+    initServerEvents();
+    initModelEvents();
+
+    const app = renderShell('/library');
+    const chats = screen.getByRole('region', { name: 'Chats' });
+    expect(await within(chats).findByText('No chats yet.', {}, SLOW)).toBeInTheDocument();
+
+    await user.click(within(chats).getByRole('button', { name: 'New chat' }));
+
+    expect(app.at()).toBe('/chat/new');
+    expect(await screen.findByRole('textbox', { name: 'Message' }, SLOW)).toBeInTheDocument();
+    expect(await screen.findByText('gemma-3-4b', {}, SLOW)).toBeInTheDocument();
   });
 });

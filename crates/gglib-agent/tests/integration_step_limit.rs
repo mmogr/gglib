@@ -179,6 +179,15 @@ async fn a_closing_reply_of_tool_call_markup_ends_the_run_on_the_limit() {
     assert_closing_request_made(&llm).await;
 }
 
+#[tokio::test]
+async fn a_closing_reply_of_bracketed_tool_call_markup_ends_the_run_on_the_limit() {
+    let markup = "[TOOL_CALL]\n{tool => \"search\", args => {}}\n[/TOOL_CALL]";
+    let (ended, events, llm, _) = run_to_the_limit(Some(MockLlmResponse::text(markup))).await;
+
+    assert_ended_on_the_limit(&ended, &events);
+    assert_closing_request_made(&llm).await;
+}
+
 /// A closing reply that holds `content` and was cut off at its token limit.
 fn cut_off(content: Option<&str>) -> MockLlmResponse {
     MockLlmResponse {

@@ -34,7 +34,8 @@ pub use image_size::{
 };
 pub use images::{
     CannotReadImages, IMAGE_TOKEN_PX, MAX_IMAGE_BYTES, MAX_IMAGE_TOKENS, MAX_REQUEST_IMAGE_BYTES,
-    estimate_image_tokens, has_images, image_url_tokens, refuse_unless_can_see, request_image_urls,
+    RequestImages, estimate_image_tokens, has_images, image_url_tokens, refuse_unless_can_see,
+    request_image_urls,
 };
 pub use measure::ContextBudget;
 pub use messages::shape_messages;

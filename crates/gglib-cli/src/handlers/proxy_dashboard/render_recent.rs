@@ -1,6 +1,7 @@
 //! The recent-requests section of the frame: the last few requests, newest
 //! first, each with the tokens it wrote and how fast (the proxy's rate, in
-//! [`rate_words`]), and what gglib did to it in the proxy's own words.
+//! [`rate_words`]), and, in the proxy's own words, what its images cost and
+//! what gglib did to it.
 //!
 //! Pure, like its siblings: data in, `String` out, no IO and no clock beyond
 //! the one the age column is given.
@@ -16,14 +17,16 @@ use crate::presentation::truncate_string;
 /// How many of the proxy's recent requests the section shows.
 pub(super) const SHOWN: usize = 5;
 
-/// What a request wrote and how fast, "812 tokens · 34 t/s", each part only
-/// when the proxy has it; empty when it has neither.
+/// What a request wrote, how fast, and what its images cost, "812 tokens ·
+/// 34 t/s · 1 image ~3,600 tokens · 3,646 prompt tokens", each part only when
+/// the proxy has it; empty when it has none.
 fn figures(request: &RecentRequest) -> String {
     [
         request
             .completion_tokens
             .map(|tokens| tokens_words(u64::from(tokens))),
         request.tokens_per_second.map(rate_words),
+        request.image_words.clone(),
     ]
     .into_iter()
     .flatten()
@@ -74,6 +77,7 @@ mod tests {
             recorded_at_secs: u64::MAX, // the age column is not under test
             completion_tokens: None,
             tokens_per_second: None,
+            image_words: None,
             interventions: words
                 .iter()
                 .map(|w| Intervention {
@@ -147,6 +151,37 @@ mod tests {
         );
         assert!(
             rows[3].ends_with("phi                      1,200 tokens \u{b7} 8.5 t/s"),
+            "{out}"
+        );
+    }
+
+    /// An image request's row says what its images cost, in the proxy's
+    /// words, after what it wrote and before what was done to it; a row with
+    /// no image is as it was.
+    #[test]
+    fn a_row_says_what_the_requests_images_cost_in_the_proxys_words() {
+        let seen = RecentRequest {
+            completion_tokens: Some(1_200),
+            tokens_per_second: Some(8.46),
+            image_words: Some("1 image ~3,600 tokens \u{b7} 3,646 prompt tokens".to_owned()),
+            ..request("gemma", &["Trimmed 4 old messages"])
+        };
+        let running = RecentRequest {
+            image_words: Some("2 images ~7,200 tokens".to_owned()),
+            ..request("gemma", &[])
+        };
+        let out = render_recent_section(&[seen, running, request("qwen3", &[])]);
+        let rows: Vec<&str> = out.lines().collect();
+        assert!(rows[1].ends_with("qwen3"), "{out}");
+        assert!(
+            rows[2].ends_with("gemma                    2 images ~7,200 tokens"),
+            "{out}"
+        );
+        assert!(
+            rows[3].ends_with(
+                "gemma                    1,200 tokens \u{b7} 8.5 t/s \u{b7} 1 image ~3,600 tokens \u{b7} \
+                 3,646 prompt tokens  Trimmed 4 old messages"
+            ),
             "{out}"
         );
     }

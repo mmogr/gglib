@@ -112,6 +112,7 @@ async fn local_only_allows_ipv6_localhost() {
 
 #[tokio::test]
 async fn the_daemons_defaults_leave_the_database_path_to_resolve() {
+    gglib_core::paths::isolate_data_root();
     let config = ServerConfig::with_defaults().expect("defaults should build");
 
     // The production arm of `db_path`. Every other test in this crate passes

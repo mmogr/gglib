@@ -58,8 +58,9 @@ nix = { version = "0.30", features = ["signal"] }
 # the adapter crates' own `ts-bindings`, never on its own in an ordinary build.
 ts-bindings = ["dep:ts-rs"]
 # A data root of a test binary's own, which `data_root()` and
-# `resource_root()` answer before anything else (#955). Other crates enable it
-# from `[dev-dependencies]` only, so no ordinary build can set that root.
+# `resource_root()` answer before anything else (#955), and their refusal of
+# the user's own folder to a test that set none (#2088). Other crates enable
+# it from `[dev-dependencies]` only, so no ordinary build has either.
 test-utils = ["dep:tempfile"]
 
 # Run only with `test-utils`, which `cargo test` at the workspace root turns

@@ -44,11 +44,23 @@ pub fn source_checkout() -> Option<PathBuf> {
 /// keep a development build's state apart, set `GGLIB_DATA_DIR` (and
 /// `GGLIB_DAEMON_PORT`, so it runs a daemon of its own).
 ///
-/// A test binary built with this crate's `test-utils` feature can set a root
-/// of its own with `isolate_data_root`, which comes before both. A build
-/// without the feature neither looks for one nor can set one. One that a
-/// test run compiles with it, such as the `gglib` the CLI's tests start,
-/// looks and finds none, since only a test calls `isolate_data_root`.
+/// A build made for tests never answers a test with the second. That is
+/// this crate's own unit tests, and any build with its `test-utils`
+/// feature, which other crates turn on from `[dev-dependencies]`. There a
+/// test names its root, with `isolate_data_root` (which comes before both)
+/// or `GGLIB_DATA_DIR`, and one that names none is refused before the
+/// per-user folder is looked for, so no test reads or makes it. A gglib
+/// program such a build produced, as the `gglib` the CLI's tests start,
+/// says what it is with [`this_is_a_gglib_program`] and resolves as any
+/// other build does.
+/// An ordinary build has none of this.
+///
+/// # Panics
+///
+/// In a build made for tests, when a test that named no root asks. A panic
+/// and not an error, which the code under test could take for "nothing is
+/// installed" and the test pass on. The message names both ways to name a
+/// root.
 pub fn data_root() -> Result<PathBuf, PathError> {
     // 0. A test binary's own root (#955)
     #[cfg(feature = "test-utils")]
@@ -59,6 +71,14 @@ pub fn data_root() -> Result<PathBuf, PathError> {
     if let Ok(path) = env::var("GGLIB_DATA_DIR") {
         return Ok(PathBuf::from(path));
     }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    assert!(
+        !refuses_the_per_user_folder(),
+        "A test asked for the user's own gglib data folder. Call \
+         `gglib_core::paths::isolate_data_root()` at the start of the test, or set \
+         `GGLIB_DATA_DIR` for it, so it reads and writes a folder of its own."
+    );
 
     let root = dirs::data_local_dir()
         .ok_or(PathError::NoDataDir)?
@@ -72,6 +92,29 @@ pub fn data_root() -> Result<PathBuf, PathError> {
     }
 
     Ok(root)
+}
+
+/// Whether this process said it is a gglib program.
+#[cfg(any(test, feature = "test-utils"))]
+static PROGRAM: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Say that this process is a gglib program, which serves the user's own
+/// data folder. The first line of a `main`, and called nowhere else.
+///
+/// It matters only to a program a test run built: [`data_root`] refuses a
+/// test the per-user folder, and tells a test from a program by this call.
+/// A test never makes it, and `clippy.toml` refuses the call anywhere but
+/// in a `main`. An ordinary build compiles it to nothing.
+pub fn this_is_a_gglib_program() {
+    #[cfg(any(test, feature = "test-utils"))]
+    PROGRAM.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether [`data_root`] refuses the per-user folder: in a test, which is
+/// every process of a build made for tests but a gglib program.
+#[cfg(any(test, feature = "test-utils"))]
+fn refuses_the_per_user_folder() -> bool {
+    !PROGRAM.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Where a data root came from, for `gglib config paths`.
@@ -137,3 +180,7 @@ pub(super) fn normalize_user_path(raw: &str) -> Result<PathBuf, PathError> {
             .map_err(|e| PathError::CurrentDirError(e.to_string()))
     }
 }
+
+#[cfg(test)]
+#[path = "platform_tests.rs"]
+mod tests;

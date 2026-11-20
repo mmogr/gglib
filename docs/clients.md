@@ -353,7 +353,11 @@ or in a failed run, is listed with its type, HTTP status and meaning in
 the file against the source. An agent run whose model's server refused its
 request ends with the refusal's code when it is one of these (such as
 `model_cannot_read_images`), and `agent_error` otherwise; the run's last
-`error` event carries the refusal's code as `code`.
+`error` event carries the refusal's code as `code`. An agent run whose final
+reply is no answer ends `failed`, `no_answer`, after an `error` event that
+says the model gave no answer: the reply had no text, or it started with a
+tool call written as text on a turn that offered no tools. The text and the
+thinking the model wrote are in the events before it.
 
 Every refusal is `{"error": {"message", "type", "code"}}`, the gglib routes'
 and the guards' included: a path no route serves is `404 unknown_route`, a

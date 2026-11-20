@@ -44,6 +44,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::domain::agent::{FirstCall, LlmStreamEvent};
+use gglib_core::normalize::no_answer;
 use gglib_core::ports::{
     AgentError, AgentGuardReporter, AgentLoopPort, AgentRunOutput, EmptyToolExecutor,
     FilteredToolExecutor, LlmCompletionPort, ToolExecutorPort, UpstreamRefusal,
@@ -506,6 +507,10 @@ impl AgentLoopPort for AgentLoop {
     ///   text content for too many consecutive iterations.
     /// - `Err(AgentError::FirstCallMissing)` — `config.first_call` demanded a
     ///   call of one tool of the first reply and the model did not make it.
+    /// - `Err(AgentError::NoAnswer)` — the final reply had no words, or
+    ///   started with a tool call written as text when no tool was offered
+    ///   ([`no_answer`]). The words after a demanded first call are not
+    ///   judged: a reply with none there is answered for.
     /// - `Err(AgentError::TurnTooLong)` — a reply was cut off at its token
     ///   limit (`finish_reason: "length"`) while it wrote a tool call, or
     ///   before it wrote any text; none of it is run or answered. A reply
@@ -621,6 +626,15 @@ impl AgentLoopPort for AgentLoop {
                 .await?;
 
             if response.tool_calls.is_empty() {
+                // A reply with no words, or a call written as text when no
+                // tool was offered, is not an answer: the run says so and
+                // ends, with what the model wrote already sent.
+                if let Some(why) = no_answer(&response.content, !tools.is_empty()) {
+                    warn!(?why, "the final reply was no answer");
+                    let error = AgentError::NoAnswer;
+                    emit_error_event(&tx, &error.to_string()).await;
+                    return Err(error);
+                }
                 return Self::finalize_answer(
                     &mut messages,
                     response.content,

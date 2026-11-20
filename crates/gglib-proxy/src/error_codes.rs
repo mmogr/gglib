@@ -178,6 +178,7 @@ const CODES: &[ErrorCode] = &[
     row("stagnation_detected", UNTYPED, None, "The agent gave the same reply too often, so the run was stopped."),
     row("too_many_tool_calls", UNTYPED, None, "The model asked for more tool calls at once than are allowed."),
     row("turn_too_long", UNTYPED, None, "The model's turn was cut off at its token limit while it wrote a tool call, or before it wrote any text, so the agent run stopped rather than use half of it; retry, or turn thinking off."),
+    row("no_answer", UNTYPED, None, "The agent run's final reply was no answer: it had no text, or it was a tool call written as text on a turn that offered no tools. What the model wrote, its thinking included, is in the run's events."),
     row("agent_error", UNTYPED, None, "The agent loop failed; the run's last event says why. A run whose model's server refused its request ends with the refusal's code instead when it is one of these."),
     row("transcript_not_saved", UNTYPED, None, "The reply could not be saved to its conversation."),
 ];

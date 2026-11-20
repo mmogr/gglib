@@ -302,6 +302,7 @@ mod tests {
 
     #[test]
     fn explicit_cache_tuning_survives_the_cascade() {
+        gglib_core::paths::isolate_data_root();
         let mut cfg = bare(GlobalDefaults {
             cache_enabled: true,
             ..Default::default()
@@ -338,6 +339,7 @@ mod tests {
 
     #[test]
     fn slot_dir_defaults_when_cache_enabled_without_a_directory() {
+        gglib_core::paths::isolate_data_root();
         let cfg = bare(GlobalDefaults {
             cache_enabled: true,
             ..Default::default()

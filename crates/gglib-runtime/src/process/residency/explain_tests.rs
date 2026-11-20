@@ -273,6 +273,7 @@ fn sized_spec() -> ModelLaunchSpec {
 /// figures, since the budget is this machine's.
 #[test]
 fn a_launch_narration_carries_the_fit_its_context_was_sized_by() {
+    gglib_core::paths::isolate_data_root();
     let request = super::super::prepare(
         sized_spec(),
         &ServerConfigOptions::default(),
@@ -296,6 +297,7 @@ fn a_launch_narration_carries_the_fit_its_context_was_sized_by() {
 /// A plan and the launch it describes show one fit, read twice.
 #[test]
 fn a_plan_shows_the_fit_its_narration_carries() {
+    gglib_core::paths::isolate_data_root();
     let plan = plan_launch(
         sized_spec(),
         &crate::process::RuntimeBinaries::stand_in(),
@@ -317,6 +319,7 @@ fn a_plan_shows_the_fit_its_narration_carries() {
 /// could not be read.
 #[test]
 fn a_launch_with_the_fit_switched_off_narrates_no_fit() {
+    gglib_core::paths::isolate_data_root();
     let request = super::super::prepare_with(
         None,
         sized_spec(),

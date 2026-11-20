@@ -13,10 +13,15 @@
 //! ## Marker set
 //!
 //! [`KNOWN_RESIDUE_MARKERS`], a curated list of tool-call markers from
-//! dialects in the wild.  This deliberately duplicates a handful of literals
-//! from `gglib-gguf`'s detection pattern tables: core cannot depend on
-//! `gglib-gguf`, the list is small and changes rarely, and a doc
-//! cross-reference keeps the two in sight of each other.
+//! dialects in the wild: the forms models have been seen to write a call in
+//! when nothing parsed it.
+//!
+//! ## A reply that is no answer
+//!
+//! [`no_answer`] judges a run's final reply by the same markers: a reply
+//! with no words, or one that starts with a tool call written as text on a
+//! turn that offered no tools, is not an answer. The agent loop and its
+//! step-limit closing request both ask it.
 //!
 //! ## Chunk safety
 //!
@@ -29,16 +34,14 @@
 
 /// Tool-call markers from dialects observed in the wild.
 ///
-/// Curated from `gglib-gguf`'s detection pattern tables
-/// (`crates/gglib-gguf/src/capabilities/patterns.rs`) — see the module
-/// docs for why this small duplication is deliberate.  Only *tool-call*
-/// markers belong here: generic XML would false-positive on ordinary
-/// prose.
+/// Only *tool-call* markers belong here: generic XML would false-positive
+/// on ordinary prose.
 pub const KNOWN_RESIDUE_MARKERS: &[&str] = &[
     "<tool_call>",
     "</tool_call>",
     "<function=",
     "[TOOL_CALLS]",
+    "[TOOL_CALL]",
     "<｜tool▁calls▁begin｜>",
     "<｜tool▁call▁begin｜>",
     "<|python_tag|>",
@@ -134,9 +137,93 @@ pub fn scan_complete(text: &str) -> Option<String> {
     scan(text)
 }
 
+/// Why a run's final reply is no answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoAnswer {
+    /// It has no words: it is empty, or only whitespace.
+    Wordless,
+    /// It starts with this tool-call marker, on a turn that offered no
+    /// tools: a call written as text, which is what a model that tries a
+    /// call it was not offered writes.
+    ToolCall(&'static str),
+}
+
+/// Why `text`, a final reply that called no tool, is no answer; `None` when
+/// it is one. `tools_offered` is whether the request it answers offered any.
+///
+/// A reply with no words is never an answer. One that starts with a known
+/// tool-call marker ([`KNOWN_RESIDUE_MARKERS`]), leading whitespace aside,
+/// is none when no tools were offered, whatever follows the call. Only how
+/// the text starts is judged: words that name a marker, or that come before
+/// a call, are an answer.
+#[must_use]
+pub fn no_answer(text: &str, tools_offered: bool) -> Option<NoAnswer> {
+    let text = text.trim_start();
+    if text.is_empty() {
+        return Some(NoAnswer::Wordless);
+    }
+    if tools_offered {
+        return None;
+    }
+    KNOWN_RESIDUE_MARKERS
+        .iter()
+        .copied()
+        .find(|marker| text.starts_with(marker))
+        .map(NoAnswer::ToolCall)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_reply_with_no_words_is_no_answer_whether_or_not_tools_were_offered() {
+        for text in ["", " \n\t"] {
+            for tools_offered in [true, false] {
+                assert_eq!(
+                    no_answer(text, tools_offered),
+                    Some(NoAnswer::Wordless),
+                    "{text:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_reply_that_starts_with_a_marker_is_no_answer_only_when_no_tools_were_offered() {
+        let replies = [
+            (
+                "<tool_call>\n{\"name\": \"search\"}\n</tool_call>",
+                "<tool_call>",
+            ),
+            (
+                "[TOOL_CALL]\n{tool => \"search\"}\n[/TOOL_CALL]",
+                "[TOOL_CALL]",
+            ),
+            ("[TOOL_CALLS][{\"name\": \"search\"}]", "[TOOL_CALLS]"),
+            ("\n <tool_call>{}</tool_call>\nI will look.", "<tool_call>"),
+        ];
+        for (text, marker) in replies {
+            assert_eq!(
+                no_answer(text, false),
+                Some(NoAnswer::ToolCall(marker)),
+                "{text:?}"
+            );
+            assert_eq!(no_answer(text, true), None, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn a_reply_whose_words_come_first_is_an_answer() {
+        for text in [
+            "The parser reads `<tool_call>` blocks in src/parse.rs.",
+            "It is in src/lib.rs.\n<tool_call>{\"name\": \"search\"}</tool_call>",
+        ] {
+            for tools_offered in [true, false] {
+                assert_eq!(no_answer(text, tools_offered), None, "{text:?}");
+            }
+        }
+    }
 
     fn feed_all(scanner: &mut ResidueScanner, chunks: &[&str]) {
         for c in chunks {

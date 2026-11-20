@@ -632,6 +632,7 @@ mod tests {
     /// Test that None bootstrap path triggers fallback.
     #[test]
     fn test_select_llama_path_none_triggers_fallback() {
+        gglib_core::paths::isolate_data_root();
         let result = select_llama_path(None);
         // Fallback will either succeed (if llama-server is installed) or fail
         // We just verify the function doesn't panic and returns a Result
@@ -641,6 +642,7 @@ mod tests {
     /// Test that an invalid bootstrap path triggers fallback.
     #[test]
     fn test_select_llama_path_invalid_triggers_fallback() {
+        gglib_core::paths::isolate_data_root();
         let nonexistent = PathBuf::from("/nonexistent/path/llama-server");
         let result = select_llama_path(Some(&nonexistent));
         // Should attempt fallback (which may succeed or fail)

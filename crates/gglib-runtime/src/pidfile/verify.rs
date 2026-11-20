@@ -150,6 +150,7 @@ mod tests {
 
     #[test]
     fn is_our_server_false_for_self() {
+        gglib_core::paths::isolate_data_root();
         // The test binary is neither managed server
         let self_pid = std::process::id();
         assert!(!is_our_server(self_pid));

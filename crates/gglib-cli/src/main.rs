@@ -32,6 +32,11 @@ async fn main() -> anyhow::Result<ExitCode> {
 
 /// The command line, parsed and run.
 async fn run() -> anyhow::Result<()> {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "this is the gglib program's `main`"
+    )]
+    gglib_core::paths::this_is_a_gglib_program();
     gglib_core::utils::process::host::prepare();
     let (cli, remote) = parse();
     if leaves_nothing_behind(cli.command.as_ref()) {

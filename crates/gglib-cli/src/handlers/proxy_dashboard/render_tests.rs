@@ -657,6 +657,7 @@ fn the_recent_requests_sit_before_the_total() {
             recorded_at_secs: u64::MAX,
             completion_tokens: None,
             tokens_per_second: None,
+            image_words: None,
             interventions: vec![Intervention {
                 word: "Repaired a tool call".to_owned(),
             }],

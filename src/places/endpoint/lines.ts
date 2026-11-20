@@ -7,7 +7,8 @@
  * its flag line, an active request's prompt progress, the queue, the
  * second slot's room in the daemon's own sentence (`secondary_slot.detail`),
  * what gglib did to a request in the proxy's own words
- * (`Intervention.word`), a request's rate (`tokens_per_second`), the
+ * (`Intervention.word`), what a request's images cost in the proxy's own
+ * words (`image_words`), a request's rate (`tokens_per_second`), the
  * cache's reuse in its own sentence (`CacheUsage.summary`), the counters
  * and the loop-guard trips total. State words are
  * `components/status/words.ts`'s. The sentences around them are this
@@ -111,7 +112,11 @@ export interface RecentRow {
   /** When it was recorded, as a clock time. */
   time: string;
   model: string;
-  /** "812 tokens · 34 t/s", only the figures recorded; empty with none. */
+  /**
+   * "812 tokens · 34 t/s", then what its images cost in the proxy's words
+   * ("1 image ~3,600 tokens · 3,646 prompt tokens"); only the figures
+   * recorded, and empty with none.
+   */
   figures: string;
   /** What gglib did to it, in the proxy's words; empty when nothing. */
   done: string;
@@ -137,6 +142,7 @@ export function recentRows(snapshot: DashboardSnapshot | null, shown = RECENT_SH
         figures: [
           r.completion_tokens != null ? `${formatCount(r.completion_tokens)} ${r.completion_tokens === 1 ? 'token' : 'tokens'}` : null,
           r.tokens_per_second != null ? rateWords(r.tokens_per_second) : null,
+          r.image_words,
         ]
           .filter(Boolean)
           .join(' · '),

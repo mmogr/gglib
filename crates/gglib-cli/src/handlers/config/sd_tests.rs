@@ -150,6 +150,7 @@ fn status_of_a_binary_that_does_not_work_stops_at_why() {
 
 #[test]
 fn the_endings_name_the_product_and_what_to_do_next() {
+    gglib_core::paths::isolate_data_root();
     let built = built("master-948-228c707", "Metal");
     assert_eq!(
         built[1],

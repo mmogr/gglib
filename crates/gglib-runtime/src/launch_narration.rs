@@ -493,6 +493,7 @@ mod tests {
 
     #[test]
     fn context_line_names_the_rung_that_won() {
+        gglib_core::paths::isolate_data_root();
         let (s, c, r) = (
             spec(&[]),
             caps(),
@@ -508,6 +509,7 @@ mod tests {
     /// the line is a magic string.
     #[test]
     fn kv_line_shows_what_quantization_saved() {
+        gglib_core::paths::isolate_data_root();
         let (s, c, r) = (
             spec(&[]),
             caps(),
@@ -523,6 +525,7 @@ mod tests {
     /// An f16 launch has nothing to compare against — it *is* the baseline.
     #[test]
     fn kv_line_omits_the_comparison_when_already_f16() {
+        gglib_core::paths::isolate_data_root();
         let (s, c, r) = (
             spec(&[]),
             caps(),
@@ -543,6 +546,7 @@ mod tests {
     /// Without a per-token estimate there is no honest byte figure to show.
     #[test]
     fn kv_line_degrades_to_the_bare_types_without_an_estimate() {
+        gglib_core::paths::isolate_data_root();
         let mut s = spec(&[]);
         s.kv_shape = None;
         let (c, r) = (caps(), cache_ram(Some(6144), CacheRamSource::Auto));
@@ -552,6 +556,7 @@ mod tests {
 
     #[test]
     fn cache_line_reports_the_auto_budget_against_free_ram() {
+        gglib_core::paths::isolate_data_root();
         let (s, c, r) = (
             spec(&[]),
             caps(),
@@ -570,6 +575,7 @@ mod tests {
     /// chose — the whole reason `CacheRamSource` is carried this far.
     #[test]
     fn cache_line_distinguishes_a_forced_zero_from_a_chosen_one() {
+        gglib_core::paths::isolate_data_root();
         let s = spec(&[]);
         let c = caps();
         let forced = cache_ram(Some(0), CacheRamSource::Auto);
@@ -596,6 +602,7 @@ mod tests {
     /// the case a user would otherwise misread as working.
     #[test]
     fn cache_line_flags_a_disk_layer_the_model_cannot_use() {
+        gglib_core::paths::isolate_data_root();
         let (s, c, r) = (
             spec(&[]),
             caps(),
@@ -617,6 +624,7 @@ mod tests {
 
     #[test]
     fn mtp_line_appears_only_when_enabled() {
+        gglib_core::paths::isolate_data_root();
         let (s, r) = (spec(&[]), cache_ram(Some(6144), CacheRamSource::Auto));
         let off = caps();
         assert!(narrate(&inputs(&s, &off, &r)).decision("mtp").is_none());
@@ -655,6 +663,7 @@ mod tests {
 
     #[test]
     fn flags_line_carries_per_flag_provenance() {
+        gglib_core::paths::isolate_data_root();
         let (s, r) = (spec(&[]), cache_ram(Some(6144), CacheRamSource::Auto));
         let mut c = caps();
         c.jinja = JinjaResolution {
@@ -677,6 +686,7 @@ mod tests {
     /// default.
     #[test]
     fn flags_line_names_an_explicitly_disabled_jinja() {
+        gglib_core::paths::isolate_data_root();
         let (s, r) = (spec(&[]), cache_ram(Some(6144), CacheRamSource::Auto));
         let mut c = caps();
         c.jinja = JinjaResolution {
@@ -691,6 +701,7 @@ mod tests {
     /// of this launch, and the line says which.
     #[test]
     fn flags_and_mtp_lines_name_the_models_own_default() {
+        gglib_core::paths::isolate_data_root();
         let (s, r) = (spec(&[]), cache_ram(Some(6144), CacheRamSource::Auto));
         let mut c = caps();
         c.jinja = JinjaResolution {
@@ -718,6 +729,7 @@ mod tests {
     /// misreport the command line gglib actually built.
     #[test]
     fn flags_line_stays_silent_when_jinja_is_deferred() {
+        gglib_core::paths::isolate_data_root();
         let (s, c, r) = (
             spec(&[]),
             caps(),
@@ -731,6 +743,7 @@ mod tests {
     /// banner, or a user staring at a 501 has nothing to go on.
     #[test]
     fn flags_line_names_embedding_mode() {
+        gglib_core::paths::isolate_data_root();
         let (s, r) = (spec(&[]), cache_ram(Some(6144), CacheRamSource::Auto));
         let mut c = caps();
         c.embeddings = true;
@@ -745,6 +758,7 @@ mod tests {
     /// never took.
     #[test]
     fn flags_line_is_absent_when_gglib_added_no_flags() {
+        gglib_core::paths::isolate_data_root();
         let (s, c, r) = (
             spec(&[]),
             caps(),
@@ -761,6 +775,7 @@ mod tests {
     /// to fit under it or displace one rather than quietly widen the banner.
     #[test]
     fn narration_stays_within_the_banner_budget() {
+        gglib_core::paths::isolate_data_root();
         let (s, r) = (
             spec(&["agent", "reasoning", "mtp"]),
             cache_ram(Some(6144), CacheRamSource::Auto),

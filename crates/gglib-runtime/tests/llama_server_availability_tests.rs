@@ -8,6 +8,7 @@ use gglib_runtime::llama::{LlamaServerError, resolve_llama_server};
 
 #[test]
 fn test_missing_binary_returns_not_found_error() {
+    gglib_core::paths::isolate_data_root();
     // Try to resolve without env var (will fail in test environment)
     let result = resolve_llama_server();
 
@@ -44,6 +45,7 @@ fn test_nonexistent_path_in_env_var_returns_not_found() {
 
 #[test]
 fn test_error_messages_include_install_instructions() {
+    gglib_core::paths::isolate_data_root();
     // Try to resolve - will likely fail in test environment
     let result = resolve_llama_server();
 
@@ -61,6 +63,7 @@ fn test_error_messages_include_install_instructions() {
 /// Integration test: validate full error propagation chain
 #[test]
 fn test_error_has_all_required_fields() {
+    gglib_core::paths::isolate_data_root();
     let result = resolve_llama_server();
 
     if let Err(err) = result {

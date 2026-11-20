@@ -30,6 +30,37 @@ messages_truncated: number,
  */
 was_clamped: boolean, 
 /**
+ * How many images the request carries, over every message: counted on
+ * the body sent on to the model, after trimming, and on the body as it
+ * arrived for a request refused as longer than the context. Zero on a
+ * run the loop guard ended.
+ */
+images: number, 
+/**
+ * The prompt tokens those images were estimated at: the sum of
+ * `gglib_core::request_pipeline::image_url_tokens` over them, which is
+ * what the context budget counted them at.
+ */
+image_tokens: number, 
+/**
+ * `usage.prompt_tokens` as the upstream reported it: the whole prompt,
+ * text, template and images together. `None` until the turn's usage is
+ * read, when [`ContextMetricsStore::flag_prompt_tokens`] writes it, and
+ * on a turn that ended without one being read.
+ *
+ * Streamed: from the first generation's `Usage` frame. Non-streaming:
+ * from the first answer's body. A re-issue's count is not read.
+ */
+prompt_tokens: number | null, 
+/**
+ * What the images cost, in the words every surface shows
+ * (`gglib_core::domain::figures::image_cost_words`): the images and
+ * their estimate, then the prompt tokens once they are written. `None`
+ * with no image. The store writes it where the request is recorded and
+ * again when its prompt tokens land; a value a caller passes is replaced.
+ */
+image_words: string | null, 
+/**
  * `true` when dialect residue — tool-call markup llama-server left
  * unparsed — reached this request's client-visible output (see
  * `gglib_core::normalize::residue`). Back-patched after the response

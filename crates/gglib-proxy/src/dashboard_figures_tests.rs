@@ -1,7 +1,7 @@
 //! The dashboard's figures as the proxy serves them, recorded in
 //! `contracts/proxy/figures.json` for the GUI and `gglib proxy dashboard`
-//! to read back: recent requests with their writing rates, the cache's
-//! reuse, and the loop-guard trips total.
+//! to read back: recent requests with their writing rates and one with what
+//! its image cost, the cache's reuse, and the loop-guard trips total.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -9,6 +9,7 @@ use std::sync::Arc;
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::defects::{LoopGuardTrip, ModelDefectLedger};
 use gglib_core::domain::figures::rate_words;
+use gglib_core::request_pipeline::estimate_image_tokens;
 use serde_json::{Value, json};
 
 use super::*;
@@ -23,6 +24,10 @@ fn request(model: &str) -> ContextSnapshot {
         payload_chars_after: 2_000,
         messages_truncated: 0,
         was_clamped: false,
+        images: 0,
+        image_tokens: 0,
+        prompt_tokens: None,
+        image_words: None,
         dialect_residue: false,
         tool_repaired: false,
         completion_tokens: None,
@@ -48,26 +53,39 @@ fn generated(tokens: u32, ms: Option<u64>) -> TurnGeneration {
 }
 
 /// A frame's figures from known traffic: five finished requests (one of a
-/// single token, so with no rate, one at ten exactly and one at a tie of
-/// 8.25), one cut short before its usage, a cache
+/// single token, so with no rate, one at ten exactly, one at a tie of
+/// 8.25, and one carrying a 2560x1440 image in a prompt the upstream counted
+/// at 3,646 tokens), one cut short before its usage, a cache
 /// that served 6,600 of 10,000 prompt tokens (the last request 2,400 of
 /// 4,000), and three loop-guard trips over two models. Beside each request,
 /// the words its rate is said in.
 fn figures() -> Value {
     let ledger = Arc::new(ModelDefectLedger::new());
     let metrics = ContextMetricsStore::new().with_ledger(Arc::clone(&ledger));
-    for (model, generation) in [
-        ("Qwen3-8B", Some(generated(812, Some(23_600)))),
-        ("gemma-3-12b", Some(generated(1_200, Some(141_800)))),
-        ("Qwen3-8B", Some(generated(1, Some(0)))),
-        ("Qwen3-8B", None),
+    for (model, generation, image_prompt) in [
+        ("Qwen3-8B", Some(generated(812, Some(23_600))), None),
+        // The one with an image, and its prompt as the upstream counted it.
+        (
+            "gemma-3-12b",
+            Some(generated(1_200, Some(141_800))),
+            Some(3_646),
+        ),
+        ("Qwen3-8B", Some(generated(1, Some(0))), None),
+        ("Qwen3-8B", None, None),
         // Ten exactly, said whole, and a tie, which goes up.
-        ("phi-4", Some(generated(100, Some(10_000)))),
-        ("phi-4", Some(generated(33, Some(4_000)))),
+        ("phi-4", Some(generated(100, Some(10_000))), None),
+        ("phi-4", Some(generated(33, Some(4_000))), None),
     ] {
-        let seq = metrics.record(request(model));
+        let seq = metrics.record(ContextSnapshot {
+            images: usize::from(image_prompt.is_some()),
+            image_tokens: image_prompt.map_or(0, |_| estimate_image_tokens(2560, 1440)),
+            ..request(model)
+        });
         if let Some(generation) = generation {
             metrics.flag_generation(seq, generation);
+        }
+        if let Some(prompt_tokens) = image_prompt {
+            metrics.flag_prompt_tokens(seq, prompt_tokens);
         }
     }
     ledger.record_loop_guard_trip("Qwen3-8B", LoopGuardTrip::Loop);
@@ -115,6 +133,23 @@ fn the_served_figures_are_the_ones_the_traffic_makes() {
     assert_eq!(
         figures["rate_words"],
         json!(["34 t/s", "8.5 t/s", null, null, "10 t/s", "8.3 t/s"])
+    );
+    let image_words: Vec<&Value> = figures["recent_requests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|request| &request["image_words"])
+        .collect();
+    assert_eq!(
+        image_words,
+        [
+            &Value::Null,
+            &json!("1 image ~3,600 tokens \u{b7} 3,646 prompt tokens"),
+            &Value::Null,
+            &Value::Null,
+            &Value::Null,
+            &Value::Null
+        ]
     );
     assert_eq!(figures["cache_usage"]["reuse_percent"], 66);
     assert_eq!(figures["cache_usage"]["last_reuse_percent"], 60);

@@ -772,6 +772,19 @@ describe('the endpoint place', () => {
       expect(screen.getByRole('main', { name: 'Diagnostics' })).toBeInTheDocument();
     });
 
+    it("Recent says what a request's images cost, in the proxy's words", async () => {
+      renderEndpoint();
+      await frame({
+        recent_requests: [recentRequest({ model_name: 'text-only' }), { ...FIGURES.recent_requests[1], model_name: 'sees' }],
+      });
+      const rows = within(screen.getByRole('list', { name: 'Recent requests' })).getAllByRole('listitem');
+      expect(rows[0]).toHaveTextContent(`sees1,200 tokens · 8.5 t/s · ${FIGURES.recent_requests[1].image_words}`);
+      expect(FIGURES.recent_requests[1].image_words).toBe('1 image ~3,600 tokens · 3,646 prompt tokens');
+      expect(rows[1].textContent).not.toMatch(/image/);
+      // A row too long for its column wraps under its model's name; jsdom lays nothing out, so the class is what holds it.
+      rows.forEach((row) => expect(row).toHaveClass('flex-wrap'));
+    });
+
     it('Recent is not drawn before the first request', async () => {
       renderEndpoint();
       await frame();
