@@ -70,8 +70,9 @@ gglib config reveal proxy-api-key  # a stored secret, alone on stdout
   stdout, for a script.
 - `default-model-id` is the model a command uses when none is named: `gglib
   q` without `-m`, for one. `up` fills an empty default with the model it
-  served. `default-image-model-id` is the same for drawing, and is refused
-  unless the model draws.
+  served. With no default, `gglib q` asks the library's only chat model
+  when there is exactly one. `default-image-model-id` is the same for
+  drawing, and is refused unless the model draws.
 - `proxy-port` is where `proxy`, `serve` and `up` start the endpoint when
   they are given no `--port`, where the desktop app starts it, and where
   `proxy dashboard` and `proxy cache-clear` look for it.

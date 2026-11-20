@@ -26,8 +26,11 @@ n
 
 One-shot. `{}` in the question is replaced by piped or `--file` input, and
 `--quiet` strips tool progress and reasoning tokens for a script.
-Without `-m` it asks the default model (`default-model-id`, [config set](config.md#set-unset-show));
-under `--remote`, the model last asked of that machine.
+Without `-m` it asks the default model (`default-model-id`, [config set](config.md#set-unset-show)).
+With no default it asks the library's only chat model and says which on
+stderr (`Model: <name> (the only chat model in the library)`, not under
+`--quiet`); with no chat model, or several, it says to name one or set a
+default. Under `--remote` it asks the model last asked of that machine.
 
 <!-- snippet: q-pipe -->
 ```console

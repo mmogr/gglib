@@ -95,12 +95,52 @@ pub(crate) struct QuestionArgs {
     pub profile: Option<String>,
 }
 
+/// The model a question that named none asks, by id: the settings' default
+/// (`default_id`), else the library's only chat model, which is said on
+/// `said` unless `quiet`, since the question did not choose it.
+///
+/// # Errors
+///
+/// There is no default and the library has no chat model, or several; the
+/// default is a model the library no longer holds; or the library could not
+/// be read.
+async fn unnamed_model(
+    ctx: &CliContext,
+    default_id: Option<i64>,
+    quiet: bool,
+    said: &mut impl io::Write,
+) -> Result<String> {
+    let models = ctx.app.models();
+    let Some(default_id) = default_id else {
+        let only = models
+            .only_chat_model()
+            .await
+            .map_err(|e| anyhow!("failed to read the library: {e}"))?
+            .ok_or_else(|| {
+                anyhow!(
+                    "No model specified and no default model set.\n\
+                     Use --model <id-or-name> or set a default:\n  \
+                     gglib config set default-model-id <id-or-name>"
+                )
+            })?;
+        if !quiet {
+            writeln!(
+                said,
+                "Model: {} (the only chat model in the library)",
+                only.name
+            )?;
+        }
+        return Ok(only.id.to_string());
+    };
+    let model = models
+        .get_by_id(default_id)
+        .await
+        .map_err(|e| anyhow!("failed to load default model: {e}"))?
+        .ok_or_else(|| anyhow!("default model (ID: {default_id}) not found"))?;
+    Ok(model.id.to_string())
+}
+
 /// Run a single-turn agentic question, with optional continuation into chat.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one `gglib q` read top to bottom: input, model and profile, the conversation, \
-              the turn, and the hand-off to chat"
-)]
 pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> {
     let QuestionArgs {
         question,
@@ -143,26 +183,13 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         profile.as_deref(),
     )
     .await?;
-    // A turn with no model named: this machine's default here, by id, the
-    // model last asked for there — then resolved once, on that machine.
+    // A turn with no model named: this machine's default here, else its
+    // only chat model, by id; the model last asked for there. Then resolved
+    // once, on that machine.
     let default_id = settings.default_model_id;
     let model_identifier = target
         .model_for_turn(ctx, selection.model, async || {
-            let default_id = default_id.ok_or_else(|| {
-                anyhow!(
-                    "No model specified and no default model set.\n\
-                     Use --model <id-or-name> or set a default:\n  \
-                     gglib config set default-model-id <id-or-name>"
-                )
-            })?;
-            let model = ctx
-                .app
-                .models()
-                .get_by_id(default_id)
-                .await
-                .map_err(|e| anyhow!("failed to load default model: {e}"))?
-                .ok_or_else(|| anyhow!("default model (ID: {default_id}) not found"))?;
-            Ok(model.id.to_string())
+            unnamed_model(ctx, default_id, quiet, &mut receipts).await
         })
         .await?;
     let turn = target.resolve_turn(ctx, model_identifier).await?;

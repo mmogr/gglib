@@ -174,7 +174,8 @@ pub enum Commands {
         question: String,
         /// Model ID or name
         ///
-        /// Locally, omitting it falls back to the default model from settings.
+        /// Locally, omitting it falls back to the default model from settings, or with
+        /// no default to the library's only chat model, which the question then names.
         /// With --remote, an ID is the paired machine's, as `gglib model list --remote`
         /// shows it; omitting it reuses the model last asked of that machine, and this
         /// machine's default is not consulted.
