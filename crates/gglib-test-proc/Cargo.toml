@@ -17,7 +17,8 @@ path = "src/lib.rs"
 name = "gglib-test-proc"
 path = "src/main.rs"
 
-# Taken only from `[dev-dependencies]`, so no release build carries it. No
+# Taken from `[dev-dependencies]`, and by gglib-mcp's `test-utils` feature,
+# which only `[dev-dependencies]` turn on, so no release build carries it. No
 # dependencies at all: `install` builds the program with cargo on first use,
 # and a build with nothing to compile but this crate takes a moment.
 [dev-dependencies]

@@ -40,7 +40,7 @@ DEPENDS ON ───────────────────────
   engine-llama       → gguf, core
   gguf               → core
   hf                 → core
-  mcp                → core, build-info
+  mcp                → core, build-info, test-proc
   proxy              → mcp, core, broadcast, build-info
   runtime            → mcp, proxy, agent, core
   agent              → core

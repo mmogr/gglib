@@ -142,20 +142,6 @@ pub(crate) fn stdio(name: &str, command: &str) -> NewMcpServer {
     NewMcpServer::new_stdio(name, command, vec![], None)
 }
 
-/// An MCP server for `sh -c`: it answers `initialize` and `tools/list` with
-/// the id it was asked under, and offers one tool.
-#[cfg(unix)]
-pub(crate) const STAND_IN_SERVER: &str = r#"while IFS= read -r line; do
-  id=${line#*\"id\":}
-  id=${id%%,*}
-  case "$line" in
-    *'"method":"initialize"'*)
-      printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"stand-in\"}}}" ;;
-    *'"method":"tools/list"'*)
-      printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"tools\":[{\"name\":\"echo\",\"description\":\"says it back\"}]}}" ;;
-  esac
-done"#;
-
 #[tokio::test]
 async fn test_add_and_list_servers() {
     let (service, _) = service();
@@ -351,17 +337,12 @@ async fn updating_a_server_that_is_not_there_is_not_found() {
 /// The row is added with a bare command and no resolved path, as
 /// `gglib mcp add` leaves it. The test has to resolve it before it starts
 /// it: the client refuses a path that is not absolute.
-#[cfg(unix)]
 #[tokio::test]
 async fn testing_a_server_resolves_its_executable_then_starts_what_is_stored() {
+    let stand_in = crate::StandIn::install();
     let (service, _) = service();
     let added = service
-        .add_server(NewMcpServer::new_stdio(
-            "stand-in",
-            "sh",
-            vec!["-c".to_string(), STAND_IN_SERVER.to_string()],
-            None,
-        ))
+        .add_server(stand_in.server("stand-in"))
         .await
         .unwrap();
     assert_eq!(added.config.resolved_path_cache, None);
@@ -377,10 +358,9 @@ async fn testing_a_server_resolves_its_executable_then_starts_what_is_stored() {
         .config
         .resolved_path_cache
         .expect("the test stores the path it resolved");
-    assert!(
-        std::path::Path::new(&resolved).is_absolute() && resolved.ends_with("/sh"),
-        "resolved to {resolved}"
-    );
+    let resolved = std::path::Path::new(&resolved);
+    assert!(resolved.is_absolute(), "resolved to {}", resolved.display());
+    assert_eq!(resolved, stand_in.program());
     assert_eq!(
         service.get_server_status(added.id).await,
         McpServerStatus::Stopped,
@@ -487,23 +467,17 @@ async fn starting_up_restamps_each_server_whose_verdict_changed_and_writes_no_ot
 }
 
 /// A server's info as its name, its status and the names of its tools.
-#[cfg(unix)]
 fn summary(info: McpServerInfo) -> (String, McpServerStatus, Vec<String>) {
     let tools = info.tools.into_iter().map(|tool| tool.name).collect();
     (info.server.name, info.status, tools)
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn a_servers_info_is_its_status_and_its_tools_while_it_runs() {
+    let installed = crate::StandIn::install();
     let (service, _) = service();
     let stand_in = service
-        .add_server(NewMcpServer::new_stdio(
-            "stand-in",
-            "sh",
-            vec!["-c".to_string(), STAND_IN_SERVER.to_string()],
-            None,
-        ))
+        .add_server(installed.server("stand-in"))
         .await
         .unwrap();
     service.add_server(stdio("idle", "echo")).await.unwrap();

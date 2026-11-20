@@ -106,7 +106,6 @@ async fn a_stored_image_is_on_the_result() {
 // ---- list_tools -------------------------------------------------------------
 
 /// What `list_tools` names each tool's server, over stand-in servers.
-#[cfg(unix)]
 mod listing {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -116,8 +115,9 @@ mod listing {
     use gglib_core::{McpServer, NewMcpServer};
 
     use super::McpToolExecutorAdapter;
+    use crate::StandIn;
     use crate::service::McpService;
-    use crate::service::tests::{MockMcpRepository, STAND_IN_SERVER};
+    use crate::service::tests::MockMcpRepository;
     use crate::tool_images::tool_images_tests::images;
 
     /// The repository in memory, whose list can be made to fail while each
@@ -158,18 +158,9 @@ mod listing {
         }
     }
 
-    fn stand_in(name: &str) -> NewMcpServer {
-        NewMcpServer::new_stdio(
-            name,
-            "sh",
-            vec!["-c".to_owned(), STAND_IN_SERVER.to_owned()],
-            None,
-        )
-    }
-
-    /// Two running stand-ins, "Tavily Web Search" and "Files", each
-    /// offering `echo`, and the repository under them.
-    async fn two_running() -> (Arc<McpService>, Arc<ListFails>, [i64; 2]) {
+    /// Two running servers started from `stand_in`, "Tavily Web Search" and
+    /// "Files", each offering `echo`, and the repository under them.
+    async fn two_running(stand_in: &StandIn) -> (Arc<McpService>, Arc<ListFails>, [i64; 2]) {
         let repo = Arc::new(ListFails {
             inner: MockMcpRepository::new(),
             failing: AtomicBool::new(false),
@@ -177,7 +168,7 @@ mod listing {
         let service = Arc::new(McpService::new(repo.clone()));
         let mut ids = [0; 2];
         for (id, name) in ids.iter_mut().zip(["Tavily Web Search", "Files"]) {
-            *id = service.add_server(stand_in(name)).await.unwrap().id;
+            *id = service.add_server(stand_in.server(name)).await.unwrap().id;
             service.start_server(*id).await.unwrap();
         }
         (service, repo, ids)
@@ -201,7 +192,8 @@ mod listing {
     /// servers with one tool name each keep their own names.
     #[tokio::test]
     async fn each_tool_names_the_server_whose_id_it_carries() {
-        let (service, _, [tavily, files]) = two_running().await;
+        let stand_in = StandIn::install();
+        let (service, _, [tavily, files]) = two_running(&stand_in).await;
 
         let mut want = vec![
             (
@@ -218,7 +210,8 @@ mod listing {
     /// Servers that cannot be read leave each tool listed without a server.
     #[tokio::test]
     async fn unreadable_servers_leave_the_tools_listed_without_one() {
-        let (service, repo, [tavily, files]) = two_running().await;
+        let stand_in = StandIn::install();
+        let (service, repo, [tavily, files]) = two_running(&stand_in).await;
         repo.failing.store(true, Ordering::SeqCst);
 
         let mut want = vec![

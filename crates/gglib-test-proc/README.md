@@ -13,7 +13,9 @@ for is tested there as well.
 
 ## Architecture
 
-A leaf, taken only from `[dev-dependencies]`, with no dependencies of its own.
+A leaf with no dependencies of its own, taken from `[dev-dependencies]`, and
+by `gglib-mcp`'s `test-utils` feature, whose stand-in MCP server is this
+program and which other crates turn on from theirs.
 The library installs the program; the binary is the program.
 
 ```text
