@@ -432,6 +432,7 @@ gglib run show
   --follow -f
 gglib run start
   --follow -f
+  --image
   --model -m
 gglib serve
   --allowed-host

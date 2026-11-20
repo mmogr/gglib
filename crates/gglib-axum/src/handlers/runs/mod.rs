@@ -6,6 +6,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::sse::{Event, Sse};
 use futures_util::stream::Stream;
+use gglib_core::contracts::http::MAX_BODY_BYTES;
 use gglib_core::domain::runs::{RunInfo, RunKind, RunList};
 use gglib_core::ports::{RunScope, RunsPort};
 use serde::Deserialize;
@@ -25,6 +26,22 @@ fn invalid(message: String) -> HttpError {
         code: "invalid_request",
         message,
     }
+}
+
+/// A body the route could not read: one over the route's limit answered
+/// with the proxy's code for it, and any other as [`invalid`].
+fn unreadable(rejection: &JsonRejection) -> HttpError {
+    if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        return HttpError::Coded {
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+            code: "request_too_large",
+            message: format!(
+                "The request body is over the {} MiB limit.",
+                MAX_BODY_BYTES >> 20
+            ),
+        };
+    }
+    invalid(rejection.body_text())
 }
 
 #[derive(Deserialize)]
@@ -53,7 +70,7 @@ pub(crate) async fn put(
     body: Result<Json<Value>, JsonRejection>,
 ) -> Result<(StatusCode, Json<RunInfo>), HttpError> {
     let Query(query) = query.map_err(|e| invalid(e.body_text()))?;
-    let Json(body) = body.map_err(|e| invalid(e.body_text()))?;
+    let Json(body) = body.map_err(|e| unreadable(&e))?;
     let created = match query.kind {
         Some(RunKind::Agent) if query.draw || query.image_model.is_some() => {
             return Err(invalid(gglib_proxy::runs::AGENT_DRAW_IN_QUERY.to_owned()));

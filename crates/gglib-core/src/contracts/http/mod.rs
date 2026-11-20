@@ -13,8 +13,9 @@ pub use hf::*;
 /// The most bytes a request body may be on a route that takes images.
 ///
 /// Those are the proxy's `POST /v1/chat/completions` and
-/// `PUT /v1/gglib/runs/{id}`. An image rides in the body as base64, a third
-/// larger than its file.
+/// `PUT /v1/gglib/runs/{id}`, and the daemon's `PUT /api/runs/{id}` and
+/// `POST /api/images/generations`. An image rides in the body as base64, a
+/// third larger than its file.
 pub const MAX_BODY_BYTES: usize = 32 * 1024 * 1024;
 
 /// `raw` as one URL path segment: every byte but an RFC 3986 unreserved one

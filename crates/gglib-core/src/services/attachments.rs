@@ -2,7 +2,9 @@
 //!
 //! Every surface that attaches an image (the daemon's upload route, the
 //! proxy's, the CLI) hands the file's bytes to [`AttachmentService::ingest`],
-//! so what counts as an image and how large one may be is decided once.
+//! so what counts as an image and how large one may be is decided once, in
+//! [`checked_image`], which a surface that sends an image without storing
+//! it calls itself.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,6 +15,28 @@ use crate::ports::attachment_store::{AttachmentError, AttachmentStore};
 use crate::request_pipeline::{
     MAX_IMAGE_BYTES, MAX_REQUEST_IMAGE_BYTES, estimate_image_tokens, image_mime, image_size,
 };
+
+/// What `bytes` must be to be attached or sent as an image, and what they
+/// are: the media type and the width and height in pixels.
+///
+/// The one rule for every surface, whether it stores the image
+/// ([`AttachmentService::ingest`]) or sends it inline (`gglib run start`).
+/// The type is read from the first bytes and the size from the image's own
+/// header, never from a name.
+///
+/// # Errors
+///
+/// [`AttachmentError::TooLarge`] over [`MAX_IMAGE_BYTES`];
+/// [`AttachmentError::Unsupported`] for anything but a PNG or a JPEG, and
+/// for one whose size cannot be read.
+pub fn checked_image(bytes: &[u8]) -> Result<(&'static str, (u32, u32)), AttachmentError> {
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(AttachmentError::TooLarge);
+    }
+    let mime = image_mime(bytes).ok_or(AttachmentError::Unsupported)?;
+    let size = image_size(bytes).ok_or(AttachmentError::Unsupported)?;
+    Ok((mime, size))
+}
 
 /// Service for storing and reading the images messages carry.
 pub struct AttachmentService {
@@ -47,11 +71,7 @@ impl AttachmentService {
     /// [`AttachmentError::Unsupported`] for anything but a PNG or a JPEG, and
     /// for one whose size cannot be read. Nothing is stored in either case.
     pub async fn ingest(&self, bytes: &[u8]) -> Result<AttachmentUpload, AttachmentError> {
-        if bytes.len() > MAX_IMAGE_BYTES {
-            return Err(AttachmentError::TooLarge);
-        }
-        let mime = image_mime(bytes).ok_or(AttachmentError::Unsupported)?;
-        let (width, height) = image_size(bytes).ok_or(AttachmentError::Unsupported)?;
+        let (mime, (width, height)) = checked_image(bytes)?;
         let info = AttachmentInfo {
             id: AttachmentId::of(bytes),
             mime: mime.to_owned(),

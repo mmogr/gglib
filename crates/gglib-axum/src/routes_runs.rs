@@ -4,6 +4,7 @@
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
+use gglib_core::contracts::http::MAX_BODY_BYTES;
 
 use crate::handlers;
 use crate::state::AppState;
@@ -14,13 +15,14 @@ use crate::state::AppState;
 pub(crate) fn run_routes() -> Router<AppState> {
     Router::new()
         .route("/", get(handlers::runs::list))
-        // A run's body is a whole conversation, so it gets the agent route's
-        // 4 MiB rather than the default 2.
+        // A chat run's body is the whole request, images inline, so it
+        // gets what the proxy's own run door takes. An agent run's body
+        // comes through the same route and gets the same.
         .route(
             "/{id}",
             get(handlers::runs::get)
                 .put(handlers::runs::put)
-                .layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
+                .layer(DefaultBodyLimit::max(MAX_BODY_BYTES)),
         )
         .route("/{id}/events", get(handlers::runs::events))
         .route("/{id}/cancel", post(handlers::runs::cancel))

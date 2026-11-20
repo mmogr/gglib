@@ -4,6 +4,8 @@ mod read;
 mod start;
 mod text;
 
+use std::path::PathBuf;
+
 use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use gglib_core::domain::runs::is_run_id;
@@ -27,6 +29,9 @@ pub(crate) enum RunCommand {
         model: String,
         /// What to ask
         prompt: String,
+        /// Send a PNG or JPEG image with the prompt; may be repeated
+        #[arg(long = "image", value_name = "PATH")]
+        images: Vec<PathBuf>,
         /// Print the reply as it arrives instead of the id
         #[arg(long, short)]
         follow: bool,
@@ -54,8 +59,9 @@ pub(crate) async fn dispatch(args: RunArgs) -> Result<()> {
         RunCommand::Start {
             model,
             prompt,
+            images,
             follow,
-        } => start::start(&ensure_daemon().await?, &model, &prompt, follow).await,
+        } => start::start(&ensure_daemon().await?, &model, &prompt, &images, follow).await,
         RunCommand::List => read::list(&ensure_daemon().await?).await,
         RunCommand::Show { id, follow } => {
             checked(&id)?;

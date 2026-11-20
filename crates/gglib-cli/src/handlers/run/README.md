@@ -12,7 +12,8 @@ the terminal leaves the reply running.
 run/
   mod.rs    — the subcommands, and routing them
   start.rs  — `start`: mint an id, start the run, print the id, or with
-              `--follow` the reply as it arrives
+              `--follow` the reply as it arrives; `--image` puts each file in
+              the request as a `data:` URL, checked first
   read.rs   — `list`, `show [--follow]`, `cancel`
   text.rs   — the reply text in a frame, from its content delta
 ```
