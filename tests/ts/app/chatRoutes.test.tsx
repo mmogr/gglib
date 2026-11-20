@@ -3,7 +3,8 @@
  * read from it. `/chat/:id` opens that conversation on its model (the
  * paired machine's, for one made for it); `/chat/new` opens an empty one on
  * `?model=` or `?far=`, else on the last model used or the default while
- * the library has it, or the first loaded, and the first send's
+ * the library has it, or the first loaded, or the library's only chat
+ * model, and with none of those says what to do; the first send's
  * conversation replaces the address without remounting the place; a local
  * chat on a model nothing serves opens all the same, with no port (a send
  * loads the model), and one whose model stops while it is open stays; the
@@ -513,10 +514,58 @@ describe('the chat routes', () => {
     expect(at()).toBe('/chat/new');
   });
 
-  it('with nothing used, no default and nothing loaded, the library', async () => {
+  it("then the library's only chat model, loaded or not, with nothing used, no default and nothing loaded", async () => {
+    library(36);
     daemon.settings = { defaultModelId: 33 };
     const { at } = renderApp('/chat/new');
+    const chatPage = await page();
+    expect(chatPage).toHaveTextContent('Chatting with model 36');
+    expect(chatPage).toHaveAttribute('data-port', '');
+    expect(at()).toBe('/chat/new');
+  });
+
+  it('an image model is not counted: one chat model beside image models is the only one', async () => {
+    act(() =>
+      applyLibraryRead({
+        models: [
+          { id: 37, name: 'flux', imageFamily: 'flux1' },
+          { id: 38, name: 'model 38' },
+          { id: 39, name: 'sdxl', imageFamily: 'sdxl' },
+        ] as GgufModel[],
+      }),
+    );
+    renderApp('/chat/new');
+    expect(await page()).toHaveTextContent('Chatting with model 38');
+  });
+
+  it('with several chat models and nothing to pick by, says to pick one, with the way to the library', async () => {
+    const user = userEvent.setup();
+    library(40, 41);
+    const { at } = renderApp('/chat/new');
+    expect(await screen.findByText('Pick a model to chat with: open one in the library and press Chat.')).toBeInTheDocument();
+    expect(at()).toBe('/chat/new');
+    expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Open the library' }));
     await waitFor(() => expect(at()).toBe('/library'));
+  });
+
+  it('with no chat model in the library, says so, with the way to the library', async () => {
+    act(() => applyLibraryRead({ models: [{ id: 42, name: 'flux', imageFamily: 'flux1' }] as GgufModel[] }));
+    daemon.settings = { defaultModelId: 33 };
+    const { at } = renderApp('/chat/new');
+    expect(await screen.findByText('No model to chat with yet. Get one in the library.')).toBeInTheDocument();
+    expect(at()).toBe('/chat/new');
+    expect(screen.getByRole('button', { name: 'Open the library' })).toBeInTheDocument();
+  });
+
+  it('opens the chat once a model is loaded while it says to pick one', async () => {
+    library(43, 44);
+    renderApp('/chat/new');
+    expect(await screen.findByText('Pick a model to chat with: open one in the library and press Chat.')).toBeInTheDocument();
+
+    serving(44, 5044);
+    expect(await page()).toHaveAttribute('data-port', '5044');
   });
 
   it('deleting the open chat opens an empty one on its model', async () => {
