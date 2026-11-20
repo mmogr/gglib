@@ -352,22 +352,18 @@ fn the_folder_state_is_read_from_the_disk() {
     assert_eq!(there.source, "explicit");
 }
 
-/// A folder whose mode refuses a write is not writable, and a missing
-/// folder under one will not be created there: both are Not writable, as
-/// the first download's write would find.
-// Unix only: the folder is made unwritable by its mode.
-#[cfg(unix)]
+/// A folder that refuses a write is not writable, and a missing folder
+/// under one will not be created there: both are Not writable, as the
+/// first download's write would find.
 #[test]
 fn a_folder_that_refuses_a_write_or_sits_under_one_is_not_writable() {
-    use std::os::unix::fs::PermissionsExt;
     let root = tempfile::tempdir().expect("a temp folder");
     let locked = root.path().join("locked");
     std::fs::create_dir(&locked).expect("a folder to lock");
-    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555)).expect("0555");
+    let held = gglib_core::paths::unwritable_folder(&locked);
     let folder = directory_info_at(&locked, "explicit", String::new());
     let under = directory_info_at(&locked.join("models"), "explicit", String::new());
-    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
-        .expect("writable again, to clean up");
+    drop(held);
     assert_eq!(folder.state, ModelsDirState::NotWritable);
     assert!(folder.exists && !folder.writable);
     assert_eq!(under.state, ModelsDirState::NotWritable);

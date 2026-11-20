@@ -119,22 +119,18 @@ async fn a_key_directory_that_cannot_be_made_refuses_the_join() {
 /// A first key that cannot be written refuses the join with modelpipe's
 /// reason, and sends nobody to delete a file that is not there.
 ///
-/// The directory is `0500`, the owner's to read and not to write, which
-/// `create_private_dir` leaves as it is: it takes away only what group and
-/// others have. A user no mode binds, such as root, would mint the key and
-/// dial, so the test first shows that this one cannot write there, and
-/// makes no join if it can.
-// Unix only: the folder is made unwritable by its mode.
-#[cfg(unix)]
+/// The directory refuses a write. On macOS and Linux that is `0500`, the
+/// owner's to read and not to write, which `create_private_dir` leaves as it
+/// is: it takes away only what group and others have. A user no mode binds,
+/// such as root, would mint the key and dial, so the test first shows that
+/// this one cannot write there, and makes no join if it can.
 #[tokio::test]
 async fn a_first_key_that_cannot_be_written_refuses_the_join_with_nothing_to_delete() {
-    use std::os::unix::fs::PermissionsExt;
-
     use crate::test_support_remote::FINGERPRINT_A;
 
     let dir = scratch_join_keys();
-    fs::create_dir_all(&dir).expect("the directory");
-    fs::set_permissions(&dir, fs::Permissions::from_mode(0o500)).expect("chmod 500");
+    gglib_core::paths::create_private_dir(&dir).expect("the directory");
+    let held = gglib_core::paths::unwritable_folder(&dir);
     let unwritable = fs::File::create(dir.join("probe")).map(drop);
     let ops = paired_with_a(&dir).await;
 
@@ -142,10 +138,12 @@ async fn a_first_key_that_cannot_be_written_refuses_the_join_with_nothing_to_del
         Err(_) => Some(ops.join(join_a(0)).await),
         Ok(()) => None,
     };
-    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).expect("chmod 700");
+    drop(held);
 
     let cause = unwritable
-        .expect_err("this user wrote into a directory with no write bit, so no key write can fail")
+        .expect_err(
+            "this user wrote into a directory that refuses a write, so no key write can fail",
+        )
         .to_string();
     let err = joined
         .expect("joined")
