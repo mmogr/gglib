@@ -172,12 +172,8 @@ mod tests {
         assert!(result.unwrap_err().contains("does not exist"));
     }
 
-    #[cfg(unix)]
     #[test]
-    fn an_executable_path_is_refused_with_what_is_wrong_with_it() {
-        use std::fs::Permissions;
-        use std::os::unix::fs::PermissionsExt;
-
+    fn a_path_that_is_no_file_is_refused_with_what_is_wrong_with_it() {
         let dir = tempfile::tempdir().unwrap();
         let dir_path = dir.path().to_str().unwrap();
         let file = dir.path().join("tool");
@@ -195,6 +191,20 @@ mod tests {
             validate_exe_path(dir_path),
             Err(format!("Executable path is not a file: {dir_path}"))
         );
+    }
+
+    // Unix only: a file is a program by its permission bits, which only Unix
+    // has. Windows' half is `on_windows_a_file_is_a_program_by_its_extension`.
+    #[cfg(unix)]
+    #[test]
+    fn on_unix_a_file_is_a_program_by_its_permission_bits() {
+        use std::fs::Permissions;
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("tool");
+        let file_path = file.to_str().unwrap();
+
         std::fs::write(&file, "").unwrap();
         std::fs::set_permissions(&file, Permissions::from_mode(0o644)).unwrap();
         assert_eq!(
@@ -203,6 +213,25 @@ mod tests {
         );
         std::fs::set_permissions(&file, Permissions::from_mode(0o755)).unwrap();
         assert_eq!(validate_exe_path(file_path), Ok(()));
+    }
+
+    /// Under this machine's rules a file with no program extension is
+    /// refused, and `tool.exe` is accepted.
+    #[cfg(windows)]
+    #[test]
+    fn on_windows_a_file_is_a_program_by_its_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let bare = dir.path().join("tool");
+        let program = dir.path().join("tool.exe");
+        std::fs::write(&bare, "").unwrap();
+        std::fs::write(&program, "").unwrap();
+        let bare = bare.to_str().unwrap();
+
+        assert_eq!(
+            validate_exe_path(bare),
+            Err(format!("File is not executable: {bare}"))
+        );
+        assert_eq!(validate_exe_path(program.to_str().unwrap()), Ok(()));
     }
 
     /// The defaults are a macOS matter: an app started from the Finder has a

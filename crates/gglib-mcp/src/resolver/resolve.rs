@@ -229,6 +229,6 @@ mod tests {
     }
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 #[path = "resolve_order_tests.rs"]
 mod order_tests;
