@@ -81,7 +81,7 @@ test('the comment says what was set and from what, what is missing, and when tri
     '',
     '`priority:` and `size:` are never read from an issue\'s words: each is an estimate someone makes after reading the code.',
     '',
-    'The missing labels are added by hand. `status: needs-triage` clears by itself once `component:`, `priority:`, `size:` and `type:` are all present.',
+    'A reply with the line `/label priority: medium` adds that label. Anyone can give an issue its first `component:`, `type:` or `platform:` label this way; `priority:` and `size:` take write access. `status: needs-triage` clears by itself once `component:`, `priority:`, `size:` and `type:` are all present.',
   ].join('\n'));
 });
 
@@ -106,8 +106,28 @@ test('a missing category lists its candidates, and a platform is offered without
     '',
     '`platform:` is not required. It may be `platform: windows`, from the platforms this issue names.',
     '',
-    'The missing labels are added by hand. `status: needs-triage` clears by itself once `component:`, `priority:`, `size:` and `type:` are all present.',
+    'A reply with the line `/label component: proxy` adds that label. Anyone can give an issue its first `component:`, `type:` or `platform:` label this way; `priority:` and `size:` take write access. `status: needs-triage` clears by itself once `component:`, `priority:`, `size:` and `type:` are all present.',
   ].join('\n'));
+});
+
+test('the reply the comment shows asks for the first missing category', () => {
+  const shown = (missing, open = []) => /`(\/label [^`]+)`/.exec(triageComment({ missing, applied: [], open }))[1];
+  assert.equal(shown(['component:', 'size:']), '/label component: cli');
+  assert.equal(shown(['type:']), '/label type: bug');
+  assert.equal(shown(['size:']), '/label size: s');
+  assert.equal(shown(['type:'], [{ prefix: 'type:', labels: ['type: test'], from: '`test` in the title' }]), '/label type: test');
+  // A candidate for another category is not the example.
+  assert.equal(shown(['size:'], [{ prefix: 'platform:', labels: ['platform: linux'], from: 'x' }]), '/label size: s');
+});
+
+test('the comment holds no line that is itself a command', () => {
+  const { parseLabelCommands } = require('./label-command.cjs');
+  const body = triageComment({
+    missing: ['component:', 'priority:', 'size:', 'type:'],
+    applied: [{ label: 'platform: windows', from: '`Windows` in the title' }],
+    open: [{ prefix: 'component:', labels: ['component: cli'], from: 'the one path the description names' }],
+  });
+  assert.deepEqual(parseLabelCommands(body), []);
 });
 
 test('opening applies what the words say to the categories that are empty', async () => {
