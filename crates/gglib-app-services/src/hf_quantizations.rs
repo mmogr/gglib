@@ -654,6 +654,7 @@ mod tests {
     async fn the_listing_served_reads_the_repository_projectors() {
         use crate::downloads::{DownloadDeps, DownloadOps};
         use crate::test_support::{MockDownloadManager, MockHfClient};
+        gglib_core::paths::isolate_data_root();
 
         let ops = DownloadOps::new(DownloadDeps {
             downloads: Arc::new(MockDownloadManager::new()),

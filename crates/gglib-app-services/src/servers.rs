@@ -356,6 +356,7 @@ mod tests {
     /// it has to reach the frontend as the actionable install prompt.
     #[test]
     fn missing_binary_maps_to_the_install_hint() {
+        gglib_core::paths::isolate_data_root();
         let err = map_runtime_error(&ModelRuntimeError::SpawnFailed(
             "llama-server binary not found at: /home/u/.local/share/gglib/.llama/bin/llama-server\n\nPlease install llama.cpp by running:\n  gglib config llama install".to_string(),
         ));
@@ -367,6 +368,7 @@ mod tests {
     /// only errno text — it still means the binary is not usable.
     #[test]
     fn failed_spawn_maps_to_the_install_hint() {
+        gglib_core::paths::isolate_data_root();
         let err = map_runtime_error(&ModelRuntimeError::SpawnFailed(
             "Failed to spawn llama-server: No such file or directory (os error 2)".to_string(),
         ));
@@ -378,6 +380,7 @@ mod tests {
     /// the reason has to say so rather than collapsing to "not found".
     #[test]
     fn non_executable_binary_reports_its_own_reason() {
+        gglib_core::paths::isolate_data_root();
         let err = map_runtime_error(&ModelRuntimeError::SpawnFailed(
             "llama-server binary exists but is not executable: /home/u/.llama/bin/llama-server\n\nPlease check file permissions or reinstall with:\n  gglib config llama install".to_string(),
         ));
@@ -389,6 +392,7 @@ mod tests {
     /// must not be described as a missing binary.
     #[test]
     fn permission_denied_reports_its_own_reason() {
+        gglib_core::paths::isolate_data_root();
         let err = map_runtime_error(&ModelRuntimeError::SpawnFailed(
             "Permission denied accessing llama-server binary: /home/u/.llama/bin/llama-server\n\nPlease check file permissions.".to_string(),
         ));
@@ -462,6 +466,7 @@ mod tests {
         use gglib_core::domain::RuntimeKind;
         use gglib_core::ports::{LoadCause, LoadFailure};
         use gglib_core::utils::process::bounded::Failure;
+        gglib_core::paths::isolate_data_root();
 
         let refused = |failure| {
             map_runtime_error(&ModelRuntimeError::LoadFailed(Box::new(LoadFailure {

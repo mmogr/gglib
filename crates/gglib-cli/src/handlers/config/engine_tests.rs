@@ -204,6 +204,7 @@ fn an_older_engine_is_offered_the_pin_as_a_download() {
 /// A missing engine is named with what needs it and where it will go.
 #[test]
 fn a_missing_engine_says_what_needs_it() {
+    gglib_core::paths::isolate_data_root();
     let (lines, _) = offer(
         RuntimeKind::StableDiffusion,
         &state(PinStanding::Missing, None),

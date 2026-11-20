@@ -81,6 +81,7 @@ fn unexplained(plan: &gglib_core::domain::LaunchPlan) -> Vec<&str> {
 #[test]
 fn every_llama_flag_has_a_reason() {
     use ChoiceSource::{Gglib, ModelAuthor, You};
+    gglib_core::paths::isolate_data_root();
     let plan = planned(
         tagged(),
         ServerConfigOptions {
@@ -151,6 +152,7 @@ fn every_llama_flag_has_a_reason() {
 /// line is one the engine accepts; the reason says what gglib does.
 #[test]
 fn the_port_is_any_free_one_and_the_line_is_the_tokens_in_order() {
+    gglib_core::paths::isolate_data_root();
     let plan = planned(launch_spec(3, "qwen"), ServerConfigOptions::default());
     let port = plan.args.iter().find(|a| a.flag == "--port").unwrap();
     assert_eq!(port.value.as_deref(), Some("0"));
@@ -205,6 +207,7 @@ fn image_spec() -> ModelLaunchSpec {
 /// a space, as a home folder can be.
 #[test]
 fn the_program_is_the_path_of_the_engine_the_launch_runs() {
+    gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().unwrap();
     let folder = dir.path().join("My Engines");
     std::fs::create_dir_all(&folder).unwrap();
@@ -263,6 +266,7 @@ fn an_engine_not_installed_is_said_in_the_words_a_load_would_fail_with() {
 /// model's default, your default, or the floor when nothing was set.
 #[test]
 fn the_context_flags_source_is_the_rung_that_chose_it() {
+    gglib_core::paths::isolate_data_root();
     let ctx = |plan: &gglib_core::domain::LaunchPlan| {
         let arg = plan.args.iter().find(|a| a.flag == "-c").unwrap().clone();
         (
@@ -326,6 +330,7 @@ fn the_context_flags_source_is_the_rung_that_chose_it() {
 /// KV types asked for on the launch are yours; the default is gglib's.
 #[test]
 fn an_explicit_kv_type_is_yours_and_the_default_is_gglibs() {
+    gglib_core::paths::isolate_data_root();
     let default = planned(launch_spec(3, "qwen"), ServerConfigOptions::default());
     let k = |plan: &gglib_core::domain::LaunchPlan| {
         plan.args
@@ -354,6 +359,7 @@ fn an_explicit_kv_type_is_yours_and_the_default_is_gglibs() {
 /// family's recipe, every flag explained; it has no context fit.
 #[test]
 fn an_image_models_plan_is_sd_servers_command_with_no_fit() {
+    gglib_core::paths::isolate_data_root();
     let component = |role, name: &str| ModelComponent {
         role,
         path: PathBuf::from(format!("/models/{name}")),
@@ -401,6 +407,7 @@ fn an_image_models_plan_is_sd_servers_command_with_no_fit() {
 /// and an explicit cache size is yours where the auto size was gglib's.
 #[test]
 fn flags_asked_for_on_the_launch_are_yours() {
+    gglib_core::paths::isolate_data_root();
     let plan = planned_with(
         tagged(),
         ServerConfigOptions {
@@ -433,6 +440,7 @@ fn flags_asked_for_on_the_launch_are_yours() {
 /// Your default context is yours.
 #[test]
 fn a_global_default_context_is_yours() {
+    gglib_core::paths::isolate_data_root();
     let overrides = LaunchOverrides::default();
     let plan = plan_launch(
         launch_spec(3, "qwen"),
@@ -459,6 +467,7 @@ fn a_global_default_context_is_yours() {
 /// and explained.
 #[test]
 fn every_image_familys_command_is_explained() {
+    gglib_core::paths::isolate_data_root();
     let mut emitted = std::collections::BTreeSet::new();
     for family in ImageFamily::ALL {
         for file in ["image-turbo.gguf", "image.gguf"] {
@@ -517,6 +526,7 @@ fn every_image_familys_command_is_explained() {
 /// model's own rather than this launch's.
 #[test]
 fn a_models_own_default_is_yours_and_says_so() {
+    gglib_core::paths::isolate_data_root();
     let plan = planned(
         ModelLaunchSpec {
             server_defaults: Some(gglib_core::domain::ServerConfig {

@@ -288,6 +288,7 @@ async fn a_listing_without_the_companions_still_judges_an_image_model_by_its_fil
     use crate::downloads::{DownloadDeps, DownloadOps};
     use crate::test_support::MockDownloadManager;
     use gglib_core::domain::{MissingInput, VariantFit};
+    gglib_core::paths::isolate_data_root();
 
     let mut unlisted = hub("flux1-schnell-q8_0.gguf");
     unlisted.files_at.pop();

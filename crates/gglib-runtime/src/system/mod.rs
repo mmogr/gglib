@@ -328,6 +328,7 @@ mod tests {
 
     #[test]
     fn test_default_system_probe_creation() {
+        gglib_core::paths::isolate_data_root();
         let probe = DefaultSystemProbe::new();
         // Just verify it can be created
         let _report = probe.dependency_report();
@@ -335,6 +336,7 @@ mod tests {
 
     #[test]
     fn test_default_system_probe_default_trait() {
+        gglib_core::paths::isolate_data_root();
         let probe = DefaultSystemProbe;
         let _report = probe.dependency_report();
     }

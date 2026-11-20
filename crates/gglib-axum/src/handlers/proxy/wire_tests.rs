@@ -118,6 +118,7 @@ fn cache_true_carries_the_explicit_slot_dir() {
 /// leaving it `None` here would make `cache: true` alone insufficient.
 #[test]
 fn cache_true_without_slot_dir_uses_the_default_directory() {
+    gglib_core::paths::isolate_data_root();
     let cfg = StartProxyConfig {
         cache: Some(true),
         ..Default::default()
@@ -478,6 +479,7 @@ fn a_body_with_no_allowed_hosts_still_deserializes() {
 /// names them wins.
 #[test]
 fn an_omitted_address_cache_and_hosts_come_from_settings() {
+    gglib_core::paths::isolate_data_root();
     let settings = Settings {
         proxy_host: Some("0.0.0.0".to_owned()),
         proxy_allowed_hosts: Some(vec!["gglib.lan".to_owned()]),
