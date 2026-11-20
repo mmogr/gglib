@@ -370,6 +370,21 @@ describe('the diagnostics place', () => {
       expect(rows.map((r) => r.children[1].textContent)).toEqual(['m6', 'm5', 'm4', 'm3', 'm2', 'm1', 'm0']);
     });
 
+    it("Requests: an image request's row says what its images cost, in the proxy's words", async () => {
+      renderAt('/diagnostics/live');
+      await frame({
+        recent_requests: [
+          recentRequest({ model_name: 'text-only' }),
+          recentRequest({ model_name: 'sees', images: 2, image_tokens: 7200, prompt_tokens: 7451, image_words: '2 images ~7,200 tokens · 7,451 prompt tokens' }),
+        ],
+      });
+      const rows = within(screen.getByRole('list', { name: 'Recent requests' })).getAllByRole('listitem');
+      expect(rows[0]).toHaveTextContent('sees2 images ~7,200 tokens · 7,451 prompt tokens');
+      expect(rows[1].textContent).not.toMatch(/image/);
+      // A row too long for its column wraps under its model's name; jsdom lays nothing out, so the class is what holds it.
+      rows.forEach((row) => expect(row).toHaveClass('flex-wrap'));
+    });
+
     it('Slots: a bar per slot with its tokens and percent; with none reported while loaded, the reason', async () => {
       renderAt('/diagnostics/live');
       await frame({ slots_available: true, slots_status: null, slots: [...(FULL.slots ?? []), slotSnapshot({ id: 1, n_ctx: 4096 })] });

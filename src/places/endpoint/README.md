@@ -10,9 +10,10 @@ names a model (`app/paths` `inspectorSubject`; × drops only `inspect`).
 
 Every fact is the daemon's: the endpoint's state, address, key rule and pin
 from `services/proxyRegistry`; the residents, their flag lines, the queue,
-the second slot's room in the daemon's sentence (`secondary_slot.detail`), the requests in flight and recorded, and what
-gglib did to each (`Intervention.word`, the words `gglib proxy dashboard`
-prints) from the one dashboard stream (`places/library/useResidency`
+the second slot's room in the daemon's sentence (`secondary_slot.detail`), the requests in flight and recorded, what
+gglib did to each (`Intervention.word`) and what an image request's images
+cost (`image_words`), both the words `gglib proxy dashboard`
+prints, from the one dashboard stream (`places/library/useResidency`
 `useEndpointDashboard`); the recipes and the proof from
 `GET /api/proxy/clients` and `POST /api/proxy/prove`, said in the CLI's
 words (`readings/connect`, pinned by `contracts/connectClient.test.ts`);
@@ -92,7 +93,7 @@ only while it can act (the endpoint up and its key revealed), and a row's
 | `useFitReads.ts` | The palette's explain reads: the highlighted row first, then the rows in view, three at most in flight across opens, kept for one open, an answer to a closed open dropped |
 | `Serves.tsx` | Serves ▾: Every model, the loaded models, the library's other chat models; the pin chosen by its model's id (`pinned_model_id`) |
 | `UsingIt.tsx` | Requests in flight from apps on this machine, one line per joined device in the daemon's words, or the empty sentence with Connect a client |
-| `Recent.tsx` | The last five requests, newest first: time, model, tokens and rate, what gglib did; All ›; not drawn when empty |
+| `Recent.tsx` | The last five requests, newest first: time, model, tokens and rate, what its images cost, what gglib did; All ›; not drawn when empty |
 | `Activity.tsx` | ▸ Activity: the dashboard's other sections as sentences, Clear prompt cache, Live numbers › |
 | `lines.ts` | Pure: the loaded rows (`residentRows`: the dashboard's, else the running servers once the list's read has landed, the tray's too), the queue's lines, the room line, the recent rows with the proxy's rate, and the activity sentences (the cache's reuse in the proxy's own sentence, `CacheUsage.summary`), from one dashboard frame |
 | `useClearCache.ts` | Clear prompt cache with the revealed key, its toast either way; also Diagnostics › Live's Clear |

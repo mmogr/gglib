@@ -21,7 +21,9 @@ interface SectionProps {
 /**
  * The requests: each one in flight with its phase (and its prompt's bar
  * while it is read), then every request the proxy keeps, newest first, with
- * its tokens, its rate and what gglib did to it in the proxy's words.
+ * its tokens, its rate and, in the proxy's words, what its images cost and
+ * what gglib did to it. A row too long for the column wraps under its time
+ * and model, whose name stays whole.
  */
 export const RequestsSection: FC<SectionProps> = ({ snapshot }) => {
   const connections = snapshot.active_connections;
@@ -40,7 +42,7 @@ export const RequestsSection: FC<SectionProps> = ({ snapshot }) => {
       {rows.length > 0 && (
         <ul aria-label="Recent requests" className="m-0 flex list-none flex-col p-0">
           {rows.map((r) => (
-            <li key={r.key} className="flex items-baseline gap-md py-xs text-xs text-text-secondary tabular-nums">
+            <li key={r.key} className="flex flex-wrap items-baseline gap-x-md py-xs text-xs text-text-secondary tabular-nums">
               <span className="shrink-0">{r.time}</span>
               <span className="min-w-0 truncate text-text">{r.model}</span>
               {r.figures && <span className="shrink-0">{r.figures}</span>}
