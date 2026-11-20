@@ -21,6 +21,7 @@ use std::pin::Pin;
 
 use anyhow::Result;
 use futures_util::StreamExt as _;
+use gglib_core::sse::notice::is_proxy_notice;
 use gglib_core::{AgentEvent, LlmStreamEvent, ToolCall};
 use tokio::sync::mpsc;
 use tokio::time::Instant;
@@ -200,10 +201,13 @@ pub async fn collect_stream(
     while let Some(event) = stream.next().await {
         got_any_event = true;
         let event = event?;
-        // After `Done`, text is not the model's reply: a proxy sends its own
-        // notice as text after the finish frame of a reply that showed
-        // nothing (`gglib_proxy`'s empty and reasoning-only notices).
-        if finished.is_some() && matches!(event, LlmStreamEvent::TextDelta { .. }) {
+        // A proxy's own notice is not the model's reply. It sends one as
+        // text in place of a reply that showed nothing: after the finish
+        // frame, or, for a stream that ended with none, before the `Done`
+        // that stream is given. No text after `Done` is the reply either.
+        if let LlmStreamEvent::TextDelta { content } = &event
+            && (finished.is_some() || is_proxy_notice(content))
+        {
             continue;
         }
         match event {
