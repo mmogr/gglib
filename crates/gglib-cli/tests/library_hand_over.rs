@@ -155,6 +155,32 @@ fn an_installed_copy_hands_its_command_to_one_that_opens_the_library() {
     );
 }
 
+/// Windows hands nothing over: an installed copy beside one that opens the
+/// library names that copy, exits with an error, and does not run it.
+// Windows only: everywhere else this is the case that is handed over.
+#[cfg(windows)]
+#[test]
+fn on_windows_an_installed_copy_names_the_copy_to_run_and_runs_nothing() {
+    let machine = Machine::new();
+    machine.newer_library();
+    let installed = installed();
+    let newer = machine.stand_in("newer", "9.9.9", 99);
+
+    let got = machine.run(&installed, &[&installed, &newer], &[], &["config", "show"]);
+
+    assert_eq!(got.status.code(), Some(1), "{}", text(&got));
+    assert!(out(&got).is_empty(), "{}", text(&got));
+    let said = err(&got);
+    assert!(
+        said.contains(&format!(
+            "{} (9.9.9) opens it: run that one",
+            newer.display()
+        )),
+        "{said}"
+    );
+    assert!(!said.contains("is running this command"), "{said}");
+}
+
 #[test]
 fn a_copy_that_opens_no_newer_library_is_not_handed_the_command() {
     let machine = Machine::new();
