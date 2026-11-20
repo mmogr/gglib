@@ -73,6 +73,20 @@ async fn a_failed_run_ends_with_fixed_text_and_saves_its_reply_marked() {
     assert_eq!(meta(rows.last().unwrap(), INCOMPLETE_KEY), json!(true));
 }
 
+/// A run whose final reply was no answer ends with the words its `error`
+/// event said, so a reader that shows the event and the run's error shows
+/// one sentence.
+#[test]
+fn a_run_with_no_answer_ends_with_its_error_events_words() {
+    let error = gglib_core::ports::AgentError::NoAnswer;
+
+    let ended = super::run::run_error(&error);
+
+    assert_eq!(ended.code, "no_answer");
+    assert_eq!(ended.message, "The model gave no answer.");
+    assert_eq!(ended.message, error.to_string());
+}
+
 #[tokio::test]
 async fn shutdown_drops_the_loop_and_the_reply_is_saved_before_drained() {
     let (_dir, state) = state().await;

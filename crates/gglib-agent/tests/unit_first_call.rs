@@ -396,12 +396,12 @@ async fn a_run_with_no_first_call_offers_every_tool_on_every_call_and_runs_each(
                 DRAW,
                 json!({"prompt": "a fox"}),
             ))
-            .push(MockLlmResponse::text("")),
+            .push(MockLlmResponse::text("Done.")),
     );
 
     let (ended, _events, ran) = run(&llm, None).await;
 
-    assert_eq!(ended.unwrap().answer, "", "an empty answer stays empty");
+    assert_eq!(ended.unwrap().answer, "Done.");
     let asked = llm.asked().await;
     assert_eq!(asked.len(), 3);
     for (offered, demanded) in &asked {

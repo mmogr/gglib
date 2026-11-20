@@ -1029,7 +1029,11 @@ any text, ends the run `failed`, `turn_too_long`, after an `error` event
 that says the turn ran too long, and the call is not run, unless it was the
 words after a drawn picture, which keep the picture; a reply cut off
 in its text is taken as if it had stopped, after a `system_warning` that
-says it was cut off ([Context reading](clients.md#context-reading)). The open servers'
+says it was cut off ([Context reading](clients.md#context-reading)). A final
+reply with no text, or one that starts with a tool call written as text when
+the run offered no tools, ends the run `failed`, `no_answer`, after an
+`error` event that says the model gave no answer; what the model wrote, its
+thinking included, is in the events before it. The open servers'
 tools are offered to whatever model the request names: the model list says
 nothing yet of which models call tools, so a model that cannot is offered
 them anyway and may answer oddly. Every such run takes one of the
