@@ -19,6 +19,7 @@ fn a_path_under_a_file_is_not_a_folder_that_can_be_written() {
 
 /// A folder whose mode forbids writing, and a missing folder under one:
 /// neither can be written, whatever `readonly()` would say of the child.
+// Unix only: the folder is made unwritable by its mode.
 #[cfg(unix)]
 #[test]
 fn a_read_only_folder_and_a_missing_one_under_it_are_not_writable() {
