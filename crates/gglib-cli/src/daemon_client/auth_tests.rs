@@ -58,6 +58,7 @@ fn an_unreadable_token_file_is_no_token() {
 }
 
 /// A token file others could read, or have written, is not presented.
+// Unix only: who else can read the file is its mode bits.
 #[cfg(unix)]
 #[test]
 fn a_token_file_open_to_others_is_not_sent() {
