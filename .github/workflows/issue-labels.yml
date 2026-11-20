@@ -1,7 +1,7 @@
 # Labels an issue, and holds every issue to at least one label in each of
 # component:, priority:, size: and type:.
 #
-# Three jobs:
+# Four jobs:
 #   parse (`opened` only) reads the form's answers out of the issue body. The
 #     body is the form's own output at that moment and at no other: a later
 #     edit can mangle a heading, so it is not parsed on `edited`.
@@ -15,13 +15,26 @@
 #     the form's answer and a person's label both win. priority: and size:
 #     are never read from words: each is an estimate made after reading the
 #     code.
-#   verify (every trigger) re-reads the labels from the API, sets or clears
-#     status: needs-triage, and keeps one comment while a category is missing:
-#     what was set and from what, what is missing, and the candidates the
-#     words give. It is the fail-safe for the other two: if either breaks, the
-#     issue arrives unlabelled and is flagged for a person, never silently
-#     mislabelled. The words are read again here to word the comment, and
-#     applied only in `apply`, so a label a person removes stays removed.
+#   command (a new comment on an issue) adds the labels a reply asks for: a
+#     comment with a line that is `/label <label name>`. Without write access
+#     a reply gives the issue its first component:, type: or platform: label:
+#     one for each of those categories that has none, and nothing for a
+#     category that has a label, as `apply` leaves such a category alone.
+#     With write access a reply adds any label of those three and of
+#     priority: and size:, beside what is there. Write access is the event's
+#     own word on the comment's author: OWNER, MEMBER or COLLABORATOR. The
+#     rules are .github/scripts/label-command.cjs's. It puts a thumbs-up on a
+#     comment it acted on, and ignores every other comment without a word.
+#   verify (every `issues` trigger, and after a reply that was acted on)
+#     re-reads the labels from the API, sets or clears status: needs-triage,
+#     and keeps one comment while a category is missing: what was set and from
+#     what, what is missing, the candidates the words give, and the reply that
+#     adds a label. Each run rewrites it to what is missing now, and removes
+#     it when nothing is. It is the fail-safe for the other three: if one
+#     breaks, the issue arrives unlabelled and is flagged for a person, never
+#     silently mislabelled. The words are read again here to word the
+#     comment, and applied only in `apply`, so a label a person removes stays
+#     removed.
 #
 # The form (.github/ISSUE_TEMPLATE/issue.yml) only validates in the web UI and `gh issue
 # create`'s interactive prompts — a scripted `gh issue create --title X --body Y` bypasses
@@ -30,23 +43,40 @@
 #
 # Concurrency is per job, not per workflow. An issue created with labels sends
 # `opened` and one `labeled` for each label at once, and a group over the whole
-# workflow lets those runs cancel the one that parses and applies. `parse` and
-# `apply` are in no group: an issue is opened once. `verify` runs one at a time
-# for an issue, and a run that waits gives way to a newer one, so the last to
-# run reads the labels `apply` set.
+# workflow lets those runs cancel the one that parses and applies, and would
+# let any comment cancel them too. `parse` and `apply` are in no group: an issue
+# is opened once. Nor is `command`: each reply adds its own labels, and adding
+# is all it does. `verify` runs one at a time for an issue, and a run that
+# waits gives way to a newer one, so the last to run reads the labels `apply`
+# or `command` set.
 #
-# Loop safety: comment creation/editing fires issue_comment, not issues — the `issues`
-# event's activity types contain no comment activity at all, so this workflow (which only
-# subscribes to `issues`) cannot be re-triggered by its own comment. Separately, actions
-# taken with the default GITHUB_TOKEN never trigger new workflow runs at all, which is
-# also what makes the `labeled`/`unlabeled` triggers safe against this workflow's own
-# label writes. Swapping in a PAT or GitHub App token would break both properties.
+# A comment is public input. Its text reaches label-command.cjs in the event's
+# payload and is only compared with the names of the repository's labels: it is
+# never part of a script's text or of a shell command, and what is added is the
+# repository's own name for a label. `command`'s `if:` reads the text inside an
+# expression, which GitHub evaluates and does not run. What a stranger can do
+# to an issue with a reply is one label in each of three categories, and only
+# where the category was empty.
+#
+# Loop safety rests on the default GITHUB_TOKEN. Nothing done with that token
+# starts a workflow run, so a label this workflow adds does not come back as
+# `labeled`, and the triage comment it writes does not come back as
+# `issue_comment`. With a PAT or a GitHub App token each of them would start a
+# run of this workflow. One smaller guard stands behind it for the comment:
+# its text holds `/label` only inside a sentence, never as a line, so `command`
+# would find no command in it, and issue-triage.test.cjs holds it to that.
+# Rewriting the comment is an `edited` comment, which is not subscribed to.
 
 name: Issue Labels
 
 on:
   issues:
     types: [opened, edited, labeled, unlabeled]
+  # Every new comment on every issue and pull request starts a run. `command`'s
+  # `if:` skips all but a comment on an issue that holds the word, and with it
+  # skipped `verify` is too.
+  issue_comment:
+    types: [created]
 
 # Default to nothing; each job opts in to the minimum it needs.
 permissions: {}
@@ -56,7 +86,7 @@ jobs:
     name: Parse form (opened only)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    if: github.event.action == 'opened'
+    if: github.event_name == 'issues' && github.event.action == 'opened'
     # The checkout, for the form the parser reads.
     permissions:
       contents: read
@@ -80,7 +110,7 @@ jobs:
     timeout-minutes: 10
     needs: parse
     # Also when the parser failed: the words are read without it.
-    if: ${{ !cancelled() && github.event.action == 'opened' }}
+    if: ${{ !cancelled() && github.event_name == 'issues' && github.event.action == 'opened' }}
     # The checkout of .github/scripts, and the issue's labels.
     permissions:
       contents: read
@@ -202,14 +232,50 @@ jobs:
             });
             core.setOutput('applied', JSON.stringify(applied));
 
+  command:
+    name: Add the labels a reply asks for
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # A comment on an issue, not on a pull request, that holds the word
+    # anywhere, in any letter case. label-command.cjs then reads it line by
+    # line, and checks again that the issue is not a pull request.
+    if: >-
+      github.event_name == 'issue_comment' &&
+      !github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/label')
+    # The checkout of .github/scripts; the issue's labels and the reaction.
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      acted: ${{ steps.reply.outputs.acted }}
+    steps:
+      - name: Checkout the scripts
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      # The comment reaches the module as `context.payload.comment`, never as
+      # text in this script.
+      - name: Add the labels the comment asks for
+        id: reply
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { runLabelCommands } = require('./.github/scripts/label-command.cjs');
+            core.setOutput('acted', await runLabelCommands({ github, core, context }));
+
   verify:
     name: Verify the required labels
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    needs: apply
-    # Whatever became of `apply`: skipped on every trigger but `opened`, and
-    # an issue it failed on is still flagged.
-    if: always()
+    needs: [apply, command]
+    # On `issues`, whatever became of `apply`: it is skipped on every trigger
+    # but `opened`, and an issue it failed on is still flagged. On a comment,
+    # only after a reply `command` acted on: a label added with the default
+    # token sends no `labeled`, so this is the run that sees it.
+    if: ${{ always() && (github.event_name == 'issues' || needs.command.outputs.acted == 'true') }}
     concurrency:
       group: issue-labels-${{ github.event.issue.number }}
       cancel-in-progress: false

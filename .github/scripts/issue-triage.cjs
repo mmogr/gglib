@@ -1,7 +1,8 @@
 // What issue-labels.yml does to an issue: `applyFromWords` labels a new issue
 // from its own words (issue-words.cjs), and `verify` holds every issue to one
 // label in each of `component:`, `priority:`, `size:` and `type:`, with
-// `status: needs-triage` and one comment while any is missing.
+// `status: needs-triage` and one comment while any is missing. The comment
+// shows the reply that adds a label, which label-command.cjs reads.
 //
 // Everything is read from the API when it is needed, never from the event's
 // payload, which a re-run replays as it was.
@@ -30,6 +31,21 @@ function either(items) {
   return `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
 }
 
+// A label of each required category, for the reply the comment shows.
+const EXAMPLES = {
+  'component:': 'component: cli',
+  'priority:': 'priority: medium',
+  'size:': 'size: s',
+  'type:': 'type: bug',
+};
+
+// The label the comment's example reply asks for: one of the first missing
+// category, a candidate for it when the words gave one.
+function example(missing, open) {
+  const candidates = open.find(o => o.prefix === missing[0]);
+  return candidates ? candidates.labels[0] : EXAMPLES[missing[0]];
+}
+
 // The comment's text. `missing` are the required prefixes with no label;
 // `applied` the labels just set, as `{ label, from }`; `open` the candidates
 // for a category with no label, as `{ prefix, labels, from }`.
@@ -55,7 +71,10 @@ function triageComment({ missing, applied, open }) {
   if (platform) {
     lines.push(`\`platform:\` is not required. It may be ${either(platform.labels.map(code))}, from ${platform.from}.`, '');
   }
-  lines.push(`The missing labels are added by hand. ${code(TRIAGE)} clears by itself once`
+  // Inside a sentence, so that this comment is never itself a command.
+  lines.push(`A reply with the line ${code(`/label ${example(missing, open)}`)} adds that label.`
+    + ' Anyone can give an issue its first `component:`, `type:` or `platform:` label this way; `priority:` and `size:` take write access.'
+    + ` ${code(TRIAGE)} clears by itself once`
     + ` ${REQUIRED_PREFIXES.slice(0, -1).map(code).join(', ')} and ${code(REQUIRED_PREFIXES[REQUIRED_PREFIXES.length - 1])}`
     + ' are all present.');
   return lines.join('\n');
