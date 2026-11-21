@@ -17,21 +17,17 @@ fn a_path_under_a_file_is_not_a_folder_that_can_be_written() {
     assert!(!can_write_folder(&file.join("models")));
 }
 
-/// A folder whose mode forbids writing, and a missing folder under one:
-/// neither can be written, whatever `readonly()` would say of the child.
-// Unix only: the folder is made unwritable by its mode.
-#[cfg(unix)]
+/// A folder that refuses a write, and a missing folder under one: neither
+/// can be written, whatever `readonly()` would say of the child.
 #[test]
 fn a_read_only_folder_and_a_missing_one_under_it_are_not_writable() {
-    use std::os::unix::fs::PermissionsExt;
     let root = tempfile::tempdir().expect("a temp folder");
     let locked = root.path().join("locked");
     std::fs::create_dir(&locked).expect("a folder to lock");
-    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555)).expect("0555");
+    let held = crate::paths::unwritable_folder(&locked);
     let folder = can_write_folder(&locked);
     let under = can_write_folder(&locked.join("models"));
-    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
-        .expect("writable again, to clean up");
-    assert!(!folder, "a 0555 folder");
-    assert!(!under, "a missing folder under a 0555 one");
+    drop(held);
+    assert!(!folder, "a folder that refuses a write");
+    assert!(!under, "a missing folder under one");
 }

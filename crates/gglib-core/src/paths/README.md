@@ -35,7 +35,10 @@ line of its `main`, and resolves as any other build does.
 
 The same builds have `link_folder(target, link)`, for a test that needs a
 folder reached under a second name: a symbolic link on macOS and Linux, a
-junction on Windows, so the test runs on all three.
+junction on Windows, so the test runs on all three. `unwritable_folder(folder)`
+is the same for a test that needs a file write refused: the write bits off
+the folder's mode, or a deny entry on Windows, until its answer is dropped.
+On Windows a folder can still be made in it.
 
 `source_checkout` says whether this binary was built from a checkout that is
 still there. It decides nothing about data: only whether

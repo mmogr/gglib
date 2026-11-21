@@ -185,12 +185,8 @@ async fn a_forget_whose_roster_write_fails_still_drops_the_runs_once_the_key_is_
 
 /// A forget that fails before the key is out keeps the runs: the device may
 /// still be admitted, and they are still its own.
-// Unix only: the key folder is made unwritable by its mode.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_forget_that_fails_to_remove_the_key_keeps_the_runs() {
-    use std::os::unix::fs::PermissionsExt as _;
-
     let dir = tempfile::tempdir().expect("a scratch directory");
     let keys_dir = dir.path().join("keys");
     let (core, proxy, mcp) = crate::test_support::test_core_proxy_and_mcp().await;
@@ -205,11 +201,10 @@ async fn a_forget_that_fails_to_remove_the_key_keeps_the_runs() {
         Some(keys_dir.join("remote_devices")),
     );
     let (watched, _reader) = a_device_with_a_run(&ops).await;
-    let read_only = std::fs::Permissions::from_mode(0o500);
-    std::fs::set_permissions(&keys_dir, read_only).expect("the key directory is read-only");
+    let held = gglib_core::paths::unwritable_folder(&keys_dir);
 
     let refused = ops.forget(DEVICE).await;
-    std::fs::set_permissions(&keys_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    drop(held);
 
     assert!(refused.is_err(), "the key write fails: {refused:?}");
     assert!(

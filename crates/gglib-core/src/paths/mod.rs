@@ -17,6 +17,8 @@ mod slots;
 mod test_links;
 #[cfg(feature = "test-utils")]
 mod test_root;
+#[cfg(any(test, feature = "test-utils"))]
+mod test_unwritable;
 pub mod user_path;
 
 #[cfg(test)]
@@ -43,6 +45,11 @@ pub use test_root::isolate_data_root;
 // crate's tests and with the `test-utils` feature
 #[cfg(any(test, feature = "test-utils"))]
 pub use test_links::link_folder;
+
+// A folder nothing can be written into, made the same way on every OS,
+// compiled in this crate's tests and with the `test-utils` feature
+#[cfg(any(test, feature = "test-utils"))]
+pub use test_unwritable::{UnwritableFolder, unwritable_folder};
 
 // Database
 pub use database::database_path;
