@@ -1,143 +1,78 @@
-//! Tests of `python_env` that run an interpreter.
+//! Tests of `python_env` that run a program: an interpreter, or the stand-in
+//! for one.
 
 use super::*;
 
-/// How long a stand-in may stay busy before the helper stops waiting for it.
-#[cfg(unix)]
-const BUSY_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
-
-/// What `run` answers once it no longer fails because the program is busy.
-///
-/// Linux does not run a file that a process has open for writing. A test
-/// binary whose other tests spawn processes can fork while this thread is
-/// writing a script, and the child holds a copy of that descriptor until it
-/// execs. No copy is left once a run has started: the writer closed its own
-/// before the first attempt, so a later fork inherits none.
-#[cfg(unix)]
-fn once_not_busy<T>(mut run: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
-    let started = std::time::Instant::now();
-    loop {
-        match run() {
-            Err(e)
-                if e.kind() == std::io::ErrorKind::ExecutableFileBusy
-                    && started.elapsed() < BUSY_LIMIT =>
-            {
-                std::thread::sleep(std::time::Duration::from_millis(5));
-            }
-            outcome => return outcome,
-        }
-    }
-}
-
-/// A script at `python` that answers the version probe with `version`. It
-/// has run once by the time this returns, so the next run of it starts.
-#[cfg(unix)]
-fn write_stand_in(python: &Path, version: &str) {
-    fs::write(
-        python,
-        format!("#!/bin/sh\necho /fake/python3\necho {version}\n"),
-    )
-    .expect("write the stand-in");
-    fs::set_permissions(python, fs::Permissions::from_mode(0o755)).expect("make it executable");
-    once_not_busy(|| gglib_core::utils::process::cmd(python).output()).expect("the stand-in runs");
-}
-
-/// A stand-in interpreter: a script that answers the version probe with
-/// `version`, in an environment directory laid out as a venv is.
-#[cfg(unix)]
+/// A stand-in interpreter that answers the version probe with `version`,
+/// where an environment directory laid out as a venv keeps its interpreter
+/// on this OS: `Scripts\python.exe` on Windows, `bin/python3` elsewhere.
 fn environment_reporting(version: &str) -> (tempfile::TempDir, PythonEnvironment) {
     let root = tempfile::tempdir().expect("tempdir");
-    let env_dir = root.path().join(ENV_NAME);
-    let python = env_dir.join("bin").join("python3");
-    fs::create_dir_all(python.parent().expect("bin directory")).expect("create bin");
-    write_stand_in(&python, version);
-
     let env = PythonEnvironment {
-        env_dir,
+        env_dir: root.path().join(ENV_NAME),
         script_path: root.path().join("helper.py"),
     };
+    let python = env.python_path();
+    let bin = python.parent().expect("the interpreter's directory");
+    fs::create_dir_all(bin).expect("create the interpreter's directory");
+    let name = if cfg!(windows) { "python" } else { "python3" };
+    let installed =
+        gglib_test_proc::install(bin, name, &format!("print /fake/python3\nprint {version}"));
+
+    assert_eq!(
+        env.python_path(),
+        installed,
+        "the stand-in is where the environment looks for its interpreter"
+    );
     (root, env)
 }
 
-/// A program the kernel calls busy is run again until a run starts, and what
-/// that run answers is handed back.
-#[cfg(unix)]
-#[test]
-fn a_busy_program_is_run_again_until_it_starts() {
-    let mut runs = 0;
-
-    let outcome = once_not_busy(|| {
-        runs += 1;
-        if runs < 3 {
-            Err(std::io::ErrorKind::ExecutableFileBusy.into())
-        } else {
-            Ok(runs)
-        }
-    });
-
-    assert_eq!(outcome.expect("the third run starts"), 3);
+/// The status of a program that exited with `code`.
+fn exited_with(code: u8) -> std::process::ExitStatus {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let builder = gglib_test_proc::install(dir.path(), "builder", &format!("exit {code}"));
+    gglib_core::utils::process::cmd(&builder)
+        .status()
+        .expect("the stand-in runs")
 }
 
-/// Only a busy program is waited for: any other failure is the answer.
-#[cfg(unix)]
+/// `create_env` runs the builder through `.output()`, not `.status()`, so
+/// its stderr is captured into the error and not inherited by the terminal,
+/// where it could corrupt a live `MultiProgress` redraw. This is the
+/// formatting half of that: a real exit status and the captured bytes.
 #[test]
-fn a_program_that_fails_for_another_reason_is_not_run_again() {
-    let mut runs = 0;
+fn venv_failure_reason_includes_captured_stderr() {
+    let reason =
+        create_env_failure_reason("venv", exited_with(1), b"NotADirectoryError: [Errno 20]\n");
 
-    let outcome = once_not_busy(|| -> std::io::Result<()> {
-        runs += 1;
-        Err(std::io::ErrorKind::NotFound.into())
-    });
-
-    assert_eq!(
-        outcome.expect_err("it does not start").kind(),
-        std::io::ErrorKind::NotFound
-    );
-    assert_eq!(runs, 1);
+    assert!(reason.contains("exited with"));
+    assert!(reason.contains("NotADirectoryError"));
 }
 
-/// A stand-in another thread still has open for writing is not handed back
-/// until that thread lets go of it. That is so wherever the kernel refuses to
-/// run such a file; macOS runs it, and there is nothing to wait out there.
-#[cfg(unix)]
+/// Which builder failed decides what the user has to go fix, so the
+/// message names it and does not always say `venv`.
 #[test]
-fn a_stand_in_still_open_for_writing_is_waited_out() {
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
+fn create_env_failure_reason_names_the_builder() {
+    let reason = create_env_failure_reason("uv", exited_with(2), b"no interpreter found\n");
 
-    let root = tempfile::tempdir().expect("tempdir");
-    let python = root.path().join("python3");
-    write_stand_in(&python, "3.9");
-    let held = fs::OpenOptions::new()
-        .append(true)
-        .open(&python)
-        .expect("open the stand-in for writing");
-    let refused = gglib_core::utils::process::cmd(&python).output();
-    if !matches!(&refused, Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy) {
-        return;
-    }
-    let let_go = Arc::new(AtomicBool::new(false));
-    let holder = std::thread::spawn({
-        let let_go = Arc::clone(&let_go);
-        move || {
-            std::thread::sleep(std::time::Duration::from_millis(200));
-            let_go.store(true, Ordering::SeqCst);
-            drop(held);
-        }
-    });
+    assert!(reason.starts_with("uv exited with"), "{reason}");
+    assert!(reason.contains("no interpreter found"), "{reason}");
+}
 
-    write_stand_in(&python, "3.9");
+/// Empty stderr must not leave a dangling ": " with nothing after it: the
+/// reason is the bare "exited with <status>", whatever the status's own
+/// words are on this OS.
+#[test]
+fn venv_failure_reason_omits_colon_when_stderr_is_empty() {
+    let status = exited_with(1);
 
-    assert!(
-        let_go.load(Ordering::SeqCst),
-        "handed back while still open for writing"
-    );
-    holder.join().expect("the holder ends");
+    let reason = create_env_failure_reason("venv", status, b"");
+
+    assert_eq!(reason, format!("venv exited with {status}"));
 }
 
 /// An environment built before the floor rose to 3.10 holds an interpreter
 /// the pinned packages will not install against.
-#[cfg(unix)]
 #[tokio::test]
 async fn an_environment_below_the_floor_is_too_old() {
     let (_root, env) = environment_reporting("3.9");
@@ -147,7 +82,6 @@ async fn an_environment_below_the_floor_is_too_old() {
 
 /// Such an environment is removed before anything is installed into it. The
 /// rebuild is pointed at an interpreter that is not there, so it ends there.
-#[cfg(unix)]
 #[tokio::test]
 async fn an_environment_below_the_floor_is_removed_to_be_built_again() {
     let (root, env) = environment_reporting("3.9");
@@ -162,7 +96,6 @@ async fn an_environment_below_the_floor_is_removed_to_be_built_again() {
     assert!(!env.env_dir.exists());
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn an_environment_at_the_floor_is_kept() {
     let (_root, env) = environment_reporting("3.10");

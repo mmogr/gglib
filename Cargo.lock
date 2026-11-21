@@ -2781,6 +2781,7 @@ dependencies = [
  "gglib-core",
  "gglib-hf",
  "gglib-test-http",
+ "gglib-test-proc",
  "indexmap 2.14.2",
  "reqwest",
  "serde",

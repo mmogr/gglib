@@ -286,24 +286,12 @@ fn build() -> PathBuf {
 ///
 /// On Linux a copy can be refused for a moment as "text file busy", while a
 /// process forked elsewhere in the test binary still holds the descriptor it
-/// was written through; that is retried. Once a run has started, no such
-/// descriptor is left to reach the test's own, and the copy is never opened
-/// for writing again.
+/// was written through; that is retried ([`once_not_busy`]). Once a run has
+/// started, no such descriptor is left to reach the test's own, and the copy
+/// is never opened for writing again.
 fn run_once(program: &Path) {
-    let mut busy = 0;
-    let ran = loop {
-        match command(program).stdin(Stdio::null()).output() {
-            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy && busy < 100 => {
-                busy += 1;
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-            done => {
-                break done.unwrap_or_else(|e| {
-                    panic!("gglib-test-proc: running {}: {e}", program.display())
-                });
-            }
-        }
-    };
+    let ran = once_not_busy(|| command(program).stdin(Stdio::null()).output())
+        .unwrap_or_else(|e| panic!("gglib-test-proc: running {}: {e}", program.display()));
     assert!(
         ran.status.success(),
         "gglib-test-proc: {} {}:\n{}",
@@ -311,6 +299,27 @@ fn run_once(program: &Path) {
         ran.status,
         String::from_utf8_lossy(&ran.stderr)
     );
+}
+
+/// How many times a run refused as "text file busy" is tried again.
+const BUSY_RETRIES: u32 = 100;
+
+/// What `run` answers once it is no longer refused as "text file busy".
+///
+/// A refusal for that reason is waited out, 10 ms at a time, and `run` is
+/// tried again, [`BUSY_RETRIES`] times at most; after that the refusal is
+/// the answer. Any other outcome is the answer at once.
+fn once_not_busy<T>(mut run: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    let mut busy = 0;
+    loop {
+        match run() {
+            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy && busy < BUSY_RETRIES => {
+                busy += 1;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            outcome => return outcome,
+        }
+    }
 }
 
 /// The `executable` of one line of cargo's JSON messages, when it names one.
