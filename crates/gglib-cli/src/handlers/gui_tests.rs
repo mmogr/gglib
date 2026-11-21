@@ -240,6 +240,7 @@ fn the_system_is_the_one_this_binary_was_built_for() {
 
 /// A Linux artifact that is there and cannot be run says how to fix it; the
 /// same failure on Windows is passed on as it came.
+// Unix only: the failure is a file with no execute bit refusing to start.
 #[cfg(unix)]
 #[test]
 fn a_linux_artifact_that_is_not_executable_names_the_chmod_that_fixes_it() {

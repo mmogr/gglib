@@ -285,6 +285,6 @@ pub(crate) fn bundle_version(bundle: &Path) -> Option<String> {
     version_word(value)
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 #[path = "copies_tests.rs"]
 mod tests;

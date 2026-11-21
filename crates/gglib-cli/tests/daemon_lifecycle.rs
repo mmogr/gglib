@@ -90,6 +90,7 @@ fn a_second_daemon_refuses_to_start() {
 /// force-exit), and the lock is released so the next daemon can start.
 #[test]
 #[ignore = "binds the fixed daemon port; run explicitly on a machine with no daemon up"]
+// Unix only: SIGTERM is a signal.
 #[cfg(unix)]
 fn sigterm_shuts_the_daemon_down_cleanly() {
     let dir = tempfile::tempdir().unwrap();

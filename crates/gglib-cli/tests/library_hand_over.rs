@@ -124,8 +124,9 @@ fn text(output: &Output) -> String {
     format!("stdout: {}\nstderr: {}", out(output), err(output))
 }
 
-/// Unix only, as handing over is: on Windows the copy to run is named
+/// On Windows nothing is handed over, and the copy to run is named
 /// (`a_copy_handed_a_command_and_the_service_hand_nothing_on`).
+// Unix only: handing over replaces this process with the other copy (`exec`).
 #[cfg(unix)]
 #[test]
 fn an_installed_copy_hands_its_command_to_one_that_opens_the_library() {
