@@ -214,8 +214,9 @@ jobs:
       # release. release-tag.yml tags a candidate and promote.yml a stable
       # version, and each makes the GitHub release itself, with generated
       # notes. With `always-update` in the config it rewrites the pull request
-      # on every run, so the pull request is never behind its branch, which
-      # the ruleset requires before a merge.
+      # on every run, so a run leaves the pull request holding the branch's
+      # commits, which `Release PR Current` (release-pr-current.yml) requires
+      # of it before a merge.
       #
       # --target-branch is the branch it reads and opens against: the config,
       # the manifest, the commits since the last release and the pull

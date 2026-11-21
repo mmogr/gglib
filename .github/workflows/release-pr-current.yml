@@ -1,0 +1,127 @@
+# Holds a release pull request, "chore(<branch>): release X.Y.Z-rc.N", to its
+# branch's latest commit, and asks nothing of any other pull request.
+#
+# `main` merges a pull request that is behind it. For the release pull request
+# that is wrong: merged behind its branch it ships the commits it has not seen
+# with no line in the changelog, since release-please counts only what follows
+# the last release's tag, and it may propose a version those commits would
+# have changed. release-please.yml rebuilds it after each green CI run on the
+# branch, so it is behind from a merge until that run ends.
+#
+# Two jobs, and the rules are .github/scripts/release-pr-current.cjs's:
+#   current (every pull request) is the check, `Release PR Current`. A pull
+#     request that is not on release-please's branch for its base, in this
+#     repository, passes at once and without a request to GitHub. The release
+#     pull request passes only when it holds every commit of its base, read
+#     when the job runs.
+#   recheck (each push to main or a line, and by hand) finds the branch's open
+#     release pull request and starts the check's run on its head again. The
+#     push has put the pull request behind, so the run now fails, and it stays
+#     failed until release-please.yml pushes the rebuilt pull request, which
+#     starts a run of its own.
+#
+# `current` has no `branches` or `paths` filter and no concurrency group. A
+# check that a ruleset requires must report on every pull request into the
+# branch: a filtered-out workflow reports nothing and the pull request waits
+# for ever, and a cancelled run counts against the pull request while it is
+# the newest. A pull request in a stack is checked too, so the result is
+# already on its head commit when its base becomes `main`.
+#
+# The check guards against a mistake, and is open about where it stops. If
+# `recheck` does not run, or fails, the release pull request keeps the pass it
+# had: the failed run on the branch's commit is the sign. GitHub starts a run
+# again for 30 days after it was first made, so a release pull request left
+# unbuilt for longer than that keeps its pass through the next merge, and
+# `recheck` fails with GitHub's refusal. And it reads commits, not the
+# changelog: a release pull request brought up to date by hand, with Update
+# branch, holds the commits without their lines and passes.
+#
+# A line runs this file as the line holds it, on its pushes and on the pull
+# requests into it, so a line cut from a tag older than this file has neither
+# job. The ruleset for release/** requires an up-to-date pull request of every
+# kind.
+
+name: Release PR Current
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main, 'release/**']
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "The branch whose release PR to check again: main, or a line release/X.Y.x"
+        required: false
+        default: main
+        type: string
+
+# Default to nothing; each job opts in to the minimum it needs.
+permissions: {}
+
+jobs:
+  current:
+    # The name a ruleset requires. Renaming it leaves every pull request
+    # waiting for a check that never reports.
+    name: Release PR Current
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # The checkout of .github/scripts, and the base's tip and the comparison
+    # for a release pull request. A fork's token reads this much too.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the scripts
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      # The pull request reaches the module as `context.payload.pull_request`,
+      # never as text in this script: a branch's name is its author's to choose.
+      - name: Require a release PR to hold its branch's latest commit
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { checkCurrent } = require('./.github/scripts/release-pr-current.cjs');
+            await checkCurrent({ github, core, context });
+
+  recheck:
+    name: Check the release PR again
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # One at a time for a branch, and a waiting run gives way to a newer one:
+    # each run reads the pull request and its runs afresh, so the last is
+    # enough. Never cancelled part-way, between finding a run and starting it
+    # again.
+    concurrency:
+      group: release-pr-current-recheck-${{ inputs.branch || github.ref_name }}
+      cancel-in-progress: false
+    # The checkout of .github/scripts; the branch's open pull requests; the
+    # check's runs, and starting one again.
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    steps:
+      - name: Checkout the scripts
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      # The default GITHUB_TOKEN may start a run again: a re-run is not an
+      # event, so the rule that nothing done with that token starts a
+      # workflow does not hold it back.
+      - name: Start the check again on the branch's release PR
+        uses: actions/github-script@v9
+        # The branch's name through the environment, not this script's text.
+        env:
+          BRANCH: ${{ inputs.branch || github.ref_name }}
+        with:
+          script: |
+            const { recheck } = require('./.github/scripts/release-pr-current.cjs');
+            const { owner, repo } = context.repo;
+            await recheck({ github, core, owner, repo, branch: process.env.BRANCH });

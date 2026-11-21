@@ -1,7 +1,6 @@
 # Dependabot keeps gglib's third-party dependencies current through a few
 # grouped pull requests, not the default of one per dependency. Every pull
-# request here costs a serial CI run: ggRules merges only an up-to-date
-# branch, and a user-owned repository cannot have a merge queue.
+# request here costs a CI run.
 #
 # Majors are bumped by hand for now, in cargo and npm: a major is real work,
 # and it goes in a pull request that says what changed. That rule is the "*"
@@ -53,7 +52,7 @@ updates:
     cooldown:
       default-days: 3
     # The default, kept visible. Once five are open, the rest wait for the
-    # next run. That is the backpressure a serial merge lane needs.
+    # next run.
     open-pull-requests-limit: 5
     # No `versioning-strategy`: for cargo the default already raises a
     # requirement only when it no longer admits the new version, so an
