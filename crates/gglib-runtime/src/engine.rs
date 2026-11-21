@@ -255,6 +255,9 @@ pub fn files_present(kind: RuntimeKind) -> anyhow::Result<bool> {
 }
 
 /// [`uninstall`] of the paths `installed`, in the engine's folder `dir`.
+///
+/// A path on the list that is a link is removed as a link: what it points at
+/// stays.
 pub(crate) fn uninstall_from(
     dir: &Path,
     installed: &[PathBuf],
@@ -266,6 +269,8 @@ pub(crate) fn uninstall_from(
         };
         if meta.is_dir() {
             std::fs::remove_dir_all(path)?;
+        } else if is_folder_link(&meta) {
+            std::fs::remove_dir(path)?;
         } else {
             std::fs::remove_file(path)?;
         }
@@ -281,6 +286,25 @@ pub(crate) fn uninstall_from(
         was_installed: !removed_paths.is_empty(),
         removed_paths,
     })
+}
+
+/// Whether `meta` is a link that only `remove_dir` removes.
+///
+/// On Windows a link to a folder, a junction or a folder's symbolic link, is
+/// itself a folder entry: `remove_file` refuses it with "Access is denied",
+/// and `remove_dir` removes the link and not what it points at. On macOS and
+/// Linux `remove_file` removes every link.
+#[cfg(windows)]
+fn is_folder_link(meta: &std::fs::Metadata) -> bool {
+    use std::os::windows::fs::FileTypeExt as _;
+    meta.file_type().is_symlink_dir()
+}
+
+/// Whether `meta` is a link that only `remove_dir` removes: on macOS and
+/// Linux, none is.
+#[cfg(not(windows))]
+fn is_folder_link(_meta: &std::fs::Metadata) -> bool {
+    false
 }
 
 /// Whether anything is at `path`, a dangling link included.
