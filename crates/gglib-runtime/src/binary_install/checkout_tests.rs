@@ -10,8 +10,9 @@ use crate::binary_install::ReleaseSelector;
 use crate::llama::BuildEvent;
 
 /// Run git in `dir` with a throwaway identity and none of the caller's
-/// repository variables or signing; panic on failure.
-fn git(dir: &Path, args: &[&str]) -> String {
+/// repository variables or signing; panic on failure. The one way this
+/// crate's tests run git on a repository they made.
+pub(in crate::binary_install) fn git(dir: &Path, args: &[&str]) -> String {
     let output = cmd("git")
         .env_remove("GIT_DIR")
         .env_remove("GIT_WORK_TREE")
@@ -54,7 +55,19 @@ fn upstream(root: &Path) -> String {
     std::fs::write(up.join("release.txt"), "two").unwrap();
     git(&up, &["commit", "-q", "-am", "two"]);
     git(&up, &["tag", "b2"]);
-    format!("file://{}", up.display())
+    file_url(&up)
+}
+
+/// The `file://` URL of the folder `dir`, with `/` between its parts on
+/// every system: `/tmp/x` is `file:///tmp/x`, and Windows' `C:\tmp\x` is
+/// `file:///C:/tmp/x`.
+fn file_url(dir: &Path) -> String {
+    let path = dir.display().to_string().replace('\\', "/");
+    if path.starts_with('/') {
+        format!("file://{path}")
+    } else {
+        format!("file:///{path}")
+    }
 }
 
 fn upstream_dir(root: &Path) -> PathBuf {

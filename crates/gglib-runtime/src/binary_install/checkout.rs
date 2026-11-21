@@ -393,6 +393,6 @@ fn head_commit(dir: &Path) -> Result<(String, String)> {
     ))
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 #[path = "checkout_tests.rs"]
-mod tests;
+pub(super) mod tests;

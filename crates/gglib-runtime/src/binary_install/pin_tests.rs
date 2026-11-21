@@ -2,8 +2,7 @@
 
 use super::{Installed, PinStanding, Recorded, installed_release, standing};
 use crate::binary_install::ReleaseSelector;
-#[cfg(unix)]
-use gglib_core::utils::process::cmd;
+use crate::binary_install::checkout::tests::git;
 use std::path::Path;
 
 fn pin(tag: &str) -> ReleaseSelector {
@@ -145,34 +144,13 @@ fn only_missing_and_older_want_an_install() {
 
 /// A shallow checkout of one commit with `tags` on it, the way a clone of
 /// master that a release had been tagged on looks; the commit's full hash.
-#[cfg(unix)]
 fn checkout_with_tags(dir: &Path, tags: &[&str]) -> String {
-    let git = |args: &[&str]| {
-        let output = cmd("git")
-            .env_remove("GIT_DIR")
-            .env_remove("GIT_WORK_TREE")
-            .env_remove("GIT_INDEX_FILE")
-            .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
-            .args([
-                "-c",
-                "commit.gpgsign=false",
-                "-c",
-                "tag.gpgsign=false",
-                "-C",
-            ])
-            .arg(dir)
-            .args(args)
-            .output()
-            .expect("git runs");
-        assert!(output.status.success(), "git {args:?}");
-        String::from_utf8_lossy(&output.stdout).trim().to_owned()
-    };
-    git(&["init", "-q"]);
-    git(&["commit", "-q", "--allow-empty", "-m", "head"]);
+    git(dir, &["init", "-q"]);
+    git(dir, &["commit", "-q", "--allow-empty", "-m", "head"]);
     for tag in tags {
-        git(&["tag", tag]);
+        git(dir, &["tag", tag]);
     }
-    git(&["rev-parse", "HEAD"])
+    git(dir, &["rev-parse", "HEAD"])
 }
 
 fn download(release: &str) -> Recorded {
@@ -199,7 +177,6 @@ fn a_download_is_the_release_its_record_names() {
 
 /// A build recorded by tag is that tag, though its checkout's commit also
 /// carries another, as a `v*` release's commit carries its `b<n>`.
-#[cfg(unix)]
 #[test]
 fn a_build_recorded_by_tag_is_that_tag() {
     let tmp = tempfile::tempdir().unwrap();
@@ -214,7 +191,6 @@ fn a_build_recorded_by_tag_is_that_tag() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_source_build_recorded_by_commit_is_the_release_its_commit_is_tagged() {
     let tmp = tempfile::tempdir().unwrap();
@@ -226,7 +202,6 @@ fn a_source_build_recorded_by_commit_is_the_release_its_commit_is_tagged() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_source_build_with_no_release_tag_is_its_commit() {
     let tmp = tempfile::tempdir().unwrap();
