@@ -8,7 +8,7 @@ crates/gglib-bootstrap 0
 crates/gglib-app-services 5
 crates/gglib-hf 0
 crates/gglib-build-info 0
-crates/gglib-mcp 15
+crates/gglib-mcp 12
 crates/gglib-proxy 0
 crates/gglib-runtime 48
 crates/gglib-agent 0
