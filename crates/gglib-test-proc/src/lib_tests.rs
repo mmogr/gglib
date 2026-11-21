@@ -5,13 +5,14 @@ use super::{Instruction, executable, instructions_path, parse};
 #[test]
 fn each_instruction_is_read_from_its_line() {
     let parsed = parse(
-        "argv /tmp/a b.txt\npid /tmp/p\ntouch /tmp/t\nread\nprint out {args}\n\neprint\nsleep 30\nexit 3\n",
+        "argv /tmp/a b.txt\ncalls /tmp/c d.txt\npid /tmp/p\ntouch /tmp/t\nread\nprint out {args}\n\neprint\nsleep 30\nexit 3\n",
     );
 
     assert_eq!(
         parsed,
         Ok(vec![
             Instruction::Argv(PathBuf::from("/tmp/a b.txt")),
+            Instruction::Calls(PathBuf::from("/tmp/c d.txt")),
             Instruction::Pid(PathBuf::from("/tmp/p")),
             Instruction::Touch(PathBuf::from("/tmp/t")),
             Instruction::Read,
@@ -30,6 +31,7 @@ fn a_line_that_is_no_instruction_is_named() {
         ("sleep soon", "line 1: \"sleep soon\""),
         ("exit 256", "line 1: \"exit 256\""),
         ("argv", "line 1: \"argv\""),
+        ("calls", "line 1: \"calls\""),
         ("pid", "line 1: \"pid\""),
         ("touch", "line 1: \"touch\""),
         ("read all", "line 1: \"read all\""),

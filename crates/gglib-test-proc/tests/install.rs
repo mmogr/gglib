@@ -48,6 +48,38 @@ fn the_program_follows_its_instructions_in_order() {
     );
 }
 
+/// `argv` holds the last call; `calls` holds every one, in order, and each
+/// program writes its own file.
+#[test]
+fn every_call_is_added_to_the_end_of_its_calls_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let calls = dir.path().join("git calls.txt");
+    let argv = dir.path().join("git argv.txt");
+    let git = install(
+        dir.path(),
+        "git",
+        &format!("argv {}\ncalls {}\n", argv.display(), calls.display()),
+    );
+
+    for args in [
+        &["--version"][..],
+        &[],
+        &["clone", "--depth", "1", "a repository"],
+    ] {
+        let ran = Command::new(&git).args(args).output().unwrap();
+        assert!(ran.status.success(), "{ran:?}");
+    }
+
+    assert_eq!(
+        std::fs::read_to_string(&calls).unwrap(),
+        "--version\n\nclone --depth 1 a repository\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&argv).unwrap(),
+        "clone\n--depth\n1\na repository\n"
+    );
+}
+
 #[test]
 fn with_no_instruction_file_the_program_exits_0() {
     let dir = tempfile::tempdir().unwrap();

@@ -45,6 +45,7 @@ fn run(list: &[Instruction], args: &[String]) -> ExitCode {
     for instruction in list {
         let done = match instruction {
             Instruction::Argv(path) => write_argv(path, args),
+            Instruction::Calls(path) => add_call(path, &joined),
             Instruction::Pid(path) => write_whole(path, &format!("{}\n", std::process::id())),
             Instruction::Touch(path) => write_whole(path, ""),
             Instruction::Read => {
@@ -79,6 +80,16 @@ fn write_argv(path: &Path, args: &[String]) -> std::io::Result<()> {
         text.push('\n');
     }
     write_whole(path, &text)
+}
+
+/// Adds `call` and a newline to the end of `path`, in one write, so the
+/// lines of two programs that end together are not mixed.
+fn add_call(path: &Path, call: &str) -> std::io::Result<()> {
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?
+        .write_all(format!("{call}\n").as_bytes())
 }
 
 /// Writes `text` to `path`, whole: to a file beside it first, then renamed
