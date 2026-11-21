@@ -42,7 +42,12 @@ runs:
   using: composite
   steps:
     # The android, dotnet and haskell removals free 20 GB in about 155
-    # seconds. `large-packages` is off unless asked for: measured on run
+    # seconds. CI's Linux jobs pass `free-disk: "false"`: a runner starts
+    # with 86 GB free, more than their debug builds fill, and each prints
+    # what is left when it ends. The release builds, coverage and the
+    # engine-pins recorder still free it.
+    #
+    # `large-packages` is off unless asked for: measured on run
     # 32705784511 it spent 77 of that step's 232 seconds to reclaim 1.79 GB,
     # and among what it purged were libgl1, libglx-mesa0 and
     # libdbusmenu-gtk3-4, which a job that installs the GTK and appindicator
@@ -81,6 +86,32 @@ runs:
     - name: Install Rust toolchain
       shell: bash
       run: rustup show
+
+    # A runner image comes with a Rust of its own, a newer one each time the
+    # image is rebuilt, and rust-cache hashes every installed toolchain into
+    # its key (`rustup toolchain list`), not only the one that builds. Two
+    # images serve a pool at once during a rollout, so a job restored only
+    # what a job on its own image had saved: on 2026-11-20 the Windows legs
+    # looked for one key five hours after main had saved another. With the
+    # image's toolchains gone the key names the pinned one alone, and moves
+    # when rust-toolchain.toml does. The pinned toolchain becomes rustup's
+    # default, so a command run outside the checkout still finds one.
+    # `tr` because rustup ends its lines with a carriage return on Windows.
+    - name: Keep only the pinned toolchain
+      shell: bash
+      run: |
+        pinned=$(rustup show active-toolchain | tr -d '\r' | sed -n 1p | cut -d' ' -f1)
+        if [[ -z $pinned ]]; then
+          echo "::error title=no active toolchain::rustup names no active toolchain, so none is removed."
+          exit 1
+        fi
+        rustup default "$pinned"
+        rustup toolchain list --quiet | tr -d '\r' | while read -r toolchain; do
+          if [[ -n $toolchain && $toolchain != "$pinned" ]]; then
+            rustup toolchain uninstall "$toolchain"
+          fi
+        done
+        rustup toolchain list
 
     # Swatinem/rust-cache with a shared-key per build configuration. One key
     # for every job meant each restored the artifacts of another feature set:
