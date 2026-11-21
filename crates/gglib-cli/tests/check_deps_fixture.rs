@@ -4,19 +4,22 @@
 //! The binary a test runs is a build from this checkout, so the report is a
 //! checkout's: the build tools are marked as needed. An installed copy's
 //! report is tested as a pure function in `gglib_core::utils::system`, on
-//! every OS. The rows asserted are the ones macOS and Linux both list; a
+//! every OS. The rows asserted are the ones every OS lists, and in a test
+//! of their own the ones macOS and Linux list and Windows does not; a
 //! platform's own rows (the libraries Linux links, the GPU) depend on the
 //! machine and are not compared.
 
-#![cfg(unix)]
-
+#[path = "support/stand_in_tools.rs"]
+mod stand_in_tools;
+#[cfg(unix)]
 #[path = "support/stub_tools.rs"]
 mod stub_tools;
 
 use gglib_core::utils::process::cmd;
-use std::process::Stdio;
+use std::path::Path;
+use std::process::{Output, Stdio};
 
-use stub_tools::{Machine, one_at_a_time};
+use stand_in_tools::Machine;
 
 /// The same command with its colour taken out.
 fn plain(text: &str) -> String {
@@ -31,9 +34,122 @@ fn plain(text: &str) -> String {
     out
 }
 
+/// `gglib config check-deps` with `path` as its whole `PATH`, over a data
+/// root of its own.
+fn check_deps(path: &Path) -> Output {
+    let data = tempfile::tempdir().expect("a data root");
+    let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
+    cmd(env!("CARGO_BIN_EXE_gglib"))
+        .args(["config", "check-deps"])
+        .current_dir(elsewhere.path())
+        .env_clear()
+        .env("PATH", path)
+        .env("HOME", data.path())
+        .env("GGLIB_DATA_DIR", data.path())
+        .env("GGLIB_RESOURCE_DIR", data.path())
+        .stdin(Stdio::null())
+        .output()
+        .expect("running `gglib config check-deps`")
+}
+
+/// The first `count` rows under the group titled `title` in `stdout`.
+fn rows_under(stdout: &str, title: &str, count: usize) -> Vec<String> {
+    stdout
+        .lines()
+        .skip_while(|line| *line != title)
+        .skip(2)
+        .take(count)
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Put `npm` on `machine` as the platform ships it: on Windows a script,
+/// `npm.cmd`, that starts a program kept in `behind`; elsewhere the program.
+fn with_npm(machine: Machine, behind: &Path, banner: &str) -> Machine {
+    if cfg!(windows) {
+        let program = gglib_test_proc::install(behind, "npm", &format!("print {banner}"));
+        gglib_test_proc::wrap(&machine.path(), "npm", &program);
+        machine
+    } else {
+        machine.with_tool("npm", banner)
+    }
+}
+
+/// The rows every OS lists. Every state and every note starts in one column
+/// for every group: the first after the widest name (` stable-diffusion.cpp`)
+/// and the widest state.
+#[test]
+fn check_deps_prints_the_tools_every_system_lists_under_what_each_is_for() {
+    let behind = tempfile::tempdir().expect("a directory for the program behind npm");
+    let machine = Machine::bare()
+        .with_tool("cargo", "cargo 1.97.1 (1d8b05cdd 2026-07-20)")
+        .with_tool("rustc", "rustc 1.97.1 (82e1608df 2026-07-21)")
+        .with_tool("node", "v22.12.0")
+        .with_tool("git", "git version 2.39.5 (Apple Git-154)")
+        .with_tool(
+            "g++",
+            "Ubuntu clang version 18.1.3 (1ubuntu1)\nTarget: x86_64-pc-linux-gnu",
+        )
+        .with_tool(
+            "cmake",
+            "cmake version 3.28.1\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).",
+        )
+        .with_tool("python3", "Python 3.12.1");
+    let machine = with_npm(machine, behind.path(), "10.9.0");
+
+    let out = check_deps(&machine.path());
+
+    let calls = machine.calls();
+    for tool in ["cargo", "git", "cmake", "g++", "python3"] {
+        assert!(
+            calls.contains(&format!("{tool} --version")),
+            "{tool} is asked its version: {calls:?}"
+        );
+    }
+
+    let stdout = plain(&String::from_utf8_lossy(&out.stdout));
+    let explain = format!(
+        "stdout: {stdout}\nstderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        rows_under(&stdout, "Building gglib from source", 4),
+        [
+            "*cargo                ✓ v1.97.1       Builds gglib's Rust code",
+            "*rustc                ✓ v1.97.1       The Rust compiler",
+            "*node                 ✓ v22.12.0      Builds the web UI and the desktop app",
+            "*npm                  ✓ v10.9.0       Installs the web UI's packages",
+        ],
+        "{explain}"
+    );
+    assert_eq!(
+        rows_under(&stdout, "Building an engine from source", 2),
+        [
+            "*git                  ✓ v2.39.5       Fetches an engine's source",
+            "*cmake                ✓ v3.28.1       Configures an engine's build",
+        ],
+        "{explain}"
+    );
+    assert!(
+        stdout.contains("*C++ compiler         ✓ v18.1.3       Compiles an engine"),
+        "{explain}"
+    );
+    assert!(
+        stdout.contains(
+            " python3              ✓ v3.12.1       Turns on the optional hf_xet download accelerator"
+        ),
+        "{explain}"
+    );
+}
+
+/// The whole of a Unix machine's list, with the rows Windows does not have.
+// Unix only: make, pkg-config and libssl-dev are rows Windows does not list.
+#[cfg(unix)]
 #[test]
 fn check_deps_prints_each_tool_under_what_it_is_for() {
-    let _guard = one_at_a_time();
+    use stub_tools::Machine;
+
+    let _guard = stub_tools::one_at_a_time();
     let machine = Machine::bare()
         .with_tool("cargo", "cargo 1.97.1 (1d8b05cdd 2026-07-20)")
         .with_tool("rustc", "rustc 1.97.1 (82e1608df 2026-07-21)")
@@ -61,20 +177,8 @@ fn check_deps_prints_each_tool_under_what_it_is_for() {
             "echo 'cmake version 3.28.1'; echo; echo 'CMake suite maintained and supported by Kitware (kitware.com/cmake).'",
         )
         .with_tool("python3", "Python 3.12.1");
-    let data = tempfile::tempdir().expect("a data root");
-    let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
 
-    let out = cmd(env!("CARGO_BIN_EXE_gglib"))
-        .args(["config", "check-deps"])
-        .current_dir(elsewhere.path())
-        .env_clear()
-        .env("PATH", machine.path())
-        .env("HOME", data.path())
-        .env("GGLIB_DATA_DIR", data.path())
-        .env("GGLIB_RESOURCE_DIR", data.path())
-        .stdin(Stdio::null())
-        .output()
-        .expect("running `gglib config check-deps`");
+    let out = check_deps(&machine.path());
 
     let calls = machine.calls();
     for tool in ["cargo", "git", "cmake", "g++", "python3"] {
@@ -85,24 +189,12 @@ fn check_deps_prints_each_tool_under_what_it_is_for() {
     }
 
     let stdout = plain(&String::from_utf8_lossy(&out.stdout));
-    let rows_under = |title: &str, count: usize| -> Vec<String> {
-        stdout
-            .lines()
-            .skip_while(|line| *line != title)
-            .skip(2)
-            .take(count)
-            .map(str::to_owned)
-            .collect()
-    };
     let explain = format!(
         "stdout: {stdout}\nstderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    // Every state and every note starts in one column for every group: the
-    // first after the widest name (` stable-diffusion.cpp`) and the widest
-    // state.
     assert_eq!(
-        rows_under("Building gglib from source", 4),
+        rows_under(&stdout, "Building gglib from source", 4),
         [
             "*cargo                ✓ v1.97.1       Builds gglib's Rust code",
             "*rustc                ✓ v1.97.1       The Rust compiler",
@@ -112,7 +204,7 @@ fn check_deps_prints_each_tool_under_what_it_is_for() {
         "{explain}"
     );
     assert_eq!(
-        rows_under("Building an engine from source", 6),
+        rows_under(&stdout, "Building an engine from source", 6),
         [
             "*git                  ✓ v2.39.5       Fetches an engine's source",
             "*cmake                ✓ v3.28.1       Configures an engine's build",
@@ -135,24 +227,11 @@ fn check_deps_prints_each_tool_under_what_it_is_for() {
 /// its version is as good as not there.
 #[test]
 fn check_deps_reports_a_tool_that_is_absent_or_broken_as_missing() {
-    let _guard = one_at_a_time();
     let machine = Machine::bare()
         .with_tool("cargo", "cargo 1.97.1 (1d8b05cdd 2026-07-20)")
-        .with("git", "echo 'git version 2.43.0'; exit 1");
-    let data = tempfile::tempdir().expect("a data root");
-    let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
+        .with("git", "print git version 2.43.0\nexit 1");
 
-    let out = cmd(env!("CARGO_BIN_EXE_gglib"))
-        .args(["config", "check-deps"])
-        .current_dir(elsewhere.path())
-        .env_clear()
-        .env("PATH", machine.path())
-        .env("HOME", data.path())
-        .env("GGLIB_DATA_DIR", data.path())
-        .env("GGLIB_RESOURCE_DIR", data.path())
-        .stdin(Stdio::null())
-        .output()
-        .expect("running `gglib config check-deps`");
+    let out = check_deps(&machine.path());
 
     let stdout = plain(&String::from_utf8_lossy(&out.stdout));
     assert!(!out.status.success(), "{stdout}");

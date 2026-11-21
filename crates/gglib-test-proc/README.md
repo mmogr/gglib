@@ -29,9 +29,9 @@ The library installs the program; the binary is the program.
               │ runs
               ▼
   ┌──────────────────────────────────────────────────────────────┐
-  │ dir/sd-server[.exe]: reads dir/sd-server.proc, line by line   │
-  │ argv <path> · pid <path> · touch <path> · read                │
-  │ print <text> · eprint <text> · sleep <s> · exit <code>        │
+  │ dir/sd-server[.exe]: reads dir/sd-server.proc, line by line  │
+  │ argv <path> · calls <path> · pid <path> · touch <path>       │
+  │ read · print <text> · eprint <text> · sleep <s> · exit <code>│
   └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -70,7 +70,10 @@ let sd = gglib_test_proc::install(
 ```
 
 In `print` and `eprint`, `{args}` stands for the program's arguments, joined
-by spaces. `pid <path>` writes the program's own process id to `path`,
+by spaces. `argv <path>` writes the arguments to `path`, one per line, so the
+file holds the last call. `calls <path>` adds one line to the end of `path`,
+the arguments joined by spaces, so the file holds every call in the order
+they were made. `pid <path>` writes the program's own process id to `path`,
 `touch <path>` writes an empty file there, and `read` reads stdin until it
 ends.
 
