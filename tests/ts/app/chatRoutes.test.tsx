@@ -107,6 +107,7 @@ import { createAppRouter } from '../../../src/app/router';
 import { PlaceProviders, renderApp } from '../places/harness';
 import { Outlet, RouterProvider } from 'react-router';
 import { render } from '@testing-library/react';
+import { CHAT_LOADING, ChatNoModel, ChatUnread, ChatWaitFailed } from '../../../src/app/chatLoading';
 
 const DESK = '3ca82708b995';
 
@@ -675,5 +676,24 @@ describe('the chat routes', () => {
     expect(chatPage).toHaveAttribute('data-desk', 'desk');
     expect(chatPage).toHaveAttribute('data-conversation', '4');
     expect(chatPage).toHaveAttribute('data-port', '');
+  });
+});
+
+// Each sentence in the chat's place starts where the chat's title and turns
+// start: in the chat's column, past its gutters, on the line "Loading
+// messages…" takes. jsdom loads no stylesheet, so this holds the classes,
+// not the pixels.
+describe("the chat route's sentences in place of the chat", () => {
+  it.each([
+    ['Loading chat…', () => CHAT_LOADING],
+    ["Can't open the chat yet", () => <ChatWaitFailed words="gglib did not answer." onRetry={() => {}} />],
+    ["The chat couldn't be read", () => <ChatUnread onRetry={() => {}} />],
+    ['Pick a model to chat with', () => <ChatNoModel several onLibrary={() => {}} />],
+    ['No model to chat with yet', () => <ChatNoModel several={false} onLibrary={() => {}} />],
+  ])('%s sits in the chat column, off the pane edges', (words, state) => {
+    render(state());
+    const line = screen.getByText(new RegExp(words));
+    expect(line).toHaveClass('py-lg');
+    expect(line.parentElement).toHaveClass('mx-auto', 'max-w-[728px]', 'px-lg', 'pt-xl');
   });
 });
