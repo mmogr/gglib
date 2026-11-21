@@ -4,6 +4,7 @@
 //! tools it finds, and the `gglib` it runs, are scripts that record how they
 //! were called. Nothing here installs or builds anything.
 
+// Unix only: `make setup`'s scripts are bash, and its steps are the Makefile's.
 #![cfg(unix)]
 
 #[path = "support/stub_tools.rs"]
