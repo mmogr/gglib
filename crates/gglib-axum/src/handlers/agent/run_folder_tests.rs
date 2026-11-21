@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use gglib_core::domain::chat::{ConversationSettings, NewConversation};
 use gglib_core::domain::{Machine, ModelRef};
+use gglib_core::paths::link_folder;
 use gglib_core::ports::RunsPort as _;
 use serde_json::{Value, json};
 
@@ -128,7 +129,6 @@ fn shown(path: &Path) -> String {
 /// A folder said through a link is the folder it leads to: that is what the
 /// run reads, what the conversation remembers, and what the next run,
 /// which says nothing, reads again without writing.
-#[cfg(unix)]
 #[tokio::test]
 async fn a_said_folder_is_remembered_by_its_canonical_path_and_read_again() {
     let (_dir, state) = state().await;
@@ -136,7 +136,7 @@ async fn a_said_folder_is_remembered_by_its_canonical_path_and_read_again() {
     let project = place.path().join("project");
     std::fs::create_dir(&project).unwrap();
     let link = place.path().join("link");
-    std::os::unix::fs::symlink(&project, &link).unwrap();
+    link_folder(&project, &link);
     let project = canonical(&project);
     let id = chat_with(&state, ConversationSettings::default()).await;
 
