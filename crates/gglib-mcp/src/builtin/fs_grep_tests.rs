@@ -1,5 +1,7 @@
 //! Tests for `builtin:grep_search`.
 
+use gglib_core::paths::link_folder;
+
 use super::*;
 
 /// A search nobody has stopped.
@@ -134,13 +136,25 @@ fn paths_are_relative_to_a_root_given_by_another_name() {
     assert_eq!(result, "code.rs:1:match_me");
 }
 
-#[cfg(unix)]
 #[test]
-fn a_symlink_out_of_the_root_is_not_searched() {
+fn a_folder_link_out_of_the_root_is_not_searched() {
     let outside = tempfile::tempdir().unwrap();
     fs::write(outside.path().join("secret.txt"), "match_me\n").unwrap();
     let dir = tempfile::tempdir().unwrap();
-    std::os::unix::fs::symlink(outside.path(), dir.path().join("away")).unwrap();
+    link_folder(outside.path(), dir.path().join("away"));
+
+    let result = grep(&args_with_pattern("match_me"), dir.path()).unwrap();
+    assert!(result.contains("no matches"), "{result}");
+}
+
+// Unix only: a file link, which Windows lets an ordinary account make only in
+// Developer Mode. The folder half is `a_folder_link_out_of_the_root_is_not_searched`.
+#[cfg(unix)]
+#[test]
+fn a_file_link_out_of_the_root_is_not_searched() {
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(outside.path().join("secret.txt"), "match_me\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
     std::os::unix::fs::symlink(
         outside.path().join("secret.txt"),
         dir.path().join("secret_link.txt"),
@@ -151,43 +165,54 @@ fn a_symlink_out_of_the_root_is_not_searched() {
     assert!(result.contains("no matches"), "{result}");
 }
 
-#[cfg(unix)]
 #[test]
-fn a_symlink_inside_the_root_is_searched() {
+fn a_folder_link_inside_the_root_is_searched() {
     let dir = tempfile::tempdir().unwrap();
     let real = dir.path().join("real");
     fs::create_dir(&real).unwrap();
     fs::write(real.join("code.rs"), "match_me\n").unwrap();
-    std::os::unix::fs::symlink(&real, dir.path().join("alias")).unwrap();
-    std::os::unix::fs::symlink(real.join("code.rs"), dir.path().join("linked.rs")).unwrap();
+    link_folder(&real, dir.path().join("alias"));
 
     let result = grep(&args_with_pattern("match_me"), dir.path()).unwrap();
     assert!(result.contains("alias/code.rs:1:match_me"), "{result}");
+    assert!(result.contains("real/code.rs:1:match_me"), "{result}");
+}
+
+// Unix only: a file link, which Windows lets an ordinary account make only in
+// Developer Mode. The folder half is `a_folder_link_inside_the_root_is_searched`.
+#[cfg(unix)]
+#[test]
+fn a_file_link_inside_the_root_is_searched() {
+    let dir = tempfile::tempdir().unwrap();
+    let real = dir.path().join("real");
+    fs::create_dir(&real).unwrap();
+    fs::write(real.join("code.rs"), "match_me\n").unwrap();
+    std::os::unix::fs::symlink(real.join("code.rs"), dir.path().join("linked.rs")).unwrap();
+
+    let result = grep(&args_with_pattern("match_me"), dir.path()).unwrap();
     assert!(result.contains("linked.rs:1:match_me"), "{result}");
     assert!(result.contains("real/code.rs:1:match_me"), "{result}");
 }
 
-#[cfg(unix)]
 #[test]
 fn a_link_to_its_own_folder_or_above_lists_each_match_once() {
     let dir = tempfile::tempdir().unwrap();
     let a = dir.path().join("a");
     fs::create_dir(&a).unwrap();
     fs::write(a.join("x.rs"), "match_me\n").unwrap();
-    std::os::unix::fs::symlink(".", a.join("l1")).unwrap();
-    std::os::unix::fs::symlink("..", a.join("up")).unwrap();
+    link_folder(&a, a.join("l1"));
+    link_folder(dir.path(), a.join("up"));
 
     let result = grep(&args_with_pattern("match_me"), dir.path()).unwrap();
     assert_eq!(result, "a/x.rs:1:match_me");
 }
 
-#[cfg(unix)]
 #[test]
 fn two_links_to_the_root_list_each_match_once() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("code.rs"), "match_me\n").unwrap();
-    std::os::unix::fs::symlink(dir.path(), dir.path().join("a")).unwrap();
-    std::os::unix::fs::symlink(dir.path(), dir.path().join("b")).unwrap();
+    link_folder(dir.path(), dir.path().join("a"));
+    link_folder(dir.path(), dir.path().join("b"));
 
     let result = grep(&args_with_pattern("match_me"), dir.path()).unwrap();
     assert_eq!(result, "code.rs:1:match_me");
@@ -195,25 +220,23 @@ fn two_links_to_the_root_list_each_match_once() {
     assert!(none.contains("no matches"), "{none}");
 }
 
-#[cfg(unix)]
 #[test]
 fn a_walk_below_the_root_does_not_come_back_through_a_link_above_it() {
     let dir = tempfile::tempdir().unwrap();
     let sub = dir.path().join("sub");
     fs::create_dir(&sub).unwrap();
     fs::write(sub.join("x.rs"), "match_me\n").unwrap();
-    std::os::unix::fs::symlink("..", sub.join("up")).unwrap();
+    link_folder(dir.path(), sub.join("up"));
 
     let result = grep(&args_with_pattern_and_path("match_me", "sub"), dir.path()).unwrap();
     assert_eq!(result, "sub/x.rs:1:match_me");
 }
 
-#[cfg(unix)]
 #[test]
 fn a_dangling_link_is_passed_over() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("code.rs"), "match_me\n").unwrap();
-    std::os::unix::fs::symlink(dir.path().join("gone"), dir.path().join("broken")).unwrap();
+    link_folder(dir.path().join("gone"), dir.path().join("broken"));
 
     let result = grep(&args_with_pattern("match_me"), dir.path()).unwrap();
     assert_eq!(result, "code.rs:1:match_me");
@@ -221,7 +244,6 @@ fn a_dangling_link_is_passed_over() {
 
 /// The macOS shape: the root is reached through a link (`/tmp` is
 /// `/private/tmp` there).
-#[cfg(unix)]
 #[test]
 fn matches_under_a_root_behind_a_link_are_relative_to_it() {
     let tmp = tempfile::tempdir().unwrap();
@@ -229,7 +251,7 @@ fn matches_under_a_root_behind_a_link_are_relative_to_it() {
     fs::create_dir_all(real.join("src")).unwrap();
     fs::write(real.join("src").join("main.rs"), "match_me\n").unwrap();
     let link = tmp.path().join("link");
-    std::os::unix::fs::symlink(&real, &link).unwrap();
+    link_folder(&real, &link);
 
     let result = grep(&args_with_pattern("match_me"), &link).unwrap();
     assert_eq!(result, "src/main.rs:1:match_me");
