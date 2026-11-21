@@ -5,7 +5,7 @@
 //! The unit tests hand the service a repository they built; these run the
 //! binary, so the tables are the ones its own bootstrap creates under
 //! `GGLIB_DATA_DIR`. Nothing here reaches a network: the one server that is
-//! started is a shell script in the test's own directory, the chat commands
+//! started is gglib-mcp's stand-in, in a folder of its own, the chat commands
 //! are pointed at a port nothing listens on, and a `gglib mcp` command's
 //! daemon is a port nothing listens on or a stand-in in this process.
 
@@ -86,21 +86,6 @@ fn mcp_err(root: &Path, args: &[&str]) -> String {
     );
     String::from_utf8_lossy(&out.stderr).into_owned()
 }
-
-/// An MCP server for `sh <file>`: it answers `initialize` and `tools/list`
-/// with the id it was asked under, and offers one tool.
-#[cfg(unix)]
-const STAND_IN_SERVER: &str = r#"while IFS= read -r line; do
-  id=${line#*\"id\":}
-  id=${id%%,*}
-  case "$line" in
-    *'"method":"initialize"'*)
-      printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"stand-in\"}}}" ;;
-    *'"method":"tools/list"'*)
-      printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"tools\":[{\"name\":\"echo\",\"description\":\"says it back\"}]}}" ;;
-  esac
-done
-"#;
 
 #[test]
 fn adding_a_server_under_a_taken_name_is_refused_by_name() {
@@ -247,13 +232,15 @@ fn a_manual_lifecycle_is_refused_with_the_lifecycles_there_are() {
 
 /// The server is added with a bare command, so its row has no resolved path.
 /// `mcp test` has to resolve it first, as the GUI's Test does: the client
-/// refuses to start a path that is not absolute.
-#[cfg(unix)]
+/// refuses to start a path that is not absolute. The command is found in the
+/// row's extra search path, the stand-in's folder.
 #[test]
 fn testing_a_newly_added_server_resolves_its_command_and_starts_it() {
     let root = tempfile::tempdir().expect("temp data dir");
-    let script = root.path().join("stand-in.sh");
-    std::fs::write(&script, STAND_IN_SERVER).expect("the stand-in is written");
+    let server = gglib_mcp::StandIn::install();
+    let program = server.program();
+    let command = program.file_stem().expect("a name").to_string_lossy();
+    let folder = program.parent().expect("its folder");
     mcp_ok(
         root.path(),
         &[
@@ -261,9 +248,9 @@ fn testing_a_newly_added_server_resolves_its_command_and_starts_it() {
             "--name",
             "stand-in",
             "--command",
-            "sh",
-            "--args",
-            script.to_str().expect("a UTF-8 path"),
+            &command,
+            "--path-extra",
+            folder.to_str().expect("a UTF-8 path"),
         ],
     );
 
