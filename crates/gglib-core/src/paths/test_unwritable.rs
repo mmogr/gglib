@@ -1,4 +1,4 @@
-//! A folder nothing can be written into, made the same way on every OS.
+//! A folder no file can be made in, made the same way on every OS.
 //!
 //! A test of what gglib does when a write is refused needs a folder that
 //! refuses one. Taking the write bits off its mode does that on macOS and
@@ -22,12 +22,15 @@ pub struct UnwritableFolder {
 }
 
 /// Make the folder at `folder` refuse a write until the answer is dropped:
-/// no file and no folder can be made in it. What is already in it can still
-/// be read, and the folder can still be listed.
+/// no file can be made in it. What is already in it can still be read, and
+/// the folder can still be listed.
 ///
 /// On macOS and Linux the write bits come off its mode, and go back on as
-/// they were. On Windows a deny entry for everyone, for making a file or a
-/// folder there, is added to its access list with `icacls`, and removed.
+/// they were, and no folder can be made in it either. On Windows a deny
+/// entry for everyone is added to its access list with `icacls`, and
+/// removed. It asks for making a folder to be refused too, but Windows
+/// still lets one be made, so a test that needs that refused stays
+/// Unix-only.
 ///
 /// A mode does not bind root, so a test that may run as root should check
 /// that a write is refused before it asserts what follows from one.
@@ -85,7 +88,8 @@ impl UnwritableFolder {
 const EVERYONE: &str = "*S-1-1-0";
 
 /// `WD` is "write data", which for a folder is making a file in it; `AD` is
-/// "append data", which for a folder is making a folder in it.
+/// "append data", which for a folder is making a folder in it. The `AD`
+/// deny does not hold: CI's Windows runner still makes a folder there.
 #[cfg(windows)]
 fn refuse_writes(folder: &Path) -> Result<UnwritableFolder, String> {
     icacls(folder, &["/deny", &format!("{EVERYONE}:(WD,AD)")])?;

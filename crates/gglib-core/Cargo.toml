@@ -60,8 +60,8 @@ ts-bindings = ["dep:ts-rs"]
 # A data root of a test binary's own, which `data_root()` and
 # `resource_root()` answer before anything else (#955), and their refusal of
 # the user's own folder to a test that set none (#2088), and `link_folder`
-# and `unwritable_folder`, the folder link and the folder that refuses a
-# write a test makes the same way on every OS. Other crates enable
+# and `unwritable_folder`, the folder link and the folder no file can be
+# made in, which a test makes the same way on every OS. Other crates enable
 # it from `[dev-dependencies]` only, so no ordinary build has any of them.
 test-utils = ["dep:tempfile"]
 
