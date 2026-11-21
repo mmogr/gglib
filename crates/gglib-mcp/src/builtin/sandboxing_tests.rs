@@ -1,6 +1,7 @@
 //! Tests for sandbox path resolution and its refusals.
 
 use super::*;
+use gglib_core::paths::link_folder;
 use std::fs;
 
 #[test]
@@ -124,6 +125,8 @@ fn a_path_through_a_file_is_a_miss() {
     );
 }
 
+// Unix only: the folder is made unreadable by clearing its permission bits,
+// which only Unix has.
 #[cfg(unix)]
 #[test]
 fn an_unreadable_path_says_why_and_not_that_it_is_missing() {
@@ -150,7 +153,6 @@ fn an_unreadable_path_says_why_and_not_that_it_is_missing() {
 
 /// The macOS shape: the root is reached through a link (`/tmp` is
 /// `/private/tmp` there).
-#[cfg(unix)]
 #[test]
 fn a_root_behind_a_link_takes_either_form() {
     let tmp = tempfile::tempdir().unwrap();
@@ -158,7 +160,7 @@ fn a_root_behind_a_link_takes_either_form() {
     fs::create_dir_all(real.join("src")).unwrap();
     fs::write(real.join("src").join("main.rs"), "match_me\n").unwrap();
     let link = tmp.path().join("link");
-    std::os::unix::fs::symlink(&real, &link).unwrap();
+    link_folder(&real, &link);
     let canon_file = gglib_core::paths::canonical(&real)
         .unwrap()
         .join("src")
@@ -221,15 +223,14 @@ fn is_binary_allows_text() {
     assert!(!is_binary(&txt));
 }
 
-#[cfg(unix)]
 #[test]
-fn symlink_escape_rejected() {
+fn a_folder_link_out_of_the_root_is_refused() {
+    let outside = tempfile::tempdir().unwrap();
     let dir = tempfile::tempdir().unwrap();
-    // Create a symlink inside the sandbox pointing outside
-    let link = dir.path().join("escape");
-    std::os::unix::fs::symlink("/tmp", &link).unwrap();
+    link_folder(outside.path(), dir.path().join("escape"));
+
     let result = resolve_sandboxed_path(dir.path(), "escape");
-    assert!(result.is_err());
+    assert_eq!(result.unwrap_err(), format!("'escape' {OUTSIDE}."));
 }
 
 #[test]
