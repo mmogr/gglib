@@ -199,29 +199,27 @@ mod tests {
     }
 
     /// A run that fails has no banner, and one that answers on stderr alone
-    /// is still heard.
-    #[cfg(unix)]
+    /// is still heard. Each run is the stand-in's, told what to print and
+    /// how to exit.
     #[test]
     fn a_banner_is_the_first_line_a_successful_run_prints() {
-        use std::os::unix::process::ExitStatusExt;
-        use std::process::{ExitStatus, Output};
-
-        let run = |code: i32, stdout: &str, stderr: &str| Output {
-            status: ExitStatus::from_raw(code << 8),
-            stdout: stdout.as_bytes().to_vec(),
-            stderr: stderr.as_bytes().to_vec(),
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let run = |name: &str, instructions: &str| {
+            let tool = gglib_test_proc::install(dir.path(), name, instructions);
+            cmd(&tool).output().expect("the stand-in runs")
         };
 
-        assert_eq!(
-            first_line(&run(0, "  tool 1.2.3  \nsecond line\n", "a warning\n")).as_deref(),
-            Some("tool 1.2.3")
+        let both = run(
+            "both",
+            "print   tool 1.2.3  \nprint second line\neprint a warning",
         );
-        assert_eq!(
-            first_line(&run(0, " \n", "tool 4.5.6\n")).as_deref(),
-            Some("tool 4.5.6")
-        );
-        assert_eq!(first_line(&run(3, "tool 7.8.9\n", "")), None);
-        assert_eq!(first_line(&run(0, "", "")), None);
+        assert_eq!(first_line(&both).as_deref(), Some("tool 1.2.3"));
+        let stderr_alone = run("stderr-alone", "print  \neprint tool 4.5.6");
+        assert_eq!(first_line(&stderr_alone).as_deref(), Some("tool 4.5.6"));
+        let failed = run("failed", "print tool 7.8.9\nexit 3");
+        assert_eq!(failed.status.code(), Some(3));
+        assert_eq!(first_line(&failed), None);
+        assert_eq!(first_line(&run("silent", "")), None);
         assert_eq!(version_line("gglib-no-such-program-on-any-path"), None);
     }
 

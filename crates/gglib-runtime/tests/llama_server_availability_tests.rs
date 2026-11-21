@@ -30,14 +30,6 @@ fn test_env_var_override_takes_precedence() {
 
 #[test]
 #[ignore = "requires an unsafe block for env var manipulation"]
-#[cfg(unix)]
-fn test_non_executable_binary_returns_error() {
-    // This test is ignored because it requires unsafe blocks to set environment variables
-    // Run with: cargo test -- --ignored
-}
-
-#[test]
-#[ignore = "requires an unsafe block for env var manipulation"]
 fn test_nonexistent_path_in_env_var_returns_not_found() {
     // This test is ignored because it requires unsafe blocks to set environment variables
     // Run with: cargo test -- --ignored

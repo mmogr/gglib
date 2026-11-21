@@ -5,7 +5,6 @@ use std::path::Path;
 
 use super::status::{commit_of, sd_status_at};
 use crate::binary_install::{BuildRecord, InstallRecord, PrebuiltRecord, ReleaseSelector};
-#[cfg(unix)]
 use crate::engine::{PinStanding, PinState};
 use crate::llama::Acceleration;
 
@@ -81,21 +80,16 @@ fn nothing_installed_is_a_status_not_an_error() {
     );
 }
 
-/// The status reads the record and asks the binary itself; a stand-in
-/// script prints what sd-server 228c707 prints for `--version`.
-#[cfg(unix)]
+/// The status reads the record and asks the binary itself; the stand-in
+/// prints what sd-server 228c707 prints for `--version`.
 #[test]
 fn the_status_reads_the_record_and_the_binarys_own_version() {
-    use std::os::unix::fs::PermissionsExt;
-
     let tmp = tempfile::tempdir().expect("a temp dir");
-    let binary = tmp.path().join("sd-server");
-    std::fs::write(
-        &binary,
-        "#!/bin/sh\necho 'stable-diffusion.cpp version master-948-228c707, commit 228c707'\n",
-    )
-    .unwrap();
-    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let binary = gglib_test_proc::install(
+        tmp.path(),
+        "sd-server",
+        "print stable-diffusion.cpp version master-948-228c707, commit 228c707",
+    );
     let config = tmp.path().join("sd-config.json");
     InstallRecord::Prebuilt(PrebuiltRecord::new(
         "master-948-228c707",

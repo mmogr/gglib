@@ -188,24 +188,41 @@ mod tests {
 
     /// An install that replaces the binary is probed again: the cache holds
     /// what the file was, not only where it is.
-    #[cfg(unix)]
     #[test]
     fn a_replaced_binary_is_probed_again() {
-        use std::os::unix::fs::PermissionsExt;
-
         let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join("llama-server");
-        let write = |script: &str| {
-            std::fs::write(&path, script).unwrap();
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let install = |banner: &str| {
+            gglib_test_proc::install(dir.path(), "llama-server", &format!("eprint {banner}"))
         };
-        write("#!/bin/sh\necho 'version: 11429 (d812350)' >&2\n");
+        let path = install("version: 11429 (d812350)");
+        let first = std::fs::metadata(&path)
+            .and_then(|meta| meta.modified())
+            .expect("the first install's time");
         assert_eq!(probe(&path).build, Some(11429));
 
-        // A longer script, so the length differs whatever the clock's grain.
-        write("#!/bin/sh\n# the next release\necho 'version: 11870 (74bca39)' >&2\n");
+        // The next release, put where the first was. The stand-in is one
+        // program whatever it is told to print, so its length cannot differ
+        // as a real release's does, and a copy can carry its source's time:
+        // the file is given a later time, as an install's write gives it.
+        assert_eq!(install("version: 11870 (74bca39)"), path);
+        set_modified(&path, first + std::time::Duration::from_secs(10));
 
         assert_eq!(probe(&path).build, Some(11870));
+    }
+
+    /// Give the file at `path` the modified time `when`.
+    ///
+    /// Through a handle that cannot write where the system allows it: Linux
+    /// will not start a program while any process holds it open for writing.
+    /// Windows sets a time only through one that can.
+    fn set_modified(path: &Path, when: SystemTime) {
+        let file = if cfg!(windows) {
+            std::fs::OpenOptions::new().write(true).open(path)
+        } else {
+            std::fs::File::open(path)
+        }
+        .expect("open the binary");
+        file.set_modified(when).expect("set the binary's time");
     }
 
     /// Caching must round-trip through the real `probe` entry point, and a

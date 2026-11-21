@@ -175,6 +175,8 @@ mod tests {
         assert_eq!(human_time("last Tuesday"), "last Tuesday");
     }
 
+    // Unix only: the system refuses to run a file whose permission bits do
+    // not let it.
     #[cfg(unix)]
     #[test]
     fn test_validate_not_executable() {
