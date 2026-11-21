@@ -164,10 +164,7 @@ async fn kill_pid_windows(pid: u32) -> io::Result<()> {
     ))
 }
 
-// Gated on `unix` as well as `test`: `kill_pid_terminates_process` spawns
-// `sleep`, which Windows does not have. Gating the module rather than each
-// test is what keeps the imports from reading as unused there.
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use gglib_core::utils::process::async_cmd;
@@ -182,6 +179,9 @@ mod tests {
     /// `u32::MAX` would be `-1`, every process the user can signal, and `0`
     /// this process's own group: both are refused before any signal is sent.
     /// (Were either sent, this test process would get the SIGTERM.)
+    // Unix only: `kill(2)` reads 0 and a wrapped pid as a process group,
+    // which only the signal path refuses.
+    #[cfg(unix)]
     #[tokio::test]
     async fn kill_pid_refuses_a_value_that_names_a_group() {
         for pid in [0, 1 << 31, u32::MAX] {
@@ -190,27 +190,33 @@ mod tests {
         }
     }
 
+    /// A running process is stopped by its pid alone, and is gone when
+    /// `kill_pid` says so.
+    ///
+    /// The orphans `kill_pid` is for have no parent left, so the system reaps
+    /// them. This one is the test's child, so a task waits on it meanwhile:
+    /// unreaped, a stopped child still answers to its pid on Unix, and
+    /// `kill_pid` would report it as still there.
     #[tokio::test]
     async fn kill_pid_terminates_process() {
-        // Spawn a long-running process
-        let mut child = async_cmd("sleep")
-            .arg("60")
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let program = gglib_test_proc::install(dir.path(), "llama-server", "sleep 60");
+        let mut child = async_cmd(&program)
+            .kill_on_drop(true)
             .spawn()
-            .expect("failed to spawn sleep");
-
+            .expect("the stand-in starts");
         let pid = child.id().expect("no PID");
+        let reaped = tokio::spawn(async move { child.wait().await });
 
-        // Kill it by PID (won't reap since we don't own the Child in kill_pid)
-        let result = kill_pid(pid).await;
-        if let Err(ref e) = result {
-            eprintln!("kill_pid failed: {e}");
-        }
+        kill_pid(pid).await.expect("the process is stopped");
 
-        // Reap the child to clean up zombie
-        // In real orphan cleanup, the init process (PID 1) reaps orphans
-        let _ = child.wait().await;
-
-        // After reaping, verify process is truly gone
+        // Well inside the stand-in's 60 s: it ended because it was stopped.
+        let status = tokio::time::timeout(Duration::from_secs(20), reaped)
+            .await
+            .expect("the process is still running 20 s after kill_pid")
+            .expect("the waiting task does not panic")
+            .expect("the child is waited for");
+        assert!(!status.success(), "it was stopped, not left to finish");
         assert!(!crate::pidfile::pid_exists(pid));
     }
 }

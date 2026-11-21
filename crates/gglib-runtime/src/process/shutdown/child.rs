@@ -135,32 +135,54 @@ mod tests {
     use gglib_core::utils::process::async_cmd;
     use tokio::time::sleep;
 
+    /// A running child is stopped, well inside the time it would have run
+    /// for, and is gone afterwards.
     #[tokio::test]
-    #[cfg(unix)]
-    async fn shutdown_responds_to_sigterm() {
-        // Spawn sleep process that should respond to SIGTERM
-        let child = async_cmd("sleep")
-            .arg("30")
+    async fn shutdown_stops_a_running_child() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let program = gglib_test_proc::install(dir.path(), "llama-server", "sleep 60");
+        let child = async_cmd(&program)
+            .kill_on_drop(true)
             .spawn()
-            .expect("failed to spawn sleep");
+            .expect("the stand-in starts");
+        let pid = child.id().expect("a running child has a pid");
+        let started = std::time::Instant::now();
 
-        let result = shutdown_child(child).await;
-        assert!(result.is_ok());
+        let status = shutdown_child(child).await.expect("the child is stopped");
+
+        assert!(!status.success(), "it was stopped, not left to finish");
+        assert!(started.elapsed() < Duration::from_secs(30));
+        assert!(!crate::pidfile::pid_exists(pid));
     }
 
+    /// A child that has already exited is waited for, and its own exit
+    /// status is what comes back.
     #[tokio::test]
     async fn shutdown_handles_already_exited() {
-        // Spawn process that exits immediately
-        let child = async_cmd("echo")
-            .arg("test")
-            .spawn()
-            .expect("failed to spawn echo");
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let done = dir.path().join("done");
+        let program = gglib_test_proc::install(
+            dir.path(),
+            "llama-server",
+            &format!("touch {}", done.display()),
+        );
+        let child = async_cmd(&program).spawn().expect("the stand-in starts");
 
-        // Give it time to exit
-        sleep(Duration::from_millis(100)).await;
+        // The file is the last thing the stand-in does; then give it time
+        // to exit.
+        for _ in 0..300 {
+            if done.exists() {
+                break;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+        assert!(done.exists(), "the stand-in never ran to its end");
+        sleep(Duration::from_millis(200)).await;
 
-        let result = shutdown_child(child).await;
-        assert!(result.is_ok());
+        let status = shutdown_child(child)
+            .await
+            .expect("an exited child is waited for");
+        assert!(status.success(), "{status}");
     }
 
     #[tokio::test(start_paused = true)]
@@ -184,8 +206,10 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    // Unix only: a SIGTERM the process ignores, then the SIGKILL it cannot;
+    // Windows has one kill.
     #[cfg(unix)]
+    #[tokio::test]
     async fn shutdown_escalates_to_sigkill_when_sigterm_is_ignored() {
         // Spawn a single process that ignores SIGTERM — forces escalation to SIGKILL.
         // Uses python3 to avoid orphaning a subprocess (which bash -c 'sleep' would do).
