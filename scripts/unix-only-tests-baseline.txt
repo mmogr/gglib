@@ -10,7 +10,7 @@ crates/gglib-hf 0
 crates/gglib-build-info 0
 crates/gglib-mcp 5
 crates/gglib-proxy 0
-crates/gglib-runtime 33
+crates/gglib-runtime 30
 crates/gglib-agent 0
 crates/gglib-engine-llama 0
 crates/gglib-broadcast 0
