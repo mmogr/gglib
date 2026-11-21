@@ -8,13 +8,29 @@
  * @module app/chatLoading
  */
 
+import type { ReactNode } from 'react';
+
 import { Button } from '../components/ui/Button';
 
-export const CHAT_LOADING = (
-  <div className="flex flex-col h-full w-full overflow-hidden">
-    <div role="status" className="loading-chat">Loading chat…</div>
-  </div>
-);
+/**
+ * A sentence in the chat's place, where the chat's title and turns start:
+ * the chat's column (`NotebookColumn` in `ChatMessagesPanel`, 728 px wide at
+ * most inside its gutters) and the line its "Loading messages…" takes, so
+ * nothing moves sideways when the chat opens.
+ */
+function ChatLine({ role, children }: { role: 'status' | 'alert'; children: ReactNode }) {
+  return (
+    <div className="flex flex-col h-full w-full overflow-hidden">
+      <div className="mx-auto w-full max-w-[728px] px-lg pt-xl">
+        <div role={role} className="py-lg">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export const CHAT_LOADING = <ChatLine role="status">Loading chat…</ChatLine>;
 
 /**
  * What the chat waits on (the server list, the library, the settings) could
@@ -22,28 +38,24 @@ export const CHAT_LOADING = (
  */
 export function ChatWaitFailed({ words, onRetry }: { words: string; onRetry: () => void }) {
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden">
-      <div role="alert" className="loading-chat">
-        {`Can't open the chat yet: ${words}`}{' '}
-        <Button variant="link" size="sm" onClick={onRetry}>
-          Retry
-        </Button>
-      </div>
-    </div>
+    <ChatLine role="alert">
+      {`Can't open the chat yet: ${words}`}{' '}
+      <Button variant="link" size="sm" onClick={onRetry}>
+        Retry
+      </Button>
+    </ChatLine>
   );
 }
 
 /** The chat's list could not be read, twice: say so, and offer to read again. */
 export function ChatUnread({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden">
-      <div role="alert" className="loading-chat">
-        The chat couldn't be read.{' '}
-        <Button variant="link" size="sm" onClick={onRetry}>
-          Try again
-        </Button>
-      </div>
-    </div>
+    <ChatLine role="alert">
+      The chat couldn't be read.{' '}
+      <Button variant="link" size="sm" onClick={onRetry}>
+        Try again
+      </Button>
+    </ChatLine>
   );
 }
 
@@ -55,13 +67,11 @@ export function ChatUnread({ onRetry }: { onRetry: () => void }) {
  */
 export function ChatNoModel({ several, onLibrary }: { several: boolean; onLibrary: () => void }) {
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden">
-      <div role="status" className="loading-chat">
-        {several ? 'Pick a model to chat with: open one in the library and press Chat.' : 'No model to chat with yet. Get one in the library.'}{' '}
-        <Button variant="link" size="sm" onClick={onLibrary}>
-          Open the library
-        </Button>
-      </div>
-    </div>
+    <ChatLine role="status">
+      {several ? 'Pick a model to chat with: open one in the library and press Chat.' : 'No model to chat with yet. Get one in the library.'}{' '}
+      <Button variant="link" size="sm" onClick={onLibrary}>
+        Open the library
+      </Button>
+    </ChatLine>
   );
 }
