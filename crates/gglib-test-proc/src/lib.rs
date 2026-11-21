@@ -22,6 +22,11 @@ pub enum Instruction {
     /// `path`. The file appears whole: it is written beside `path` and then
     /// renamed onto it, so a test polling for it never reads half of it.
     Argv(PathBuf),
+    /// `calls <path>`: add one line to the end of `path`, the program's
+    /// arguments joined by single spaces. Each start adds its own, so the
+    /// file holds every call in the order they were made, where `argv`
+    /// holds the last.
+    Calls(PathBuf),
     /// `pid <path>`: write the program's own process id to `path`, whole,
     /// as `argv` writes, so a test can find the program wherever it was
     /// started from (behind a wrapper, say).
@@ -60,6 +65,7 @@ fn parse_line(line: &str) -> Option<Instruction> {
     let (verb, rest) = line.split_once(' ').unwrap_or((line, ""));
     Some(match verb {
         "argv" if !rest.is_empty() => Instruction::Argv(PathBuf::from(rest)),
+        "calls" if !rest.is_empty() => Instruction::Calls(PathBuf::from(rest)),
         "pid" if !rest.is_empty() => Instruction::Pid(PathBuf::from(rest)),
         "touch" if !rest.is_empty() => Instruction::Touch(PathBuf::from(rest)),
         "read" if rest.is_empty() => Instruction::Read,

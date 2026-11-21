@@ -6,9 +6,8 @@
 //! nothing is downloaded or built. The end of input is a no; an uninstall
 //! told yes removes what the test laid out.
 
-#[cfg(unix)]
-#[path = "support/stub_tools.rs"]
-mod stub_tools;
+#[path = "support/stand_in_tools.rs"]
+mod stand_in_tools;
 
 use gglib_core::utils::process::cmd;
 use std::io::Write;
@@ -204,12 +203,10 @@ fn uninstall_with_yes_asks_nothing_and_removes_everything() {
 /// `--yes`, so a script that ran it knows nothing was installed, and nothing
 /// is cloned; a no waiting in a pipe is not read. The stand-in `nvcc` gives a
 /// machine with no Metal a CUDA build to ask about.
-#[cfg(unix)]
 #[test]
 fn a_source_install_with_nobody_to_ask_is_refused_and_clones_nothing() {
-    let _guard = stub_tools::one_at_a_time();
     let root = tempfile::tempdir().unwrap();
-    let machine = stub_tools::Machine::bare()
+    let machine = stand_in_tools::Machine::bare()
         .with_tool("git", "git version 2.43.0")
         .with_tool("cmake", "cmake version 3.28.1")
         .with_tool("g++", "g++ (GCC) 14.2.1 20240910")

@@ -7,6 +7,8 @@
 //! what the test laid out, and a source install, which meets a stand-in git
 //! that clones nothing and fails, which is where an install stops.
 
+#[path = "support/stand_in_tools.rs"]
+mod stand_in_tools;
 #[cfg(unix)]
 #[path = "support/stub_tools.rs"]
 mod stub_tools;
@@ -298,7 +300,6 @@ fn a_source_install_without_the_build_tools_is_refused_and_says_how_to_get_them(
 
 /// What a build detects on the stand-in machine: Metal on Apple silicon,
 /// and elsewhere CUDA, from the stand-in `nvcc`.
-#[cfg(unix)]
 const DETECTED: &str = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
     "Metal"
 } else {
@@ -306,18 +307,15 @@ const DETECTED: &str = if cfg!(all(target_os = "macos", target_arch = "aarch64")
 };
 
 /// The stand-in toolkit a build detects off Apple silicon.
-#[cfg(unix)]
 const NVCC: &str = "Cuda compilation tools, release 12.4, V12.4.131";
 
 /// With the tools there, a source install says what it found and what it
 /// will do, and would ask. There is no terminal to ask, so nothing is
 /// cloned, and the command says so, names `--yes` and exits with an error.
-#[cfg(unix)]
 #[test]
 fn a_source_install_with_the_build_tools_asks_before_it_clones_anything() {
-    let _guard = stub_tools::one_at_a_time();
     let root = tempfile::tempdir().unwrap();
-    let machine = stub_tools::Machine::bare()
+    let machine = stand_in_tools::Machine::bare()
         .with_tool("git", "git version 2.43.0")
         .with_tool("cmake", "cmake version 3.28.1")
         .with_tool("g++", "g++ (GCC) 14.2.1 20240910")
@@ -351,7 +349,7 @@ fn a_source_install_with_the_build_tools_asks_before_it_clones_anything() {
              \x20 3. Compile llama-server (~3-5 minutes)\n\
              \x20 4. Install to {}\n\
              \n",
-            root.path().join(".llama/bin").display()
+            root.path().join(".llama").join("bin").display()
         ),
         "{}",
         text(&out)
@@ -373,6 +371,7 @@ fn a_source_install_with_the_build_tools_asks_before_it_clones_anything() {
 /// A clone's own output is piped into the build's log lines, and they are
 /// drawn with the spinner over the clone. Off a terminal neither is drawn, so
 /// nothing git says of the clone is left on stdout.
+// Unix only: its git stand-in must answer by its arguments, which the stand-in program cannot do yet.
 #[cfg(unix)]
 #[test]
 fn a_source_install_that_is_agreed_to_clones_under_its_spinner() {
