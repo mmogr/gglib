@@ -8,6 +8,7 @@
 //! Each check bites under the usual `022` umask. Under `077` a plain create is
 //! private too and these cannot tell the two apart; the umask is process-wide
 //! and the tests run in parallel, so it is not set here to force the question.
+// Unix only: the modes the database, its `-wal` and `-shm` and their directory are given.
 #![cfg(unix)]
 
 use std::fs;

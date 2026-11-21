@@ -37,15 +37,13 @@ pub(crate) fn prepare(db_path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
-    use std::os::unix::fs::PermissionsExt;
-
     use super::prepare;
 
-    /// `prepare` leaves the database on disk, empty and `0600`, before any pool
-    /// exists, so `SQLite` opens a file it did not create and gives its `-wal`
-    /// and `-shm` that file's mode. That `setup_database` calls this before it
+    /// `prepare` leaves the database on disk and empty before any pool exists,
+    /// `0600` where files have a mode, so `SQLite` opens a file it did not
+    /// create and gives its `-wal` and `-shm` that file's mode. That `setup_database` calls this before it
     /// connects is not visible to `tests/file_modes.rs`: tightening afterwards
     /// reaches the same modes. This pins what `prepare` leaves; the order rests
     /// on reading `setup_database`.
@@ -58,6 +56,11 @@ mod tests {
 
         let meta = std::fs::metadata(&db).expect("the database is there before SQLite opens it");
         assert_eq!(meta.len(), 0);
-        assert_eq!(meta.permissions().mode() & 0o777, 0o600);
+        // Unix only: the mode `create_private_file` asks `open` for.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(meta.permissions().mode() & 0o777, 0o600);
+        }
     }
 }

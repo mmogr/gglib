@@ -79,6 +79,7 @@ async fn step(version: i64, conn: &mut SqliteConnection) -> Result<()> {
 #[path = "setup_migrations_tests.rs"]
 mod tests;
 
+// Unix only: a file link, which the end-to-end library holds beside its linked folders.
 #[cfg(all(test, unix))]
 #[path = "setup_migrations_upgrade_tests.rs"]
 mod upgrade_tests;

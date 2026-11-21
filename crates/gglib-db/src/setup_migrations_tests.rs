@@ -234,3 +234,51 @@ async fn a_colliding_key_is_skipped_and_the_rest_of_step_1_commits() {
         ]
     );
 }
+
+/// A library never stamped whose model is stored by a path through a linked
+/// folder, shards and all, is opened by this build: the path, the key and
+/// the shard list come out under the folder the link resolves to. The
+/// end-to-end library in `setup_migrations_upgrade_tests.rs` holds a file
+/// link too, which only Unix can make; this is its linked folder on every OS.
+#[tokio::test]
+async fn a_library_stored_through_a_linked_folder_comes_out_canonical() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = gglib_core::paths::canonical(dir.path()).expect("resolved");
+    let (store, link) = (root.join("store"), dir.path().join("link"));
+    std::fs::create_dir(&store).expect("a dir");
+    for shard in ["a-1.gguf", "a-2.gguf"] {
+        std::fs::write(store.join(shard), b"weights").expect("a file");
+    }
+    gglib_core::paths::link_folder(&store, &link);
+    let under = |folder: &Path, name: &str| folder.join(name).to_string_lossy().into_owned();
+    let db = dir.path().join("gglib.db");
+    let pool = stamped(&db, 0).await;
+    let through = under(&link, "a-1.gguf");
+    plant_model(&pool, "a", &through, &local_model_key_for(&through), 7.0).await;
+    sqlx::query("UPDATE models SET file_paths_json = ?")
+        .bind(serde_json::json!([through, under(&link, "a-2.gguf")]).to_string())
+        .execute(&pool)
+        .await
+        .expect("a shard list");
+    pool.close().await;
+
+    let pool = setup_database(&db, &NoopGgufParser)
+        .await
+        .expect("the upgrade");
+
+    let model: (String, String, Option<String>) =
+        sqlx::query_as("SELECT file_path, model_key, file_paths_json FROM models")
+            .fetch_one(&pool)
+            .await
+            .expect("the model");
+    let resolved = under(&store, "a-1.gguf");
+    let shards = serde_json::json!([resolved, under(&store, "a-2.gguf")]).to_string();
+    assert_eq!(
+        model,
+        (
+            resolved.clone(),
+            local_model_key_for(&resolved),
+            Some(shards)
+        )
+    );
+}
