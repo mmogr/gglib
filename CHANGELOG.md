@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.39.0-rc.3](https://github.com/mmogr/gglib/compare/v0.39.0-rc.2...v0.39.0-rc.3) (2026-11-21)
+
+
+### What gglib now does
+
+* **chat:** an exported chat carries its images ([#2131](https://github.com/mmogr/gglib/issues/2131)) ([52a79b7](https://github.com/mmogr/gglib/commit/52a79b797b913ce17468a779180ee36c4c3a26e2))
+* **cli:** run start sends images with the prompt ([#2145](https://github.com/mmogr/gglib/issues/2145)) ([5efb0f8](https://github.com/mmogr/gglib/commit/5efb0f8e8e6e2cd1ff1e7c9c42a072cb8c75758e))
+* **cli:** the proxy dashboard says what a request's images cost ([#2133](https://github.com/mmogr/gglib/issues/2133)) ([9f53e87](https://github.com/mmogr/gglib/commit/9f53e878064c03a74cdb91c025c26b4d8e70aedd))
+* **gui:** the endpoint's recent requests say what a request's images cost ([#2134](https://github.com/mmogr/gglib/issues/2134)) ([43612f5](https://github.com/mmogr/gglib/commit/43612f580f9806dcbf56a4a21fb4c57ae647deef))
+* **proxy:** a request's record says its images, their estimate and its measured prompt tokens ([#2132](https://github.com/mmogr/gglib/issues/2132)) ([edc499a](https://github.com/mmogr/gglib/commit/edc499a5a41c06ab420a0f6dbdeeaa9cb9b01466))
+
+
+### What it stopped getting wrong
+
+* **agent:** a run whose final reply is no answer ends as "the model gave no answer" ([#2136](https://github.com/mmogr/gglib/issues/2136)) ([89291be](https://github.com/mmogr/gglib/commit/89291be0b1cc513f9a6ad9c35dcb6d099bccdadc))
+* **agent:** the proxy's own notice is never read as the model's reply ([#2140](https://github.com/mmogr/gglib/issues/2140)) ([c1f802c](https://github.com/mmogr/gglib/commit/c1f802c3c01c1b3effb0d18bab07b1b805c31198)), closes [#1946](https://github.com/mmogr/gglib/issues/1946)
+* **cli:** a question with no model named asks the library's only chat model, and says which ([#2142](https://github.com/mmogr/gglib/issues/2142)) ([2617ffe](https://github.com/mmogr/gglib/commit/2617ffe3c44c1ed018550dbc4b2ba792114ef8a6))
+* **core:** a test build refuses the per-user data folder ([#2138](https://github.com/mmogr/gglib/issues/2138)) ([11fb969](https://github.com/mmogr/gglib/commit/11fb96927699c022b6749655652f55a9cc322c98)), closes [#2088](https://github.com/mmogr/gglib/issues/2088)
+* **gui:** New chat with nothing loaded opens on the library's only chat model, or says what to do ([#2143](https://github.com/mmogr/gglib/issues/2143)) ([736cbe7](https://github.com/mmogr/gglib/commit/736cbe75e20ca147f2e693c09849b9bc6b3aaac7)), closes [#2063](https://github.com/mmogr/gglib/issues/2063)
+* **gui:** the chat page's waiting and empty states are not pinned to the corner ([#2192](https://github.com/mmogr/gglib/issues/2192)) ([8ba00bf](https://github.com/mmogr/gglib/commit/8ba00bfd0faae91bba00996a5db9588c858506e8))
+* **runtime:** an uninstall on Windows removes a folder link and not what it points at ([#2170](https://github.com/mmogr/gglib/issues/2170)) ([769ecc5](https://github.com/mmogr/gglib/commit/769ecc50601ddb985e2eb19a3d26d3df2c6f66ec)), closes [#2180](https://github.com/mmogr/gglib/issues/2180)
+
+
+### Internal
+
+* **app-services:** the Unix-only tests say why ([#2178](https://github.com/mmogr/gglib/issues/2178)) ([cd819d5](https://github.com/mmogr/gglib/commit/cd819d5954a7b5fdd5a9036a20d35c16f740c15b))
+* **axum:** a folder said through a link is tested on Windows, with a junction ([#2166](https://github.com/mmogr/gglib/issues/2166)) ([69829a8](https://github.com/mmogr/gglib/commit/69829a82a0611dcb24eb3f472b974d7b5695d6da))
+* **axum:** the tests that start an MCP server start one that runs on Windows too ([#2165](https://github.com/mmogr/gglib/issues/2165)) ([578ee31](https://github.com/mmogr/gglib/commit/578ee312643c3a9b95a56914886f39197edf6250))
+* **cache:** the Rust caches keep one key across runner images, and main saves them every night ([#2147](https://github.com/mmogr/gglib/issues/2147)) ([650cca5](https://github.com/mmogr/gglib/commit/650cca5d5067b0e58a0965a9b1dfe994f4201512))
+* **cli:** a model being served is refused on Windows as on Unix ([#2157](https://github.com/mmogr/gglib/issues/2157)) ([c0f3645](https://github.com/mmogr/gglib/commit/c0f3645f41fb3521ac12d1bd2a653357ff35a712))
+* **cli:** check-deps and the source installs are tested with stand-in tools on Windows ([#2171](https://github.com/mmogr/gglib/issues/2171)) ([7d35e4d](https://github.com/mmogr/gglib/commit/7d35e4d3de08c06758d05a351a145edcabbfaeba))
+* **cli:** mcp test starts its stand-in server on Windows ([#2173](https://github.com/mmogr/gglib/issues/2173)) ([422e2f9](https://github.com/mmogr/gglib/commit/422e2f9e753877fe64c565873895d136a9d7c6a1))
+* **cli:** on Windows an installed copy names the copy to run and hands nothing over ([#2172](https://github.com/mmogr/gglib/issues/2172)) ([b3d8af8](https://github.com/mmogr/gglib/commit/b3d8af818d1173064811cf0d42a387d66b1cfbfa))
+* **cli:** the copies listed by config paths are tested on Windows too ([#2150](https://github.com/mmogr/gglib/issues/2150)) ([0fb7edd](https://github.com/mmogr/gglib/commit/0fb7edd0ff86d2c9d875bb9f459cfda5a5a236c5))
+* **core:** a test makes a folder link the same way on every OS ([#2151](https://github.com/mmogr/gglib/issues/2151)) ([43f23fc](https://github.com/mmogr/gglib/commit/43f23fc294935af2ca3d4d09ccc12e188639329a))
+* **core:** a test makes a folder unwritable the same way on every OS ([#2179](https://github.com/mmogr/gglib/issues/2179)) ([9ec3d37](https://github.com/mmogr/gglib/commit/9ec3d37660e7c9ca19c05704a3fc89feb5eb50b0))
+* **core:** every test names its own data root ([#2137](https://github.com/mmogr/gglib/issues/2137)) ([3e23f81](https://github.com/mmogr/gglib/commit/3e23f810aeb5938041074218a52cf4dea3f08e7d))
+* **core:** the private-file tests say what is Unix's and run the rest on Windows ([#2177](https://github.com/mmogr/gglib/issues/2177)) ([de546c6](https://github.com/mmogr/gglib/commit/de546c6f4e181541737ea4f6abacb69578db5fb5))
+* **db:** the link and database-file tests run on Windows ([#2176](https://github.com/mmogr/gglib/issues/2176)) ([22322c1](https://github.com/mmogr/gglib/commit/22322c199a620fa37aaddb2ca220d631e76916e7))
+* **deps:** bump taiki-e/install-action ([#2196](https://github.com/mmogr/gglib/issues/2196)) ([1281d5f](https://github.com/mmogr/gglib/commit/1281d5f1748172bcbc7aa24b632c41902edb171f))
+* **deps:** bump the cargo and npm dependencies to the newest versions their ranges allow ([#2198](https://github.com/mmogr/gglib/issues/2198)) ([f8b2f55](https://github.com/mmogr/gglib/commit/f8b2f55d5e699dbf937b5a858e7b5ee16442cab9))
+* **deps:** bump the tauri-crates group with 8 updates ([#2195](https://github.com/mmogr/gglib/issues/2195)) ([41d5583](https://github.com/mmogr/gglib/commit/41d558302a78ccb1102a18cfcbf7ac71e3a464c1))
+* **download:** the Python environment tests run on Windows ([#2175](https://github.com/mmogr/gglib/issues/2175)) ([d30c226](https://github.com/mmogr/gglib/commit/d30c226c5356c5d4025012e254d868301e1bc9ee))
+* **gui:** the menu's and the layer shell's tests say which system they are for ([#2169](https://github.com/mmogr/gglib/issues/2169)) ([aeff32a](https://github.com/mmogr/gglib/commit/aeff32ae82d91aa124e5e4a32aa6c35dfe19198a))
+* **issues:** a new issue is a sentence and not a form ([#2156](https://github.com/mmogr/gglib/issues/2156)) ([1996892](https://github.com/mmogr/gglib/commit/19968926fbdf17bfe2622b624193065ff06e8b84))
+* **issues:** a reply on an issue can add a missing label ([#2155](https://github.com/mmogr/gglib/issues/2155)) ([9d94740](https://github.com/mmogr/gglib/commit/9d947408542bcbe41aaa923404908b0f318484bc))
+* **issues:** an issue's labels are read from its own words ([#2154](https://github.com/mmogr/gglib/issues/2154)) ([abfe9e1](https://github.com/mmogr/gglib/commit/abfe9e1a59c8454fc1d7ce6b0547e017ef35424a))
+* **mcp:** a link out of the working folder is tested on Windows, with a junction ([#2164](https://github.com/mmogr/gglib/issues/2164)) ([dc40da4](https://github.com/mmogr/gglib/commit/dc40da4b725d0dd16b32c1aff324458b0226d904))
+* **mcp:** the search order is tested under Unix's and Windows' rules on every OS ([#2152](https://github.com/mmogr/gglib/issues/2152)) ([d77c51f](https://github.com/mmogr/gglib/commit/d77c51f8ca94e256d2cc3497a4bbb40b9bd8fd7b))
+* **mcp:** the tests that start an MCP server start one that runs on Windows too ([#2148](https://github.com/mmogr/gglib/issues/2148)) ([eb8631d](https://github.com/mmogr/gglib/commit/eb8631dee7bb21c300b5f1bd85a0592085eb5f9a))
+* **release:** a release PR behind its branch fails a check of its own ([#2194](https://github.com/mmogr/gglib/issues/2194)) ([811f3d8](https://github.com/mmogr/gglib/commit/811f3d840ba0a7596a74f1e6eafeff3c62f1b3fa)), closes [#2193](https://github.com/mmogr/gglib/issues/2193)
+* **runtime:** a zip release is unpacked under test on Windows too ([#2167](https://github.com/mmogr/gglib/issues/2167)) ([8683cc3](https://github.com/mmogr/gglib/commit/8683cc3912c41291d042389af63123c147a803be))
+* **runtime:** starting and asking an engine is tested on Windows too ([#2160](https://github.com/mmogr/gglib/issues/2160)) ([fbd4d55](https://github.com/mmogr/gglib/commit/fbd4d55862c596de6182d170f980a6eb9b383283))
+* **runtime:** stopping a process is tested on Windows too ([#2149](https://github.com/mmogr/gglib/issues/2149)) ([a37633e](https://github.com/mmogr/gglib/commit/a37633ef5abda5043817e7b0ec7c6c6b32f616b5))
+* **runtime:** the build steps are tested on Windows too ([#2161](https://github.com/mmogr/gglib/issues/2161)) ([3193b60](https://github.com/mmogr/gglib/commit/3193b60049e97801b02fb7243a1efe658d0ad629))
+* **runtime:** the source checkout is tested on Windows too ([#2168](https://github.com/mmogr/gglib/issues/2168)) ([e5bd106](https://github.com/mmogr/gglib/commit/e5bd106e80fddde6568daf7c780a1a2f20e56cd7))
+
 ## [0.39.0-rc.2](https://github.com/mmogr/gglib/compare/v0.39.0-rc.1...v0.39.0-rc.2) (2026-11-20)
 
 
