@@ -12,6 +12,7 @@ fn temp() -> (tempfile::TempDir, PathBuf) {
 
 /// The file is the whole protection: another account that can read it holds
 /// the key to every `/api` route.
+// Unix only: the mode the file is created with.
 #[cfg(unix)]
 #[test]
 fn the_file_is_created_unreadable_to_anybody_else() {
@@ -45,6 +46,7 @@ fn every_start_mints_a_new_token() {
 
 /// A file somebody left open to others is replaced at start, not used, and
 /// what replaces it is `0600`.
+// Unix only: the mode of the file left there, and of the one that replaces it.
 #[cfg(unix)]
 #[test]
 fn a_loose_file_left_there_is_replaced_private() {
@@ -62,6 +64,7 @@ fn a_loose_file_left_there_is_replaced_private() {
 }
 
 /// A client does not present a token others could have read, or written.
+// Unix only: `refuse_loose` reads a mode, and on Windows refuses nothing.
 #[cfg(unix)]
 #[test]
 fn a_reader_refuses_a_file_open_to_others() {

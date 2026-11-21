@@ -3,9 +3,7 @@
 //! A `#[path]` sibling, the split `bearer_tests.rs` already makes.
 
 use super::*;
-#[cfg(unix)]
 use crate::access::private_file::create_private;
-#[cfg(unix)]
 use std::io::Write;
 
 fn temp() -> std::path::PathBuf {
@@ -53,6 +51,7 @@ fn a_corrupt_file_is_an_error_and_not_an_empty_roster() {
 
 /// The keys are secrets and the file sits in a directory a debug build
 /// resolves to the repository checkout, so the mode is the whole protection.
+// Unix only: the mode the file is written with.
 #[cfg(unix)]
 #[test]
 fn the_file_is_written_unreadable_to_anybody_else() {
@@ -85,6 +84,7 @@ fn the_file_is_written_unreadable_to_anybody_else() {
 /// plain create is `0600` too, there is no window, and this cannot tell the
 /// two apart. The umask is not set here to force the question: it is
 /// process-wide, and these tests run in parallel.
+// Unix only: the mode `open` is asked for.
 #[cfg(unix)]
 #[test]
 fn the_staging_file_is_unreadable_to_anybody_else_before_any_chmod() {
@@ -110,10 +110,6 @@ fn the_staging_file_is_unreadable_to_anybody_else_before_any_chmod() {
 /// while its mode let them. Truncating it and writing would put every key
 /// into their descriptor, where no chmod afterwards reaches. The writer gets
 /// a new file instead, and the leftover never sees a byte of it.
-///
-/// Unix only, where removing a name somebody holds open is guaranteed to
-/// free it at once.
-#[cfg(unix)]
 #[test]
 fn a_leftover_temporary_file_is_not_written_through() {
     use std::io::Read;
@@ -147,6 +143,7 @@ fn a_leftover_temporary_file_is_not_written_through() {
 /// Unlike `the_staging_file_is_unreadable_to_anybody_else_before_any_chmod`,
 /// this bites under any umask: the leftover's mode is set outright rather
 /// than left to it.
+// Unix only: the mode a leftover had, which the new file must not take.
 #[cfg(unix)]
 #[test]
 fn the_temporary_file_is_never_readable_by_others_even_for_an_instant() {
@@ -172,6 +169,7 @@ fn the_temporary_file_is_never_readable_by_others_even_for_an_instant() {
 /// create that was here before followed one and truncated the link's target,
 /// and what was written went into it; now the link itself is removed, its
 /// target is left as it was, and the keys go to a file of the writer's own.
+// Unix only: a file link.
 #[cfg(unix)]
 #[test]
 fn a_link_under_the_temporary_name_is_not_followed() {
