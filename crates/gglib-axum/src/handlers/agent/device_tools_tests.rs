@@ -131,37 +131,18 @@ fn a_phone_chat_with_its_tools_off_gets_only_the_floor() {
     );
 }
 
-/// An MCP server for `sh -c` that answers `initialize` and `tools/list`
-/// and offers one tool, `echo`.
-#[cfg(unix)]
-pub(super) const STAND_IN_SERVER: &str = r#"while IFS= read -r line; do
-  id=${line#*\"id\":}
-  id=${id%%,*}
-  case "$line" in
-    *'"method":"initialize"'*)
-      printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"stand-in\"}}}" ;;
-    *'"method":"tools/list"'*)
-      printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"tools\":[{\"name\":\"echo\",\"description\":\"says it back\"}]}}" ;;
-  esac
-done"#;
-
 /// A server open to paired devices and running here is not offered to a
 /// device while no tunnel session is live, to a phone's run or a chat that
 /// names its tool, and the chat a run settles carries that floor.
-#[cfg(unix)]
 #[tokio::test]
 async fn resolve_offers_the_floor_while_no_session_is_live() {
     use gglib_core::ports::RemoteGatewayPort as _;
 
     use super::{resolve, settle};
 
+    let stand_in = gglib_mcp::StandIn::install();
     let (_dir, state) = state().await;
-    let server = gglib_core::NewMcpServer::new_stdio(
-        "tavily",
-        "sh",
-        vec!["-c".to_owned(), STAND_IN_SERVER.to_owned()],
-        None,
-    );
+    let server = stand_in.server("tavily");
     let server = state.mcp.add_server(server).await.unwrap();
     state.mcp.set_allow_remote(server.id, true).await.unwrap();
     let tools = state.mcp.start_server(server.id).await.unwrap();

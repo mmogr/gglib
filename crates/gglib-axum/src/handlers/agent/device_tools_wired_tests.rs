@@ -15,6 +15,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use gglib_core::McpServerStatus;
 use gglib_core::domain::chat::{ConversationSettings, NewConversation};
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::domain::runs::RunStatus;
@@ -22,11 +23,10 @@ use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::{
     Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunScope, RunningTarget,
 };
-use gglib_core::{McpServerStatus, NewMcpServer};
+use gglib_mcp::StandIn;
 use serde_json::json;
 use tokio::sync::Notify;
 
-use super::tests::STAND_IN_SERVER;
 use super::{Asked, Starts, resolve, settle};
 use crate::handlers::agent::chat_turn::ChatQuery;
 use crate::handlers::agent::run_fixture::{LOCAL, device, drawing_state, settled};
@@ -83,6 +83,8 @@ struct Opened {
     loads: Arc<Loads>,
     server: i64,
     model: i64,
+    /// The program every server here starts. Last, so it outlives them.
+    stand_in: StandIn,
 }
 
 async fn opened() -> Opened {
@@ -91,8 +93,8 @@ async fn opened() -> Opened {
     let loads = Arc::new(Loads::default());
     context.runtime = Arc::clone(&loads) as Arc<dyn ModelRuntimePort>;
     let state = Arc::new(context);
-    let args = vec!["-c".to_owned(), STAND_IN_SERVER.to_owned()];
-    let server = NewMcpServer::new_stdio("tavily", "sh", args, None);
+    let stand_in = StandIn::install();
+    let server = stand_in.server("tavily");
     let server = state.mcp.add_server(server).await.unwrap().id;
     state.mcp.set_allow_remote(server, true).await.unwrap();
     state.remote.gateway().serve_for_test();
@@ -103,6 +105,7 @@ async fn opened() -> Opened {
         loads,
         server,
         model,
+        stand_in,
     }
 }
 
@@ -114,8 +117,7 @@ impl Opened {
     /// Another stand-in server under `name`, open to paired devices and not
     /// running: its id.
     async fn open_another(&self, name: &str) -> i64 {
-        let args = vec!["-c".to_owned(), STAND_IN_SERVER.to_owned()];
-        let server = NewMcpServer::new_stdio(name, "sh", args, None);
+        let server = self.stand_in.server(name);
         let id = self.state.mcp.add_server(server).await.unwrap().id;
         self.state.mcp.set_allow_remote(id, true).await.unwrap();
         id

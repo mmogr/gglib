@@ -248,6 +248,6 @@ pub(super) async fn settle(state: &AppState, mut chat: LoopRequest, asked: &Aske
 #[path = "device_tools_tests.rs"]
 mod tests;
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 #[path = "device_tools_wired_tests.rs"]
 mod wired_tests;
