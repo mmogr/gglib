@@ -185,6 +185,7 @@ async fn a_forget_whose_roster_write_fails_still_drops_the_runs_once_the_key_is_
 
 /// A forget that fails before the key is out keeps the runs: the device may
 /// still be admitted, and they are still its own.
+// Unix only: the key folder is made unwritable by its mode.
 #[cfg(unix)]
 #[tokio::test]
 async fn a_forget_that_fails_to_remove_the_key_keeps_the_runs() {

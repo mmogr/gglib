@@ -355,6 +355,7 @@ fn the_folder_state_is_read_from_the_disk() {
 /// A folder whose mode refuses a write is not writable, and a missing
 /// folder under one will not be created there: both are Not writable, as
 /// the first download's write would find.
+// Unix only: the folder is made unwritable by its mode.
 #[cfg(unix)]
 #[test]
 fn a_folder_that_refuses_a_write_or_sits_under_one_is_not_writable() {
