@@ -434,7 +434,7 @@ fn parse_build_progress(line: &str, total_files: &mut usize) -> Option<usize> {
     None
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 #[path = "step_tests.rs"]
 mod step_tests;
 
