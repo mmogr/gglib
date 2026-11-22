@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.1-rc.1](https://github.com/mmogr/gglib/compare/v0.39.0-rc.3...v0.39.1-rc.1) (2026-11-22)
+
+
+### Internal
+
+* **deps:** bump the cargo and npm dependencies to the newest versions their ranges allow ([#2200](https://github.com/mmogr/gglib/issues/2200)) ([344fc6a](https://github.com/mmogr/gglib/commit/344fc6a69394b585830bbcba7042747bb27b92d5))
+
 ## [0.39.0-rc.3](https://github.com/mmogr/gglib/compare/v0.39.0-rc.2...v0.39.0-rc.3) (2026-11-21)
 
 
