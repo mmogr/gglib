@@ -20,7 +20,7 @@ use crate::system::glibc::{Glibc, host_glibc};
 /// it renders — unfalsifiable, and two users who installed a day apart run
 /// different engines. Moving the pin is a deliberate commit with what changed
 /// in its message. Upstream tags `master-<build>-<short commit>`.
-pub const PINNED_SD_RELEASE: &str = "master-1098-b521db4";
+pub const PINNED_SD_RELEASE: &str = "master-1106-532d2c1";
 
 /// The newest glibc the pinned release's Linux builds ask for: the oldest a
 /// system can have and run them.
