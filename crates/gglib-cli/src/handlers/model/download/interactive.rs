@@ -362,16 +362,39 @@ async fn handle_add_to_queue(
 
     let (model_id, quant) = entry;
     let budget = download_budget().await;
-    match Arc::clone(downloads)
-        .queue_smart(model_id, quant, budget)
-        .await
-    {
-        Ok(_) => {
+    // The monitor's own Ctrl-C arm is not polled while this runs, and the
+    // queueing can wait out the Hub's rate limit, so Ctrl-C is listened for
+    // here too.
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    let queue = Arc::clone(downloads).queue_smart(model_id.clone(), quant, budget);
+    match unless_cancelled(queue, ctrl_c).await {
+        Some(Ok(_)) => {
             mp.println("✓ Queued").ok();
         }
-        Err(e) => {
+        Some(Err(e)) => {
             mp.println(format!("✗ Queue error: {e}")).ok();
         }
+        None => {
+            mp.println(format!("✗ {model_id} was not queued: Ctrl-C"))
+                .ok();
+        }
+    }
+}
+
+/// `queue`'s answer, or `None` when `cancel` completes first, which drops
+/// `queue` where it waits. A download is queued only once its files are
+/// found, so one dropped while it waits (on the Hub's rate limit, say) is
+/// not queued.
+async fn unless_cancelled<T>(
+    queue: impl Future<Output = T>,
+    cancel: impl Future<Output = ()>,
+) -> Option<T> {
+    tokio::select! {
+        biased;
+        () = cancel => None,
+        answer = queue => Some(answer),
     }
 }
 
@@ -398,3 +421,7 @@ fn parse_inline_quant(s: &str) -> (String, Option<String>) {
     }
     (s.trim().to_string(), None)
 }
+
+#[cfg(test)]
+#[path = "interactive_tests.rs"]
+mod tests;

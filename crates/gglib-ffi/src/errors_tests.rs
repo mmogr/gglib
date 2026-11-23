@@ -1,5 +1,9 @@
 //! Each error gglib answers maps onto the case an app words.
 
+use std::time::Duration;
+
+use gglib_core::hub_limit::HubBucket;
+
 use super::*;
 
 const REPO: &str = "owner/model-GGUF";
@@ -38,7 +42,13 @@ fn the_hubs_refusals_map_case_for_case() {
             },
             GglibError::NotFound,
         ),
-        (HfPortError::RateLimited, GglibError::RateLimited),
+        (
+            HfPortError::RateLimited {
+                bucket: HubBucket::Api,
+                resets_in: Duration::from_secs(10),
+            },
+            GglibError::RateLimited,
+        ),
     ];
     for (hub, expected) in cases {
         assert_eq!(GglibError::from(hub), expected);

@@ -1,6 +1,10 @@
 //! Error types for `HuggingFace` port operations.
 
+use std::time::Duration;
+
 use thiserror::Error;
+
+use crate::hub_limit::{HubBucket, clock};
 
 /// Errors from `HuggingFace` port operations.
 ///
@@ -33,9 +37,15 @@ pub enum HfPortError {
         path: String,
     },
 
-    /// API rate limit exceeded.
-    #[error("Rate limit exceeded, try again later")]
-    RateLimited,
+    /// Hugging Face's rate limit refused the request, or would have: the
+    /// allowance it counts against was spent when it was made.
+    #[error("Hugging Face's rate limit lifts in {}", clock(*.resets_in))]
+    RateLimited {
+        /// The allowance that is spent.
+        bucket: HubBucket,
+        /// The time until it opens again.
+        resets_in: Duration,
+    },
 
     /// Authentication required or failed.
     #[error("Authentication required for private model: {model_id}")]
@@ -86,5 +96,15 @@ mod tests {
         };
         assert!(err.to_string().contains("Q4_K_M"));
         assert!(err.to_string().contains("Org/Model"));
+    }
+
+    /// A refusal says when the limit lifts, in the words a wait is shown in.
+    #[test]
+    fn a_rate_limit_says_when_it_lifts() {
+        let err = HfPortError::RateLimited {
+            bucket: HubBucket::Api,
+            resets_in: Duration::from_millis(133_200),
+        };
+        assert_eq!(err.to_string(), "Hugging Face's rate limit lifts in 2:14");
     }
 }

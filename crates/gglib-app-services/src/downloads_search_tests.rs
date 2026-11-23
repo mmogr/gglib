@@ -2,8 +2,10 @@
 //! summary the browser is answered with.
 
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
+use gglib_core::hub_limit::HubBucket;
 use gglib_core::ports::{
     HfFileInfo, HfModelKind, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchResult, HfSortField,
 };
@@ -35,7 +37,10 @@ impl HfClientPort for SearchedHub {
     async fn search(&self, options: &HfSearchOptions) -> Result<HfSearchResult, HfPortError> {
         self.asked.lock().unwrap().push(options.clone());
         if self.limited {
-            return Err(HfPortError::RateLimited);
+            return Err(HfPortError::RateLimited {
+                bucket: HubBucket::Api,
+                resets_in: Duration::from_secs(134),
+            });
         }
         Ok(HfSearchResult {
             items: self.hits.clone(),
@@ -268,7 +273,7 @@ async fn a_search_the_hub_refuses_says_why() {
 
     assert!(
         matches!(&refused, Err(GuiError::Internal(reason))
-            if reason == "HF search failed: Rate limit exceeded, try again later"),
+            if reason == "HF search failed: Hugging Face's rate limit lifts in 2:14"),
         "{refused:?}"
     );
 }

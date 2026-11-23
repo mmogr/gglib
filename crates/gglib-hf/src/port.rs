@@ -31,13 +31,14 @@ fn map_error(err: HfError) -> HfPortError {
             } else if status == 401 || status == 403 {
                 let model_id = extract_model_id_from_url(&url);
                 HfPortError::AuthRequired { model_id }
-            } else if status == 429 {
-                HfPortError::RateLimited
             } else {
                 HfPortError::Network {
                     message: format!("API request failed with status {status}: {url}"),
                 }
             }
+        }
+        HfError::RateLimited { bucket, resets_in } => {
+            HfPortError::RateLimited { bucket, resets_in }
         }
         HfError::InvalidResponse { message } => HfPortError::InvalidResponse { message },
         HfError::ModelNotFound { model_id } => HfPortError::ModelNotFound { model_id },
@@ -210,6 +211,10 @@ mod recorded_tests;
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use gglib_core::hub_limit::HubBucket;
+
     use super::*;
 
     #[test]
@@ -249,15 +254,19 @@ mod tests {
         }
     }
 
+    /// A rate limit keeps its allowance and the time until it lifts.
     #[test]
-    fn test_map_error_429() {
-        let err = HfError::ApiRequestFailed {
-            status: 429,
-            url: "https://example.com".to_string(),
+    fn a_rate_limit_keeps_its_allowance_and_reset() {
+        let err = HfError::RateLimited {
+            bucket: HubBucket::Api,
+            resets_in: Duration::from_secs(10),
         };
         match map_error(err) {
-            HfPortError::RateLimited => {}
-            _ => panic!("Expected RateLimited"),
+            HfPortError::RateLimited { bucket, resets_in } => {
+                assert_eq!(bucket, HubBucket::Api);
+                assert_eq!(resets_in, Duration::from_secs(10));
+            }
+            other => panic!("Expected RateLimited, got {other:?}"),
         }
     }
 }

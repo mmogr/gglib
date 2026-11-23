@@ -46,7 +46,7 @@ async fn run() -> anyhow::Result<()> {
     let Some(command) = dispatch_without_library(cli.command).await? else {
         return Ok(());
     };
-    let ctx = match bootstrap().await {
+    let ctx = match bootstrap(&command).await {
         Ok(ctx) => ctx,
         Err(e) => return Err(refused(e, &command)),
     };

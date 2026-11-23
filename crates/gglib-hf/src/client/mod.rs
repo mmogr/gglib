@@ -8,6 +8,7 @@ mod search;
 
 use crate::config::HfClientConfig;
 use crate::http::{HttpBackend, ReqwestBackend};
+use crate::limit::HubLimits;
 use crate::models::HfConfig;
 use url::Url;
 
@@ -37,7 +38,9 @@ impl DefaultHfClient {
     /// Create a new client with the given configuration.
     pub fn new(config: &HfClientConfig) -> Self {
         let internal_config = Self::to_internal_config(config);
-        let backend = ReqwestBackend::new(&internal_config);
+        let gate = config.gate.clone().unwrap_or_default();
+        let limits = HubLimits::new(gate, config.on_limit.clone());
+        let backend = ReqwestBackend::new(&internal_config, limits);
         Self {
             backend,
             config: internal_config,

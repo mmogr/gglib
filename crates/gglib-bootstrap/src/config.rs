@@ -3,6 +3,8 @@
 use std::fmt;
 use std::path::PathBuf;
 
+use gglib_core::hub_limit::OnLimit;
+
 /// Configuration required to run [`crate::CoreBootstrap::build`].
 ///
 /// The database path must be fully resolved by the caller before passing
@@ -36,18 +38,23 @@ pub struct BootstrapConfig {
     /// and a blank one is no token. With `None`, or a blank one,
     /// [`crate::CoreBootstrap::build`] reads the one in the environment.
     pub hf_token: Option<String>,
+    /// What the Hub client, and `AppCore` in the Hub requests it makes
+    /// itself, do at Hugging Face's rate limit: a one-shot command waits it
+    /// out, and a daemon surfaces it.
+    pub on_hub_limit: OnLimit,
 }
 
 impl BootstrapConfig {
     /// The database at `db_path`, with no models directory and no token: the
     /// download manager asks for the directory as each download starts, and
-    /// the token is the environment's.
+    /// the token is the environment's. The Hub's rate limit is surfaced.
     #[must_use]
     pub const fn for_db(db_path: PathBuf) -> Self {
         Self {
             db_path,
             models_dir: None,
             hf_token: None,
+            on_hub_limit: OnLimit::Surface,
         }
     }
 }
@@ -58,6 +65,7 @@ impl fmt::Debug for BootstrapConfig {
             .field("db_path", &self.db_path)
             .field("models_dir", &self.models_dir)
             .field("has_hf_token", &self.hf_token.is_some())
+            .field("on_hub_limit", &self.on_hub_limit)
             .finish()
     }
 }

@@ -3,6 +3,9 @@
 //! These errors are internal to `gglib-hf` and are mapped to core port errors
 //! at the boundary.
 
+use std::time::Duration;
+
+use gglib_core::hub_limit::{HubBucket, clock};
 use thiserror::Error;
 
 /// Result type alias for `HuggingFace` operations.
@@ -41,6 +44,16 @@ pub enum HfError {
         model_id: String,
         /// The quantization that was not found
         quantization: String,
+    },
+
+    /// Hugging Face's rate limit refused the request, or the allowance it
+    /// counts against was known to be spent and it was not sent.
+    #[error("Hugging Face's rate limit lifts in {}", clock(*.resets_in))]
+    RateLimited {
+        /// The allowance that is spent.
+        bucket: HubBucket,
+        /// The time until it opens again.
+        resets_in: Duration,
     },
 
     /// Network or HTTP client error.

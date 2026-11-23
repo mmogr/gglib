@@ -32,8 +32,9 @@ use gglib_core::domain::agent::{AgentEvent, TurnUsage};
 use crate::presentation::style::{BOLD, DANGER, DIM, RESET, SUCCESS, WARNING};
 
 use super::pictures::Links;
-use super::progress_line::{progress_line, show};
+use super::progress_line::progress_line;
 use super::tool_format::format_tool_result;
+use crate::presentation::status_line::show;
 
 // =============================================================================
 // Public API

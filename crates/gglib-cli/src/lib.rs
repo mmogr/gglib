@@ -17,6 +17,7 @@ pub(crate) mod dispatch;
 pub(crate) mod draw_commands;
 pub(crate) mod hand_over;
 pub(crate) mod handlers;
+pub(crate) mod hub_wait;
 pub(crate) mod image_args;
 pub(crate) mod llama_commands;
 pub(crate) mod mcp_commands;

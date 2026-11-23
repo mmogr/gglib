@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use gglib_core::download::{DownloadError, DownloadId};
+use gglib_core::hub_limit::OnLimit;
 use gglib_core::ports::{GgufParserPort, HfClientPort, QuantizationResolver, ResolvedFile};
 
 use super::types::{CliDownloadRequest, CliDownloadResult, CliUpdateRequest, UpdateCheckResult};
@@ -42,7 +43,10 @@ pub(super) async fn download(
         request.model_id
     ));
 
-    let hub: Arc<dyn HfClientPort> = Arc::new(super::api::hub_client(request.token.clone()));
+    let hub: Arc<dyn HfClientPort> = Arc::new(super::api::hub_client(
+        request.token.clone(),
+        request.on_limit.clone(),
+    ));
     let commit_sha = hub
         .get_commit_sha(&request.model_id)
         .await
@@ -172,7 +176,7 @@ where
 }
 
 /// Check if a model has an update available, asking the Hub with `token`
-/// when there is one.
+/// when there is one, and meeting its rate limit as `on_limit` says.
 ///
 /// `has_update` is true when no `current_sha` is recorded: there is no
 /// baseline to compare against, so the caller cannot claim the model is
@@ -182,8 +186,14 @@ pub async fn check_update(
     repo_id: &str,
     current_sha: Option<&str>,
     token: Option<String>,
+    on_limit: OnLimit,
 ) -> Result<UpdateCheckResult> {
-    check_update_with(&super::api::hub_client(token), repo_id, current_sha).await
+    check_update_with(
+        &super::api::hub_client(token, on_limit),
+        repo_id,
+        current_sha,
+    )
+    .await
 }
 
 /// [`check_update`] against a given hub. Fails when the hub answers with no
@@ -223,6 +233,7 @@ pub async fn update_model(
         models_dir: request.models_dir,
         force: true,
         token: request.token,
+        on_limit: request.on_limit,
     };
 
     download(download_request, parser, rows).await
