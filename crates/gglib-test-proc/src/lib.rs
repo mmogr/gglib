@@ -7,7 +7,8 @@
 //! [`install`] puts the program at `dir/<name>` (`<name>.exe` on Windows)
 //! and writes the instructions to `dir/<name>.proc`. When the program runs it
 //! reads the file named by [`instructions_path`] of its own path and follows
-//! [`Instruction`]s one per line, in order. With no file beside it, it exits 0.
+//! [`Instruction`]s one per line, in order, skipping a [`Instruction::When`]
+//! whose argument it was not given. With no file beside it, it exits 0.
 
 use std::env::consts::EXE_SUFFIX;
 use std::ffi::OsString;
@@ -45,6 +46,11 @@ pub enum Instruction {
     Sleep(u64),
     /// `exit <code>`: exit at once with `code`.
     Exit(u8),
+    /// `when <argument> <instruction>`: follow `instruction` only when one
+    /// of the program's arguments is `argument`, whole, so one program can
+    /// answer `--version` and `clone` differently. Each `when` is a
+    /// condition of its own: `when clone when --depth exit 1` needs both.
+    When(String, Box<Self>),
 }
 
 /// In the text of `print` and `eprint`, this stands for the program's
@@ -73,6 +79,13 @@ fn parse_line(line: &str) -> Option<Instruction> {
         "eprint" => Instruction::Eprint(rest.to_owned()),
         "sleep" => Instruction::Sleep(rest.parse().ok()?),
         "exit" => Instruction::Exit(rest.parse().ok()?),
+        "when" => {
+            let (argument, then) = rest.split_once(' ')?;
+            if argument.is_empty() {
+                return None;
+            }
+            Instruction::When(argument.to_owned(), Box::new(parse_line(then)?))
+        }
         _ => return None,
     })
 }

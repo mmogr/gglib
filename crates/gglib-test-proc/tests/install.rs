@@ -80,6 +80,45 @@ fn every_call_is_added_to_the_end_of_its_calls_file() {
     );
 }
 
+/// A `when` line is followed only when its argument is one of the
+/// program's own, whole: `git --version` and `git clone` answer apart, and
+/// an argument that only holds the word is not it.
+#[test]
+fn a_when_line_answers_by_the_programs_arguments() {
+    let dir = tempfile::tempdir().unwrap();
+    let git = install(
+        dir.path(),
+        "git",
+        "when clone eprint Cloning into {args}\nwhen clone exit 1\nprint git version 2.43.0\n",
+    );
+
+    let version = Command::new(&git).arg("--version").output().unwrap();
+    let clone = Command::new(&git)
+        .args(["clone", "--depth", "1", "a repository"])
+        .output()
+        .unwrap();
+    let unlike = Command::new(&git).arg("clones").output().unwrap();
+
+    assert_eq!(version.status.code(), Some(0), "{version:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&version.stdout),
+        "git version 2.43.0\n"
+    );
+    assert!(version.stderr.is_empty(), "{version:?}");
+    assert_eq!(clone.status.code(), Some(1), "{clone:?}");
+    assert!(clone.stdout.is_empty(), "{clone:?}");
+    assert!(
+        String::from_utf8_lossy(&clone.stderr)
+            .starts_with("Cloning into clone --depth 1 a repository"),
+        "{clone:?}"
+    );
+    assert_eq!(unlike.status.code(), Some(0), "{unlike:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&unlike.stdout),
+        "git version 2.43.0\n"
+    );
+}
+
 #[test]
 fn with_no_instruction_file_the_program_exits_0() {
     let dir = tempfile::tempdir().unwrap();

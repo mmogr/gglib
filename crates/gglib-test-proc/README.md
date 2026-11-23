@@ -32,6 +32,7 @@ The library installs the program; the binary is the program.
   │ dir/sd-server[.exe]: reads dir/sd-server.proc, line by line  │
   │ argv <path> · calls <path> · pid <path> · touch <path>       │
   │ read · print <text> · eprint <text> · sleep <s> · exit <code>│
+  │ when <argument> <instruction>                                │
   └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -75,7 +76,17 @@ file holds the last call. `calls <path>` adds one line to the end of `path`,
 the arguments joined by spaces, so the file holds every call in the order
 they were made. `pid <path>` writes the program's own process id to `path`,
 `touch <path>` writes an empty file there, and `read` reads stdin until it
-ends.
+ends. `when <argument> <instruction>` follows the instruction only when one
+of the program's arguments is `<argument>`, whole, so one stand-in can answer
+by what it is asked:
+
+```text
+when clone eprint Cloning into 'a stand-in'...
+when clone exit 1
+print git version 2.43.0
+```
+
+answers `git --version` with its banner and fails `git clone …`.
 
 `wrap(dir, name, program)` writes a script that starts `program` and waits
 for it, as a shim such as `npx.cmd` does: `name.cmd` on Windows, run by
