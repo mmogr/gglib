@@ -289,14 +289,15 @@ nothing can draw (no image runtime or model, or a `--remote` session, whose
 model is on the other machine).
 
 ```bash
-You: /draw
-the next message draws, with flux1-schnell
-You: a red fox in the snow at dawn
+You: /draw a red fox in the snow at dawn
 ```
 
+`/draw` on its own arms the next message instead, and the description goes
+on the line after it.
+
 With more than one image model on the daemon, `/draw list` prints them,
-`/draw <model>` chooses one for the session by name or id and arms the next
-message, and `/draw default` goes back to the daemon's default. The choice
+`/draw with <model>` chooses one for the session by name or id and arms the
+next message, and `/draw default` goes back to the daemon's default. The choice
 lasts until the session ends, said on each turn that draws, and is not saved
 with the chat; a chosen model
 that can no longer draw is refused with the reason, never swapped for the
@@ -306,8 +307,8 @@ default.
 You: /draw list
      7  qwen-image-q8  (Qwen-Image 2.1)
 *    3  flux1-schnell  (Flux.1, default, loaded)
-  /draw <name or id> chooses one for this session; /draw default forgets it
-You: /draw qwen
+  /draw with <name or id> chooses one for this session; /draw default forgets it
+You: /draw with qwen
 the next message draws, with qwen-image-q8, this session's image model
 ```
 

@@ -17,7 +17,7 @@ use tokio::sync::mpsc;
 use super::*;
 use crate::bootstrap::{CliContext, test_context};
 use crate::daemon_client::STAND_IN_PORT;
-use crate::handlers::agent_chat::images::images_tests::{attached, service};
+use crate::handlers::agent_chat::images::images_tests::{attached, file, png, service};
 use crate::handlers::agent_chat::turn::turn_stand_in::{Answer, handle, stand_in};
 
 /// A daemon that can draw with `flux1-schnell`.
@@ -224,8 +224,61 @@ async fn a_new_local_session_can_draw_through_its_daemon() {
         shown,
     );
 
-    let said = STAND_IN_PORT.scope(daemon, session.draw.say(None)).await;
+    let said = STAND_IN_PORT
+        .scope(daemon, session.draw.say(&DrawAsk::Arm))
+        .await;
 
     assert_eq!(said, "the next message draws, with sdxl");
     assert_eq!(session.draw.turn(), (true, None));
+}
+
+/// `/draw <description>` is one turn: the description, sent at once, that
+/// draws, with the images waiting for the next message. The message after
+/// it carries none of them.
+#[tokio::test]
+async fn a_draw_with_a_description_sends_it_at_once_as_a_turn_that_draws() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = test_context(dir.path()).await;
+    let bytes = png(64, 32);
+    let path = file(&dir, "shot.png", &bytes);
+    let (attachments, _) = service();
+    let (images, _) = attached(&attachments, &[path], true).await.unwrap();
+    let mut session = session(chat(&ctx, &[]).await, images, None, None);
+
+    let Typed::Turn(turn) = session.typed("/draw a red fox").await else {
+        panic!("a description after /draw is a turn");
+    };
+
+    assert_eq!(turn.content, "a red fox");
+    assert!(turn.draw);
+    assert_eq!(turn.images, [AttachmentId::of(&bytes)]);
+    let Typed::Turn(next) = session.typed("and now?").await else {
+        panic!("a message is a turn");
+    };
+    assert_eq!(next.images, []);
+}
+
+/// Where nothing can draw, `/draw <description>` sends nothing, and the
+/// images waiting for the next message go on waiting for it.
+#[tokio::test]
+async fn a_draw_with_a_description_that_cannot_draw_sends_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = test_context(dir.path()).await;
+    let bytes = png(64, 32);
+    let path = file(&dir, "shot.png", &bytes);
+    let (attachments, _) = service();
+    let (images, _) = attached(&attachments, &[path], true).await.unwrap();
+    let mut session = session(chat(&ctx, &[]).await, images, None, None);
+    session.draw = DrawSwitch::off("there is no image model");
+
+    assert!(matches!(
+        session.typed("/draw a red fox").await,
+        Typed::Done
+    ));
+
+    let Typed::Turn(next) = session.typed("what is this?").await else {
+        panic!("a message is a turn");
+    };
+    assert!(!next.draw);
+    assert_eq!(next.images, [AttachmentId::of(&bytes)]);
 }

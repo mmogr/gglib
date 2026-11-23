@@ -53,7 +53,8 @@ independently readable:
   whether the chat's model can read them is the daemon's to say
 - [`draw`]     — `/draw`, the session's Draw switch: it asks the daemon
   whether it can draw and arms the next message, whose turn says `draw`,
-  and is off again once that message is sent; `/draw <model>`,
+  and is off again once that message is sent; `/draw <description>` arms
+  it and sends the description at once; `/draw with <model>`,
   `/draw default` and `/draw list` choose, forget and list the image model
   the session draws with, held by the switch for the session and said on
   each turn that draws as its `image_model`

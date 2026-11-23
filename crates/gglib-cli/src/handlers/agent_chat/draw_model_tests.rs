@@ -1,7 +1,8 @@
-//! `/draw <model>`, `/draw default` and `/draw list`: the session's choice
+//! `/draw with <model>`, `/draw default` and `/draw list`: the session's choice
 //! of image model, made among the daemon's, held across messages, said on
 //! each turn that draws, and never swapped for the default when it can no
-//! longer draw.
+//! longer draw. And `/draw <description>`, which asks afresh whether it can
+//! draw.
 
 use std::sync::{Arc, Mutex};
 
@@ -11,7 +12,7 @@ use gglib_core::domain::{ComponentRole, ImageFamily};
 use gglib_core::ports::{ImageBatch, ImageError, ImageGenerationPort, ImageProgress, ImageRequest};
 use tokio::sync::mpsc;
 
-use super::DrawSwitch;
+use super::{DrawAsk, DrawSwitch};
 
 const QWEN: u32 = 7;
 const SCHNELL: u32 = 3;
@@ -103,7 +104,8 @@ fn session() -> (Arc<Library>, DrawSwitch) {
     (library, switch)
 }
 
-const HINT: &str = "  /draw <name or id> chooses one for this session; /draw default forgets it";
+const HINT: &str =
+    "  /draw with <name or id> chooses one for this session; /draw default forgets it";
 
 /// `/draw list` prints the daemon's rows in its order and arms nothing: the
 /// star is on the one the next `/draw` message would draw with, and a
@@ -112,7 +114,7 @@ const HINT: &str = "  /draw <name or id> chooses one for this session; /draw def
 async fn draw_list_prints_the_daemons_image_models_and_arms_nothing() {
     let (_, switch) = session();
 
-    let listed = switch.say(Some("list")).await;
+    let listed = switch.say(&DrawAsk::List).await;
 
     let rows = [
         "     7  qwen-image-q8  (Qwen-Image 2.1)",
@@ -125,9 +127,9 @@ async fn draw_list_prints_the_daemons_image_models_and_arms_nothing() {
     assert!(!switch.is_armed());
     assert_eq!(switch.chosen(), None);
 
-    switch.say(Some("qwen")).await;
+    switch.say(&DrawAsk::With("qwen".to_owned())).await;
     switch.sent();
-    let listed = switch.say(Some("list")).await;
+    let listed = switch.say(&DrawAsk::List).await;
     let rows = [
         "*    7  qwen-image-q8  (Qwen-Image 2.1, this session's)",
         "     3  flux1-schnell  (Flux.1, default, loaded)",
@@ -139,7 +141,7 @@ async fn draw_list_prints_the_daemons_image_models_and_arms_nothing() {
     assert!(!switch.is_armed(), "listing arms nothing");
 }
 
-/// `/draw <model>` chooses by id, by whole name, or by a part only one
+/// `/draw with <model>` chooses by id, by whole name, or by a part only one
 /// model has, whatever the case, arms the next message and says so.
 #[tokio::test]
 async fn draw_with_a_model_chooses_it_by_name_or_id_and_arms() {
@@ -150,7 +152,7 @@ async fn draw_with_a_model_chooses_it_by_name_or_id_and_arms() {
         ("schnell", SCHNELL, "flux1-schnell"),
     ] {
         let (_, switch) = session();
-        let said = switch.say(Some(named)).await;
+        let said = switch.say(&DrawAsk::With(named.to_owned())).await;
         assert_eq!(
             said,
             format!("the next message draws, with {name}, this session's image model"),
@@ -167,10 +169,10 @@ async fn draw_with_a_model_chooses_it_by_name_or_id_and_arms() {
 #[tokio::test]
 async fn a_name_that_does_not_choose_one_drawable_model_changes_nothing() {
     let (_, switch) = session();
-    switch.say(Some("qwen")).await;
+    switch.say(&DrawAsk::With("qwen".to_owned())).await;
     switch.sent();
 
-    let several = switch.say(Some("flux1")).await;
+    let several = switch.say(&DrawAsk::With("flux1".to_owned())).await;
     assert!(
         several.starts_with("`flux1` fits 2 image models; say more of the name, or its id\n"),
         "{several}"
@@ -180,7 +182,7 @@ async fn a_name_that_does_not_choose_one_drawable_model_changes_nothing() {
         "{several}"
     );
 
-    let none = switch.say(Some("dall-e")).await;
+    let none = switch.say(&DrawAsk::With("dall-e".to_owned())).await;
     assert!(
         none.starts_with("no image model here is named or numbered `dall-e`\n"),
         "{none}"
@@ -190,7 +192,7 @@ async fn a_name_that_does_not_choose_one_drawable_model_changes_nothing() {
         "{none}"
     );
 
-    let lacking = switch.say(Some("sdxl")).await;
+    let lacking = switch.say(&DrawAsk::With("sdxl".to_owned())).await;
     assert_eq!(
         lacking,
         "cannot draw with sdxl-base: sdxl-base has no vae linked"
@@ -208,13 +210,13 @@ async fn a_name_that_does_not_choose_one_drawable_model_changes_nothing() {
 async fn the_choice_is_held_for_the_session_and_said_on_each_turn_that_draws() {
     let (_library, switch) = session();
 
-    switch.say(Some("qwen")).await;
+    switch.say(&DrawAsk::With("qwen".to_owned())).await;
     assert_eq!(switch.turn(), (true, Some(QWEN)));
     switch.sent();
     assert_eq!(switch.turn(), (false, None), "a turn that does not draw");
     assert_eq!(switch.chosen(), Some(QWEN), "kept after its message");
 
-    let said = switch.say(None).await;
+    let said = switch.say(&DrawAsk::Arm).await;
     assert_eq!(
         said,
         "the next message draws, with qwen-image-q8, this session's image model"
@@ -222,7 +224,7 @@ async fn the_choice_is_held_for_the_session_and_said_on_each_turn_that_draws() {
     assert_eq!(switch.turn(), (true, Some(QWEN)));
     switch.sent();
 
-    let said = switch.say(Some("default")).await;
+    let said = switch.say(&DrawAsk::Default).await;
     assert_eq!(said, "the next message draws, with flux1-schnell");
     assert_eq!(switch.chosen(), None);
     assert_eq!(switch.turn(), (true, None));
@@ -234,25 +236,44 @@ async fn the_choice_is_held_for_the_session_and_said_on_each_turn_that_draws() {
 #[tokio::test]
 async fn a_choice_that_can_no_longer_draw_is_refused_not_replaced() {
     let (library, switch) = session();
-    switch.say(Some("qwen")).await;
+    switch.say(&DrawAsk::With("qwen".to_owned())).await;
     switch.sent();
     *library.gone.lock().unwrap() = Some(QWEN);
 
-    let said = switch.say(None).await;
+    let said = switch.say(&DrawAsk::Arm).await;
 
     assert_eq!(
         said,
         "cannot draw with this session's image model: the image model chosen (id 7) is no \
-         longer on this machine\n  /draw <model> chooses another, /draw default the daemon's \
-         default, /draw list shows them"
+         longer on this machine\n  /draw with <model> chooses another, /draw default the \
+         daemon's default, /draw list shows them"
     );
     assert!(!switch.is_armed());
     assert_eq!(switch.chosen(), Some(QWEN));
 
-    let listed = switch.say(Some("list")).await;
+    let listed = switch.say(&DrawAsk::List).await;
     assert!(
         listed.contains("  nothing would draw: the image model chosen (id 7)"),
         "{listed}"
     );
     assert!(!listed.contains('*'), "no row would draw: {listed}");
+}
+
+/// `/draw <description>` asks again whether it can draw, whatever an
+/// earlier `/draw` armed: a model gone since then leaves the switch off, so
+/// the description is not sent, and the line says why.
+#[tokio::test]
+async fn a_description_is_armed_afresh_and_not_by_an_earlier_draw() {
+    let (library, switch) = session();
+    switch.say(&DrawAsk::With("qwen".to_owned())).await;
+    assert!(switch.is_armed());
+    *library.gone.lock().unwrap() = Some(QWEN);
+
+    let said = switch.say(&DrawAsk::Now("a red fox".to_owned())).await;
+
+    assert!(!switch.is_armed());
+    assert!(
+        said.starts_with("cannot draw with this session's image model: "),
+        "{said}"
+    );
 }

@@ -108,22 +108,45 @@ async fn a_change_to_the_chat_is_asked_for_and_not_sent() {
     ));
 }
 
-/// `/draw` is the Draw switch, never a message: alone, or with the word
-/// after it (`list`, `default`, an image model's name or id), trimmed. A
-/// word that only starts with it is a message.
+/// `/draw` is the Draw switch: alone it arms; `list`, `default` and `with
+/// <model>` list, forget and choose the image model; any other words are a
+/// description, sent at once as the message that draws. A word that only
+/// starts with it is a message.
 #[tokio::test]
-async fn a_draw_line_is_the_switch_and_sends_nothing() {
+async fn a_draw_line_asks_the_switch_and_other_words_after_it_describe() {
     let (service, _) = service();
     let (mut images, _) = attached(&service, &[], true).await.unwrap();
-    assert!(matches!(read("/draw", &mut images).await, Line::Draw(None)));
-    for (line, word) in [
-        ("/draw list", "list"),
-        ("/draw default", "default"),
-        ("/draw   qwen image  ", "qwen image"),
-        ("/draw\t7", "7"),
+    for (line, ask) in [
+        ("/draw", DrawAsk::Arm),
+        ("/draw list", DrawAsk::List),
+        ("/draw with", DrawAsk::List),
+        ("/draw default", DrawAsk::Default),
+        (
+            "/draw with   qwen image  ",
+            DrawAsk::With("qwen image".to_owned()),
+        ),
+        ("/draw with\t7", DrawAsk::With("7".to_owned())),
+        ("/draw List", DrawAsk::List),
+        ("/draw DEFAULT", DrawAsk::Default),
+        ("/draw With Qwen", DrawAsk::With("Qwen".to_owned())),
+        (
+            "/draw list of birds",
+            DrawAsk::Now("list of birds".to_owned()),
+        ),
+        ("/draw default cat", DrawAsk::Now("default cat".to_owned())),
+        ("/draw a red fox", DrawAsk::Now("a red fox".to_owned())),
+        ("/draw   a red fox  ", DrawAsk::Now("a red fox".to_owned())),
+        (
+            "/draw without a hat",
+            DrawAsk::Now("without a hat".to_owned()),
+        ),
+        (
+            "/draw listing birds",
+            DrawAsk::Now("listing birds".to_owned()),
+        ),
     ] {
         match read(line.trim(), &mut images).await {
-            Line::Draw(Some(what)) => assert_eq!(what, word, "{line}"),
+            Line::Draw(asked) => assert_eq!(asked, ask, "{line}"),
             other => panic!("{line}: {other:?}"),
         }
     }

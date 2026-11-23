@@ -24,7 +24,7 @@ async fn the_chosen_image_model_is_the_requests_model() {
         .execute_with_progress(&draw, &Heard::default())
         .await
         .unwrap();
-    // Changed between calls, as `/draw <model>` and `/draw default` do.
+    // Changed between calls, as `/draw with <model>` and `/draw default` do.
     chosen.set(Some(9));
     adapter
         .execute_with_progress(&draw, &Heard::default())
