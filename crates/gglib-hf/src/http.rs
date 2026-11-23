@@ -5,6 +5,7 @@
 //! uses reqwest with automatic retry logic for transient errors.
 
 use crate::error::{HfError, HfResult};
+use crate::limit::HubLimits;
 use crate::models::HfConfig;
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
@@ -94,7 +95,7 @@ pub(crate) fn form_body(form: &[(&str, &str)]) -> String {
 /// Production HTTP backend using reqwest with retry logic.
 ///
 /// Implements exponential backoff for transient server errors (5xx)
-/// and network errors.
+/// and network errors. The Hub's rate limit is met by its [`HubLimits`].
 ///
 /// This is an implementation detail - external code should use `DefaultHfClient`
 /// and interact with it through the `HfClientPort` trait.
@@ -103,11 +104,13 @@ pub struct ReqwestBackend {
     max_retries: u8,
     retry_base_delay_ms: u64,
     auth_token: Option<String>,
+    limits: HubLimits,
 }
 
 impl ReqwestBackend {
-    /// Create a new reqwest backend with the given configuration.
-    pub fn new(config: &HfConfig) -> Self {
+    /// Create a new reqwest backend with the given configuration, meeting
+    /// the Hub's rate limit with `limits`.
+    pub fn new(config: &HfConfig, limits: HubLimits) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
@@ -118,6 +121,7 @@ impl ReqwestBackend {
             max_retries: config.max_retries,
             retry_base_delay_ms: config.retry_base_delay_ms,
             auth_token: config.token.clone(),
+            limits,
         }
     }
 
@@ -140,7 +144,8 @@ impl ReqwestBackend {
     }
 
     /// Send the request `build` makes, built afresh for each attempt, with
-    /// automatic retry for transient errors.
+    /// automatic retry for transient errors. A rate limit is its
+    /// [`HubLimits`]' to meet, and spends none of the retries.
     async fn send_with_retry(
         &self,
         url: &Url,
@@ -156,7 +161,7 @@ impl ReqwestBackend {
                 tokio::time::sleep(delay).await;
             }
 
-            match build().send().await {
+            match self.limits.send(url, &build).await? {
                 Ok(response) => {
                     let status = response.status();
                     if status.is_success() {
@@ -503,7 +508,7 @@ mod tests {
     #[test]
     fn test_reqwest_backend_creation() {
         let config = HfConfig::default();
-        let backend = ReqwestBackend::new(&config);
+        let backend = ReqwestBackend::new(&config, HubLimits::default());
         assert_eq!(backend.max_retries, 3);
         assert_eq!(backend.retry_base_delay_ms, 500);
         assert!(backend.auth_token.is_none());
@@ -515,7 +520,7 @@ mod tests {
             token: Some("test_token".to_string()),
             ..Default::default()
         };
-        let backend = ReqwestBackend::new(&config);
+        let backend = ReqwestBackend::new(&config, HubLimits::default());
         assert_eq!(backend.auth_token, Some("test_token".to_string()));
     }
 

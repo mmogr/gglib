@@ -3,7 +3,10 @@
 //! This module provides a stable public API for configuring the HF client.
 //! The internal config is derived from this.
 
+use std::sync::Arc;
 use std::time::Duration;
+
+use gglib_core::hub_limit::{HubGate, OnLimit};
 
 /// Configuration for the `HuggingFace` client.
 ///
@@ -31,6 +34,11 @@ pub struct HfClientConfig {
     pub(crate) max_retries: u8,
     /// Base delay for exponential backoff
     pub(crate) retry_base_delay: Duration,
+    /// The gate the client keeps the Hub's rate limit in, when it shares
+    /// one; with `None` it keeps its own.
+    pub(crate) gate: Option<Arc<HubGate>>,
+    /// What the client does at the Hub's rate limit.
+    pub(crate) on_limit: OnLimit,
 }
 
 impl Default for HfClientConfig {
@@ -41,6 +49,8 @@ impl Default for HfClientConfig {
             token: None,
             max_retries: 3,
             retry_base_delay: Duration::from_millis(500),
+            gate: None,
+            on_limit: OnLimit::Surface,
         }
     }
 }
@@ -79,6 +89,25 @@ impl HfClientConfig {
     #[must_use]
     pub const fn has_token(&self) -> bool {
         self.token.is_some()
+    }
+
+    /// Keep the Hub's rate limit in `gate`, shared with whatever else asks
+    /// the Hub from this address, rather than in a gate of the client's own.
+    #[must_use]
+    pub fn with_gate(mut self, gate: Arc<HubGate>) -> Self {
+        self.gate = Some(gate);
+        self
+    }
+
+    /// Meet the Hub's rate limit as `on_limit` says.
+    ///
+    /// Defaults to [`OnLimit::Surface`]: a refused request, and one asked of
+    /// an allowance known to be spent, fail at once with the time the limit
+    /// lifts.
+    #[must_use]
+    pub fn with_on_limit(mut self, on_limit: OnLimit) -> Self {
+        self.on_limit = on_limit;
+        self
     }
 
     /// Set the maximum number of retry attempts for transient errors.

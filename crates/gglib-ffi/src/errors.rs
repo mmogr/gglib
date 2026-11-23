@@ -79,7 +79,7 @@ impl From<HfPortError> for GglibError {
             HfPortError::ModelNotFound { .. }
             | HfPortError::QuantizationNotFound { .. }
             | HfPortError::FileNotFound { .. } => Self::NotFound,
-            HfPortError::RateLimited => Self::RateLimited,
+            HfPortError::RateLimited { .. } => Self::RateLimited,
             HfPortError::Network { message } | HfPortError::InvalidResponse { message } => {
                 Self::Network { message }
             }

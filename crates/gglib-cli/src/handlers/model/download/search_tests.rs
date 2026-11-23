@@ -175,7 +175,7 @@ async fn a_search_the_hub_refuses_fails_with_the_hubs_reason() {
 
     assert_eq!(
         refused.unwrap_err().to_string(),
-        "HF search failed: Rate limit exceeded, try again later"
+        "HF search failed: Hugging Face's rate limit lifts in 2:14"
     );
 }
 

@@ -3,8 +3,10 @@
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
+use gglib_core::hub_limit::HubBucket;
 use gglib_core::ports::huggingface::HfPortResult;
 use gglib_core::ports::{
     HfClientPort, HfFileInfo, HfModelKind, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
@@ -168,7 +170,10 @@ impl HfClientPort for Hub {
     async fn search(&self, options: &HfSearchOptions) -> HfPortResult<HfSearchResult> {
         self.asked.lock().unwrap().push(options.clone());
         if self.limited {
-            return Err(HfPortError::RateLimited);
+            return Err(HfPortError::RateLimited {
+                bucket: HubBucket::Api,
+                resets_in: Duration::from_secs(134),
+            });
         }
         // Each hit with the files its answer names, as the Hub's are.
         let items = self
