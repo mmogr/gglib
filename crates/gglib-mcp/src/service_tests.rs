@@ -368,6 +368,31 @@ async fn testing_a_server_resolves_its_executable_then_starts_what_is_stored() {
     );
 }
 
+/// A command that is the full path of a program in a folder with a space in
+/// its name, as `C:\Program Files\nodejs\npx.cmd` is, is valid and starts
+/// (#2188): the program itself, and a shim in front of it, which on Windows
+/// is a `.cmd` that Rust starts through `cmd.exe` with quoting of its own.
+#[tokio::test]
+async fn a_command_whose_path_has_a_space_is_valid_and_starts() {
+    let stand_in = crate::StandIn::install_where_the_path_has_a_space();
+    let program = stand_in.program();
+    let folder = program.parent().expect("the stand-in's folder");
+    let shim = gglib_test_proc::wrap(folder, "gglib-stand-in-shim", program);
+    let (service, _) = service();
+
+    for (name, command) in [("program", program), ("shim", shim.as_path())] {
+        let command = command.to_str().expect("a temporary path is UTF-8");
+        assert!(command.contains(' '), "{command} has no space");
+        let added = service.add_server(stdio(name, command)).await.unwrap();
+        assert_eq!((added.is_valid, added.last_error), (true, None), "{name}");
+
+        let tools = service.test_server(added.id).await.unwrap();
+
+        let names: Vec<&str> = tools.iter().map(|tool| tool.name.as_str()).collect();
+        assert_eq!(names, ["echo"], "{name}");
+    }
+}
+
 #[tokio::test]
 async fn testing_a_server_whose_command_cannot_be_resolved_reports_the_failed_start() {
     let (service, _) = service();

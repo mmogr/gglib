@@ -1,6 +1,7 @@
 //! Path resolution and validation for MCP server executables.
 //!
 //! This module provides utilities to:
+//! - Validate a server's command as one program
 //! - Validate executable paths (absolute, exists, executable permission)
 //! - Build effective PATH for child processes (includes exe dir, system paths, custom paths)
 //! - Validate working directories
@@ -9,6 +10,36 @@ use crate::resolver::{AttemptOutcome, FsProvider, Platform, SystemFs};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
+
+/// Validate a server's command: one program, its flags and arguments in
+/// `args`.
+///
+/// A command with whitespace in it is taken for a program and its flags
+/// typed together, and refused, unless it is the absolute path of a file
+/// that exists, as `C:\Program Files\nodejs\npx.cmd` is. An absolute path
+/// with a space that is no such file is refused as that. Whether the file is
+/// a program is left to the start, which says what is wrong with it.
+pub(crate) fn validate_command(command: &str) -> Result<(), String> {
+    if !command.contains(char::is_whitespace) {
+        return Ok(());
+    }
+    let path = Path::new(command);
+    if !path.is_absolute() {
+        return Err(
+            "Command must be an executable name/path only (e.g., 'npx'). \
+                    Put flags and arguments in the 'args' field."
+                .to_string(),
+        );
+    }
+    if path.is_file() {
+        return Ok(());
+    }
+    Err(format!(
+        "Command '{command}' has a space in it and is not a file that exists. \
+         A command with a space must be the full path to a program; put flags \
+         and arguments in the 'args' field."
+    ))
+}
 
 /// Validate an executable path.
 ///
@@ -191,6 +222,47 @@ mod tests {
             validate_exe_path(dir_path),
             Err(format!("Executable path is not a file: {dir_path}"))
         );
+    }
+
+    /// A command with a space in it is a program with its flags typed in,
+    /// unless it is the absolute path of a file that exists (#2188).
+    #[test]
+    fn a_command_has_a_space_only_as_the_path_of_a_file_that_exists() {
+        let dir = tempfile::Builder::new()
+            .prefix("gglib spaced ")
+            .tempdir()
+            .unwrap();
+        let file = dir.path().join("a tool");
+        std::fs::write(&file, "").unwrap();
+        let file = file.to_str().unwrap();
+        let unspaced = dir.path().join("tool");
+        std::fs::write(&unspaced, "").unwrap();
+        let unspaced = unspaced.to_str().unwrap();
+        let folder = dir.path().to_str().unwrap();
+        let missing = dir.path().join("missing tool");
+        let missing = missing.to_str().unwrap();
+        let with_a_flag = format!("{file} --flag");
+        let flags = Err(
+            "Command must be an executable name/path only (e.g., 'npx'). \
+                         Put flags and arguments in the 'args' field."
+                .to_string(),
+        );
+        let no_file = |command: &str| {
+            Err(format!(
+                "Command '{command}' has a space in it and is not a file that exists. \
+                 A command with a space must be the full path to a program; put flags \
+                 and arguments in the 'args' field."
+            ))
+        };
+
+        assert_eq!(validate_command("npx"), Ok(()));
+        assert_eq!(validate_command(file), Ok(()));
+        assert_eq!(validate_command(unspaced), Ok(()));
+        assert_eq!(validate_command("npx -y pkg"), flags);
+        assert_eq!(validate_command("a tool"), flags, "relative");
+        assert_eq!(validate_command(missing), no_file(missing));
+        assert_eq!(validate_command(folder), no_file(folder));
+        assert_eq!(validate_command(&with_a_flag), no_file(&with_a_flag));
     }
 
     // Unix only: a file is a program by its permission bits, which only Unix

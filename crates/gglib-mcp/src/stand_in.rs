@@ -52,7 +52,22 @@ impl StandIn {
     /// (`gglib_test_proc::install` says why).
     #[must_use]
     pub fn install() -> Self {
-        let folder = tempfile::tempdir().expect("a temporary folder for the stand-in MCP server");
+        Self::install_in(tempfile::tempdir())
+    }
+
+    /// [`Self::install`], in a folder with a space in its name, as
+    /// `C:\Program Files` has.
+    ///
+    /// # Panics
+    ///
+    /// As [`Self::install`] does.
+    #[must_use]
+    pub fn install_where_the_path_has_a_space() -> Self {
+        Self::install_in(tempfile::Builder::new().prefix("gglib stand-in ").tempdir())
+    }
+
+    fn install_in(folder: std::io::Result<tempfile::TempDir>) -> Self {
+        let folder = folder.expect("a temporary folder for the stand-in MCP server");
         let program = gglib_test_proc::install(folder.path(), COMMAND, INSTRUCTIONS);
         Self { folder, program }
     }

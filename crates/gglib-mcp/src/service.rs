@@ -198,15 +198,9 @@ impl McpService {
         // Validate config structure
         server.config.validate()?;
 
-        // Ensure command has no whitespace (flags/args should be in args array)
+        // One program, with its flags and arguments in `args`.
         if let Some(ref cmd) = server.config.command {
-            if cmd.contains(char::is_whitespace) {
-                return Err(
-                    "Command must be an executable name/path only (e.g., 'npx'). \
-                     Put flags and arguments in the 'args' field."
-                        .to_string(),
-                );
-            }
+            crate::path::validate_command(cmd)?;
         }
 
         // Validate working directory if specified
