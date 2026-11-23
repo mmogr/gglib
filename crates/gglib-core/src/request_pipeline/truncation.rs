@@ -12,9 +12,10 @@
 //! [`truncate_history`] is a stateless pass over the request body:
 //!
 //! 1. **Budget gate** — if the payload, as `measure` measures it (an image
-//!    at its estimated tokens, not its base64), already fits within the
-//!    budget the body is left **completely untouched**. No history is elided
-//!    while there is room, so the model keeps maximum context on every turn.
+//!    at its estimated tokens and an audio clip at its stand-in, not their
+//!    base64), already fits within the budget the body is left **completely
+//!    untouched**. No history is elided while there is room, so the model
+//!    keeps maximum context on every turn.
 //!
 //! 2. **Oldest-first trim to a low watermark** — only when the payload exceeds
 //!    the budget are messages elided: unprotected `role: "tool"` /
@@ -142,7 +143,8 @@ pub(crate) fn placeholder_for(msg: &Value) -> &'static str {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TruncationReport {
     /// Measured payload size before truncation: its serialized bytes, with
-    /// each image at its estimated tokens rather than its base64.
+    /// each image at its estimated tokens and each audio clip at its
+    /// stand-in, rather than their base64.
     pub payload_chars_before: usize,
     /// Measured payload size after truncation. Equal to
     /// `payload_chars_before` when nothing was changed.
@@ -192,7 +194,8 @@ pub enum TruncationError {
 ///
 /// `budget.chars` is the total payload character budget for this request,
 /// measured by [`measured_len`]: wire bytes, with each image at its estimated
-/// tokens. See the [module documentation](self) for the full algorithm.
+/// tokens and each audio clip at its stand-in. See the
+/// [module documentation](self) for the full algorithm.
 ///
 /// # Errors
 ///

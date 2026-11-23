@@ -2,7 +2,7 @@
 //!
 //! An `OpenAI` message's `content` is a string, or an array of parts in which
 //! the text parts carry a `text` field beside parts that are not text
-//! (`image_url`, …). VS Code's LLM gateway sends the array form on every
+//! (`image_url`, `input_audio`, …). VS Code's LLM gateway sends the array form on every
 //! message. Each stage that reads or rewrites message text has to handle
 //! both; the walk lives here so a stage that handles one shape handles the
 //! other.
@@ -57,6 +57,20 @@ pub fn image_urls(content: &Value) -> impl Iterator<Item = &str> {
         let image = part.get("image_url")?;
         image.as_str().or_else(|| image.get("url")?.as_str())
     })
+}
+
+/// The base64 of every audio clip `content` carries, in order: the one walk
+/// over `input_audio` parts, for the stage that measures by them.
+///
+/// A string carries none. In an array, a part's `input_audio` is the object
+/// `{"data": <base64>, "format": …}`; a part with no string `data` there, and
+/// a `content` of any other shape, carries none.
+pub(crate) fn audio_data(content: &Value) -> impl Iterator<Item = &str> {
+    content
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|part| part.get("input_audio")?.get("data")?.as_str())
 }
 
 /// Append `text` to `content` as a trailing piece of text, in either shape,
