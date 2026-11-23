@@ -6,7 +6,7 @@ use std::fmt;
 use std::time::Duration;
 
 pub use gate::HubGate;
-pub use wait::{LimitNotice, OnLimit, clock, wait_out, waiting_sentence};
+pub use wait::{LimitNotice, OnLimit, clock, wait_out, waiting_sentence, whole_seconds};
 
 /// The longest reset a limit is taken to name. The Hub's windows are five
 /// minutes long: a longer reset is a misread header, and nothing waits on

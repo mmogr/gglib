@@ -261,7 +261,23 @@ async fn a_repository_looked_up_by_its_id_is_the_summary_a_search_gives() {
     assert_eq!(serde_json::to_value(&looked_up).unwrap(), expected);
 }
 
-/// A search the Hub refuses is reported with the Hub's reason.
+/// A repository the Hub does not hold is not found: only its rate limit
+/// is answered otherwise.
+#[tokio::test]
+async fn a_repository_the_hub_does_not_hold_is_not_found() {
+    let ops = ops_over(Arc::new(SearchedHub::default()));
+
+    let missing = ops.get_model_summary("nobody/nothing").await;
+
+    assert!(
+        matches!(&missing, Err(GuiError::NotFound { entity: "model", id })
+            if id.starts_with("nobody/nothing: ")),
+        "{missing:?}"
+    );
+}
+
+/// A search the Hub's rate limit refuses is the limit, with the Hub's
+/// reason.
 #[tokio::test]
 async fn a_search_the_hub_refuses_says_why() {
     let hub = SearchedHub {
@@ -272,8 +288,8 @@ async fn a_search_the_hub_refuses_says_why() {
     let refused = search_hf_models(&hub, HfSearchRequest::default()).await;
 
     assert!(
-        matches!(&refused, Err(GuiError::Internal(reason))
-            if reason == "HF search failed: Hugging Face's rate limit lifts in 2:14"),
+        matches!(&refused, Err(GuiError::HubLimited { message, .. })
+            if message == "HF search failed: Hugging Face's rate limit lifts in 2:14"),
         "{refused:?}"
     );
 }

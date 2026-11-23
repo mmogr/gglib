@@ -334,7 +334,9 @@ impl ModelOps {
                 "A download of {id} is already waiting or running. Upgrade the model once it \
                  has ended."
             )),
-            e => GuiError::Internal(format!("The upgrade could not be queued: {e}")),
+            e => GuiError::from_download_or("The upgrade could not be queued", e, |e| {
+                GuiError::Internal(format!("The upgrade could not be queued: {e}"))
+            }),
         })?;
         Ok(UpgradeQueued {
             latest_sha: check.latest_sha,

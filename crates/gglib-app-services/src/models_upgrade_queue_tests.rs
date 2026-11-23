@@ -25,9 +25,13 @@ struct Library {
 }
 
 async fn library() -> Library {
+    library_queueing_on(MockDownloadManager::new()).await
+}
+
+/// [`library`], whose downloads queue on `manager`.
+async fn library_queueing_on(manager: MockDownloadManager) -> Library {
     gglib_core::paths::isolate_data_root();
     let pool = gglib_db::setup_test_database().await.expect("a database");
-    let manager = MockDownloadManager::new();
     let calls = Arc::clone(&manager.calls);
     let repos = gglib_db::CoreFactory::build_repos(pool);
     let core = Arc::new(AppCore::queueing_on(repos, Arc::new(manager)));
@@ -105,6 +109,51 @@ async fn an_upgrade_is_queued_at_the_commit_the_check_found() {
     assert_eq!(
         library.calls(),
         [format!("queue_upgrade {REPO} Q8_0 {id} {NEWER}")]
+    );
+    assert_eq!(library.recorded_sha().await.as_deref(), Some(RECORDED));
+}
+
+/// An upgrade whose download the Hub's rate limit kept from being chosen is
+/// the limit, led by the upgrade, and the row is left as it was.
+#[tokio::test]
+async fn an_upgrade_the_hubs_limit_refused_to_queue_is_the_limit() {
+    use gglib_core::hub_limit::HubBucket;
+    use gglib_core::ports::HfPortError;
+    use std::time::Duration;
+
+    let limited = gglib_core::download::DownloadError::from_hub(
+        HfPortError::RateLimited {
+            bucket: HubBucket::Resolvers,
+            resets_in: Duration::from_secs(134),
+        },
+        |_| unreachable!("a rate limit"),
+    );
+    let library = library_queueing_on(MockDownloadManager {
+        queue_refusal: Some(limited),
+        ..MockDownloadManager::default()
+    })
+    .await;
+    let ops = library.ops(Arc::new(NoopModelRuntime));
+
+    let refused = ops
+        .queue_upgrade_with(library.id, |_, recorded, _| finds(recorded, NEWER))
+        .await;
+
+    let Err(GuiError::HubLimited {
+        bucket,
+        retry_after,
+        message,
+    }) = refused
+    else {
+        panic!("expected the Hub's rate limit, got {refused:?}");
+    };
+    assert_eq!(
+        (bucket, retry_after, message.as_str()),
+        (
+            HubBucket::Resolvers,
+            Duration::from_secs(134),
+            "The upgrade could not be queued: Hugging Face's rate limit lifts in 2:14"
+        )
     );
     assert_eq!(library.recorded_sha().await.as_deref(), Some(RECORDED));
 }

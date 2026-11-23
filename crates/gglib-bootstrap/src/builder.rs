@@ -419,3 +419,7 @@ mod tests {
 #[cfg(test)]
 #[path = "builder_repair_tests.rs"]
 mod repair_tests;
+
+#[cfg(test)]
+#[path = "builder_limit_tests.rs"]
+mod limit_tests;

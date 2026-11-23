@@ -67,6 +67,15 @@ pub const PROXY_STATUS_REFUSED_FIELDS: &[&str] = &["refused"];
 /// The same start with `replace` switches.
 pub const ENDPOINT_DIFFERS_TYPE: &str = "endpoint_differs";
 
+/// The `type` of a refusal because Hugging Face's rate limit refused a
+/// request the call needed (429), with a `Retry-After` header.
+///
+/// Its `metadata` holds `bucket`, the allowance that is spent (`api`,
+/// `resolvers` or `pages`), and `retry_after_secs`, the whole seconds until
+/// it opens, rounded up. The same call made then can go ahead. The daemon
+/// answers 429 for other refusals too: only this type is the Hub's limit.
+pub const HUB_LIMITED_TYPE: &str = "hub_rate_limited";
+
 /// How a client connects to the endpoint for one model (`?model=<gglib id>`).
 ///
 /// The address, the key rule, the id a client sends, and the recipes per

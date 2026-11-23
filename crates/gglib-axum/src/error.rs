@@ -3,9 +3,13 @@
 //! This module provides error types for the Axum adapter and mappings
 //! from `CoreError` and `GuiError` to HTTP status codes and response bodies.
 
-use axum::http::StatusCode;
+use std::time::Duration;
+
+use axum::http::header::RETRY_AFTER;
+use axum::http::{HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use gglib_app_services::GuiError;
+use gglib_core::hub_limit::{HubBucket, whole_seconds};
 use gglib_core::ports::chat_history::ChatHistoryError;
 use gglib_core::ports::{AttachmentError, RunsError};
 use gglib_core::services::ChangeError;
@@ -15,6 +19,9 @@ use thiserror::Error;
 
 /// The `type` of [`HttpError::EndpointDiffers`]'s body.
 pub const ENDPOINT_DIFFERS: &str = gglib_core::contracts::http::daemon::ENDPOINT_DIFFERS_TYPE;
+
+/// The `type` of [`HttpError::HubLimited`]'s body.
+pub(crate) const HUB_LIMITED: &str = gglib_core::contracts::http::daemon::HUB_LIMITED_TYPE;
 
 /// Axum-specific error type.
 #[derive(Debug, Error)]
@@ -51,6 +58,17 @@ pub enum HttpError {
     /// Too many concurrent requests (429).
     #[error("Too many requests: {0}")]
     TooManyRequests(String),
+
+    /// Hugging Face's rate limit refused a request the call needed (429,
+    /// type [`HUB_LIMITED`]), with a `Retry-After` of the whole seconds
+    /// until it lifts; the body's `metadata` names the allowance and those
+    /// seconds, for a caller that waits and asks again.
+    #[error("{message}")]
+    HubLimited {
+        bucket: HubBucket,
+        retry_after: Duration,
+        message: String,
+    },
 
     /// Internal server error.
     #[error("Internal error: {0}")]
@@ -93,6 +111,10 @@ struct ErrorBody {
 
 impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
+        let retry_after = match &self {
+            Self::HubLimited { retry_after, .. } => Some(whole_seconds(*retry_after)),
+            _ => None,
+        };
         let (status, message, error_type, metadata) = match &self {
             Self::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone(), None, None),
             Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone(), None, None),
@@ -120,6 +142,17 @@ impl IntoResponse for HttpError {
                 )
             }
             Self::TooManyRequests(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.clone(), None, None),
+            Self::HubLimited {
+                bucket, message, ..
+            } => (
+                StatusCode::TOO_MANY_REQUESTS,
+                message.clone(),
+                Some(HUB_LIMITED.to_owned()),
+                Some(serde_json::json!({
+                    "bucket": bucket.name(),
+                    "retry_after_secs": retry_after,
+                })),
+            ),
             Self::EndpointDiffers(change) => (
                 StatusCode::CONFLICT,
                 format!(
@@ -145,7 +178,13 @@ impl IntoResponse for HttpError {
             metadata,
         };
 
-        (status, axum::Json(body)).into_response()
+        let mut response = (status, axum::Json(body)).into_response();
+        if let Some(seconds) = retry_after {
+            response
+                .headers_mut()
+                .insert(RETRY_AFTER, HeaderValue::from(seconds));
+        }
+        response
     }
 }
 
@@ -195,6 +234,15 @@ impl From<GuiError> for HttpError {
             GuiError::LoadFailed(message) => Self::Coded {
                 status: StatusCode::INTERNAL_SERVER_ERROR,
                 code: "model_load_failed",
+                message,
+            },
+            GuiError::HubLimited {
+                bucket,
+                retry_after,
+                message,
+            } => Self::HubLimited {
+                bucket,
+                retry_after,
                 message,
             },
             GuiError::Internal(msg) => Self::Internal(msg),
@@ -403,5 +451,56 @@ mod tests {
         );
         assert_eq!(body["type"], ENDPOINT_DIFFERS);
         assert_eq!(body["metadata"]["action"], "serve every model again");
+    }
+
+    /// A Hub read refused for Hugging Face's rate limit is a 429 a caller
+    /// can tell from any other: its type, the allowance, and the whole
+    /// seconds until it lifts, in the body and in `Retry-After`.
+    #[tokio::test]
+    async fn a_rate_limited_hub_read_says_when_to_ask_again() {
+        let limited = GuiError::HubLimited {
+            bucket: HubBucket::Api,
+            retry_after: Duration::from_millis(9_200),
+            message: "Failed to get quantizations: Hugging Face's rate limit lifts in 0:10"
+                .to_owned(),
+        };
+
+        let refused = HttpError::from(limited).into_response();
+
+        assert_eq!(refused.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            refused
+                .headers()
+                .get(RETRY_AFTER)
+                .map(HeaderValue::as_bytes),
+            Some(&b"10"[..])
+        );
+        let body = axum::body::to_bytes(refused.into_body(), usize::MAX)
+            .await
+            .expect("the body");
+        let body: serde_json::Value = serde_json::from_slice(&body).expect("JSON");
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "error": "Failed to get quantizations: Hugging Face's rate limit lifts in 0:10",
+                "status": 429,
+                "type": "hub_rate_limited",
+                "metadata": { "bucket": "api", "retry_after_secs": 10 },
+            })
+        );
+    }
+
+    /// Another 429 is not the Hub's limit: it carries no such type.
+    #[tokio::test]
+    async fn a_busy_refusal_is_not_the_hubs_limit() {
+        let busy = HttpError::TooManyRequests("busy".to_owned()).into_response();
+
+        assert_eq!(busy.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(busy.headers().get(RETRY_AFTER).is_none());
+        let body = axum::body::to_bytes(busy.into_body(), usize::MAX)
+            .await
+            .expect("the body");
+        let body: serde_json::Value = serde_json::from_slice(&body).expect("JSON");
+        assert!(body.get("type").is_none(), "{body}");
     }
 }
