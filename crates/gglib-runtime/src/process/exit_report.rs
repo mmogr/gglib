@@ -5,11 +5,12 @@
 //! - An exit nobody asked for is one `warn` event: how it ended, and the
 //!   last [`REPORTED_LINES`] lines it printed on either stream, each cut to
 //!   [`REPORTED_LINE_CHARS`] characters.
-//! - Except an exit by itself that is a stop and not a failure
-//!   ([`is_a_stop`]): an exit code of 0, or a stop signal. That is one
-//!   `info` line with the status. On macOS and Linux a server shares
-//!   gglib's process group, so a terminal's Ctrl-C stops it and gglib at
-//!   once, and gglib cannot tell that from a stop from elsewhere.
+//! - Except that an exit by itself with code 0, or by a stop signal
+//!   ([`is_a_stop`]), is the same report at `info`: it is how a server ends
+//!   when something asked it to stop, which gglib may not have seen. On
+//!   macOS and Linux a server shares gglib's process group, so a Ctrl-C in
+//!   the terminal of a gglib running there reaches its servers too. Its last
+//!   lines are kept all the same, as gglib cannot tell who asked.
 //!
 //! Each server is told of once (`RunningProcess::told`), by whichever of
 //! these sees its end first:
@@ -106,21 +107,9 @@ pub(crate) fn stopped(info: &ServerInfo, why: StopReason) {
 /// the process core's lock does not hold it for the wait. With no runtime
 /// to run that task, they are read at once.
 ///
-/// An exit that is a stop and not a failure ([`is_a_stop`]) is one `info`
-/// line with its status, and no lines.
+/// An exit that may have been a stop ([`is_a_stop`]) is reported at `info`,
+/// any other at `warn`.
 pub(crate) fn exited_by_itself(info: &ServerInfo, status: ExitStatus, output: OutputTail) {
-    if is_a_stop(status.code(), signal_of(status)) {
-        info!(
-            model_id = info.model_id,
-            pid = info.pid,
-            port = info.port,
-            "{} for {} exited by itself, with {}, which is not a failure",
-            info.runtime.server_name(),
-            info.model_name,
-            ended_with(status)
-        );
-        return;
-    }
     let info = info.clone();
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
         handle.spawn(async move {
@@ -132,12 +121,18 @@ pub(crate) fn exited_by_itself(info: &ServerInfo, status: ExitStatus, output: Ou
     }
 }
 
-/// The `warn` event for an exit by itself. It has no fields: a log line
+/// The event for an exit by itself: `info` for one that may have been a
+/// stop ([`is_a_stop`]), `warn` for any other. It has no fields: a log line
 /// gives an event's fields after its message, which would put them on the
 /// end of the last line the server printed, so the message names the
 /// server itself.
 fn write_exit(info: &ServerInfo, status: ExitStatus, lines: &[String]) {
-    warn!("{}", exit_said(info, status, lines));
+    let said = exit_said(info, status, lines);
+    if is_a_stop(status.code(), signal_of(status)) {
+        info!("{said}");
+    } else {
+        warn!("{said}");
+    }
 }
 
 /// The words for `info`'s server exiting by itself with `status`, having
@@ -168,9 +163,10 @@ pub(crate) fn exit_said(info: &ServerInfo, status: ExitStatus, lines: &[String])
     said
 }
 
-/// Whether a server that exited with `code`, or was ended by `signal`,
-/// stopped rather than failed: a 0, which llama-server exits with once it
-/// has handled a stop signal, or one of [`STOP_SIGNALS`].
+/// Whether a server that exited with `code`, or was ended by `signal`, may
+/// have been asked to stop by something other than gglib: a 0, which
+/// llama-server exits with once it has handled a stop signal, or one of
+/// [`STOP_SIGNALS`].
 pub(crate) fn is_a_stop(code: Option<i32>, signal: Option<i32>) -> bool {
     code == Some(0) || signal.is_some_and(|signal| STOP_SIGNALS.contains(&signal))
 }

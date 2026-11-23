@@ -40,7 +40,8 @@ const LOG_WAIT: Duration = Duration::from_secs(10);
 const EXITED: &str = "exited by itself";
 
 /// How long a test that expects nothing more waits for it, once the
-/// server's output has ended: far past the watch's own look for a status.
+/// server's output has ended: far past the watch's own look for a status,
+/// and past the wait for its output to settle before a report is written.
 const QUIET_WAIT: Duration = Duration::from_secs(3);
 
 /// What a capture's writer has been given.
@@ -356,36 +357,37 @@ async fn a_shutdown_is_not_logged_as_a_failure() {
 }
 
 /// A server that exits by itself with 0, as llama-server does once it has
-/// handled a Ctrl-C that reached it with gglib: one info line naming the
-/// status, no warning and none of its lines; a stop afterwards adds nothing.
+/// handled a stop signal gglib did not send: the report names the status
+/// and holds its lines, at info and not warn; a stop afterwards adds
+/// nothing.
 #[tokio::test]
-async fn a_server_that_exits_with_0_is_not_logged_as_a_failure() {
+async fn a_server_that_exits_with_0_is_reported_at_info_with_its_lines() {
     let capture = Capture::start();
     let dir = tempfile::tempdir().expect("temp dir");
     let core = core(dir.path(), 19_850, "print bye\nexit 0", "sleep 30");
 
-    spawn_watched(
+    let pid = spawn_watched(
         &core,
         qwen(dir.path(), EXITS_CLEANLY_ID, 19_850),
         EXITS_CLEANLY_ID,
     )
     .await;
-    let log = capture.once_it_says(EXITED).await;
+    capture.once_it_says(EXITED).await;
     clean_up(&core, EXITS_CLEANLY_ID).await;
-    let after_stop = capture.text();
+    tokio::time::sleep(QUIET_WAIT).await;
+    let log = capture.text();
 
-    let said: Vec<&str> = after_stop
-        .lines()
-        .filter(|line| line.contains("llama-server for qwen"))
-        .collect();
-    assert_eq!(said.len(), 1, "{after_stop}");
-    assert!(
-        said[0].contains("llama-server for qwen exited by itself, with exit code 0"),
-        "{log}"
+    let head = format!(
+        "llama-server for qwen (model {EXITS_CLEANLY_ID}, pid {pid}, port 19850) exited by \
+         itself, with exit code 0. The last line it printed:\n  | bye"
     );
-    assert!(said[0].contains(" INFO "), "{log}");
-    assert!(!after_stop.contains(" WARN "), "{after_stop}");
-    assert!(!after_stop.contains("  | "), "{after_stop}");
+    let at = log
+        .find(&head)
+        .unwrap_or_else(|| panic!("no report starting {head:?} in:\n{log}"));
+    let line_start = log[..at].rfind('\n').map_or(0, |i| i + 1);
+    assert!(log[line_start..at].contains(" INFO "), "{log}");
+    assert_eq!(log.matches("llama-server for qwen").count(), 1, "{log}");
+    assert!(!log.contains(" WARN "), "{log}");
 }
 
 /// A 0, a Ctrl-C, a closed terminal and a request to stop are stops; any

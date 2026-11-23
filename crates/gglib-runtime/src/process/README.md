@@ -21,9 +21,10 @@ This module provides shared infrastructure for managing llama-server and
   launch that fails reads for the line that says why (the rule is in its docs)
 - `exit_report` (`exit_report.rs`) - What gglib's log says when a server stops: one
   line saying why a stop gglib asked for was asked (`StopReason`), or, for an exit
-  nobody asked for, how it ended and the last lines it printed, at warn; an exit
-  with 0 or a stop signal is one line, as it is not a failure. A launch watches
-  each server it starts, so an exit is told of when it happens
+  nobody asked for, how it ended and the last lines it printed, at warn, or at
+  info for an exit with 0 or a stop signal, which something other than gglib may
+  have asked for. A launch watches each server it starts, so an exit is told of
+  when it happens
 - `check_http_health` / `wait_for_http_health` - Health checks, at each runtime's own path
 - `shutdown_child` / `kill_pid` (`shutdown/`) - Stopping a server: SIGTERM, then SIGKILL with a bounded wait
 
