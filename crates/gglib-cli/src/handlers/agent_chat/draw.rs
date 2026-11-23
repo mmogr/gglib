@@ -8,12 +8,14 @@
 //! armed says `draw` on its turn ([`DrawSwitch::turn`]), and the daemon's
 //! run then draws, once.
 //!
-//! `/draw <model>` chooses the image model the session's pictures are drawn
-//! with, by its name or id among the daemon's image models, and arms the
-//! next message; `/draw default` goes back to the daemon's default rule;
-//! `/draw list` prints the models ([`DrawSwitch::say`]). The choice is held
-//! for the session, by this switch and nowhere else: it goes on each turn
-//! that draws as its `image_model`, and never to the chat model.
+//! `/draw <description>` arms the switch and sends the description at once,
+//! as the message that draws. `/draw with <model>` chooses the image model
+//! the session's pictures are drawn with, by its name or id among the
+//! daemon's image models, and arms the next message; `/draw default` goes
+//! back to the daemon's default rule; `/draw list` prints the models
+//! ([`DrawAsk`], [`DrawSwitch::say`]). The choice is held for the session,
+//! by this switch and nowhere else: it goes on each turn that draws as its
+//! `image_model`, and never to the chat model.
 //!
 //! The CLI never drives `sd-server` itself: the daemon's run draws, and
 //! whether it can is the daemon's answer ([`ImageGenerator`]). A session
@@ -35,6 +37,42 @@ use crate::target::Target;
 /// picture would be drawn here.
 const FAR: &str = "this chat's model is on another machine, so it cannot draw here; a chat kept \
                    on that machine draws with its image model";
+
+/// What a `/draw` line asks, read from the words after it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum DrawAsk {
+    /// `/draw`: arm the next message.
+    Arm,
+    /// `/draw list`, or `/draw with` naming no model: the daemon's image
+    /// models.
+    List,
+    /// `/draw default`: forget the session's choice, and arm.
+    Default,
+    /// `/draw with <model>`: choose that image model, by name or id, and
+    /// arm.
+    With(String),
+    /// `/draw <description>`: arm, and send the description now as the
+    /// message that draws.
+    Now(String),
+}
+
+impl DrawAsk {
+    /// What `words`, the rest of a `/draw` line, asks. The words `list`,
+    /// `default` and `with` are read whatever their case.
+    pub(crate) fn of(words: &str) -> Self {
+        let words = words.trim();
+        let (first, rest) = words
+            .split_once(char::is_whitespace)
+            .map_or((words, ""), |(first, rest)| (first, rest.trim()));
+        match (first.to_lowercase().as_str(), rest) {
+            ("", _) => Self::Arm,
+            ("list" | "with", "") => Self::List,
+            ("default", "") => Self::Default,
+            ("with", model) => Self::With(model.to_owned()),
+            _ => Self::Now(words.to_owned()),
+        }
+    }
+}
 
 /// A session's Draw switch.
 #[derive(Debug)]
@@ -75,22 +113,28 @@ impl DrawSwitch {
         }
     }
 
-    /// A `/draw` line: with nothing after it, [`Self::arm`]; `list`, the
-    /// daemon's image models; `default`, forget the session's choice and
-    /// arm; anything else, choose the image model of that name or id and
-    /// arm. What it says is the line to print.
-    pub(crate) async fn say(&self, what: Option<&str>) -> String {
-        match what.map(str::trim).filter(|what| !what.is_empty()) {
-            None => self.arm().await,
-            Some("list") => match self.ask(self.model.get()).await {
+    /// Do what a `/draw` line asks, and give the line to print.
+    ///
+    /// For [`DrawAsk::Now`] the switch is armed for that message alone,
+    /// whatever an earlier `/draw` left: when it is armed afterwards, the
+    /// description is sent and the line need not be printed; when it is not,
+    /// the line says why nothing can draw.
+    pub(crate) async fn say(&self, ask: &DrawAsk) -> String {
+        match ask {
+            DrawAsk::Arm => self.arm().await,
+            DrawAsk::List => match self.ask(self.model.get()).await {
                 Ok(answer) => listing(&answer, self.model.get()),
                 Err(why) => why,
             },
-            Some("default") => {
+            DrawAsk::Default => {
                 self.model.set(None);
                 self.arm().await
             }
-            Some(named) => self.choose(named).await,
+            DrawAsk::With(named) => self.choose(named).await,
+            DrawAsk::Now(_) => {
+                self.sent();
+                self.arm().await
+            }
         }
     }
 
@@ -109,8 +153,9 @@ impl DrawSwitch {
             let reason = answer.reason.unwrap_or_default();
             return match chosen {
                 Some(_) => format!(
-                    "cannot draw with this session's image model: {reason}\n  /draw <model> \
-                     chooses another, /draw default the daemon's default, /draw list shows them"
+                    "cannot draw with this session's image model: {reason}\n  /draw with \
+                     <model> chooses another, /draw default the daemon's default, /draw list \
+                     shows them"
                 ),
                 None => format!("cannot draw: {reason}"),
             };
@@ -125,7 +170,7 @@ impl DrawSwitch {
         format!("the next message draws, with {model}{whose}")
     }
 
-    /// `/draw <model>`: choose the daemon's image model `named`, by id or by
+    /// `/draw with <model>`: choose the daemon's image model `named`, by id or by
     /// name (in full, or a part only one of them has), when the daemon says
     /// it can draw, and arm the next message. A name that fits none, or
     /// more than one, changes nothing and is answered with the list; so is
@@ -187,7 +232,6 @@ impl DrawSwitch {
     }
 
     /// Whether the next message may draw.
-    #[cfg(test)]
     pub(crate) fn is_armed(&self) -> bool {
         self.armed.load(Ordering::SeqCst)
     }
@@ -270,7 +314,8 @@ fn listing(answer: &DrawingAvailability, chosen: Option<u32>) -> String {
         ));
     }
     lines.push(
-        "  /draw <name or id> chooses one for this session; /draw default forgets it".to_owned(),
+        "  /draw with <name or id> chooses one for this session; /draw default forgets it"
+            .to_owned(),
     );
     lines.join("\n")
 }

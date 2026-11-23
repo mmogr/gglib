@@ -38,7 +38,7 @@ use crate::daemon_client::DaemonHandle;
 use crate::target::Target;
 
 use super::branches;
-use super::draw::DrawSwitch;
+use super::draw::{DrawAsk, DrawSwitch};
 use super::images::TurnImages;
 use super::persistence::Conversation;
 use super::pictures::Pictures;
@@ -57,8 +57,9 @@ const REPL_HELP: &str = "\
   /branch   copy the chat into a new branch and go on there
   /branches list the other branches along the chat
   /draw     let the model draw a picture for your next message
-  /draw <model>  the same, with that image model (a name or id) from now on
-  /draw default  the same, with the daemon's default image model again
+  /draw <description>  send <description> now, and let the model draw for it
+  /draw with <model>   /draw, with that image model (a name or id) from now on
+  /draw default  /draw, with the daemon's default image model again
   /draw list     list the daemon's image models
   /quit     exit the session
   /exit     exit the session
@@ -189,9 +190,20 @@ impl Session<'_> {
                     Typed::Done
                 }
             }
-            Line::Draw(what) => {
-                eprintln!("{}", self.draw.say(what.as_deref()).await);
-                Typed::Done
+            Line::Draw(ask) => {
+                let said = self.draw.say(&ask).await;
+                match ask {
+                    // Images attached for the next message are taken only
+                    // once it is sent, so a refusal leaves them waiting.
+                    DrawAsk::Now(description) if self.draw.is_armed() => {
+                        let images = self.images.take();
+                        Typed::Turn(self.turn(description, images, false))
+                    }
+                    _ => {
+                        eprintln!("{said}");
+                        Typed::Done
+                    }
+                }
             }
             Line::Send { content, images } => Typed::Turn(self.turn(content, images, false)),
         }

@@ -2,7 +2,7 @@
 //! at the daemon's door, the same handler body over the same image driver.
 //!
 //! Here because the proxy may be stopped or demand a key the CLI does not
-//! hold; `gglib image` calls this route, behind the daemon's own guards.
+//! hold; `gglib draw` calls this route, behind the daemon's own guards.
 //!
 //! `GET /api/images/drawing`: whether a message sent with Draw pressed can
 //! draw here, and why not, for the page's Draw button and `/draw`. Its own

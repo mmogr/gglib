@@ -299,7 +299,7 @@ pub fn benchmark_tune_apply_path(run_id: i64) -> String {
 }
 
 /// Draw: the proxy's `/v1/images/generations` handler at the daemon's door,
-/// which `gglib image` calls with `stream: true` (see
+/// which `gglib draw` calls with `stream: true` (see
 /// [`super::images`] for the body and the events).
 pub const IMAGES_GENERATIONS_PATH: &str = "/api/images/generations";
 

@@ -333,7 +333,7 @@ beside its weights.
   `--no-component <role>`. A file is linked only when its tensors are that
   role's for the model's family.
 
-Drawing is [`gglib image`](image.md).
+Drawing is [`gglib draw`](draw.md).
 
 ## Flags
 

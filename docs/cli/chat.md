@@ -216,18 +216,24 @@ sampling flags are `serve`'s and `proxy`'s.
 
 In the session, `/draw` lets the model draw a picture for the next message
 typed, and only that one, with the daemon's image model
-([gglib image](image.md)).
+([gglib draw](draw.md)).
 
+- `/draw <description>` sends the description at once as that message:
+  `/draw a red fox in the snow` draws in one line. When nothing can draw it
+  says why and sends nothing, and an image attached with `/image` waits
+  for the next message.
 - `/draw list` prints the daemon's image models, one to a line: a `*` on
   the one the next `/draw` message would draw with, its id, name and
   family, and whether it is the default, loaded, this session's choice, or
   missing a file.
-- `/draw <model>` chooses one for the session, by its id, its name, or a
-  part of the name no other has, and arms the next message. A name that
+- `/draw with <model>` chooses one for the session, by its id, its name, or
+  a part of the name no other has, and arms the next message. A name that
   fits none or several changes nothing and is answered with the list; a
-  model that cannot draw, with the daemon's reason.
+  model that cannot draw, with the daemon's reason. So a description that
+  begins with the word `with` is read as a model's name: start it with
+  another word.
 - The choice is held until the session ends: every later `/draw` draws with
-  it and says so. `/draw default` forgets it, and arms the next message
+  it, and a `/draw` on its own says so. `/draw default` forgets it, and arms the next message
   with the default. A chosen model that has since
   gone, or lost a file, is never swapped for the default: `/draw` says why it
   cannot draw and how to choose again.

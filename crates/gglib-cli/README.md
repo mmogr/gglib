@@ -96,7 +96,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `q <text>` | Ask a question, with optional piped or file context; its file tools read the directory it was asked in by `chat`'s rule, and a question that reads none says why on one `Files:` stderr line; `--no-tools` for none |
 | `q --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
 | `chat history` | List past conversations with message counts, and the chat each branch was made from |
-| `image "<prompt>" [--size WxH] [--count N] [--seed S] [-m MODEL] [-o PATH] [--remote]` | Draw with this machine's image model through the daemon, or with `--remote` with the paired machine's (`-m` then names one of its models, and without it that machine's default draws); one live line (queued, loading, sampling step/total, decoding), each PNG saved to `PATH` or `gglib-<unix>.png`, `-1`, `-2`, … for more than one, and `[image WxH] <path>` printed for each |
+| `draw "<prompt>" [--size WxH] [--count N] [--seed S] [-m MODEL] [-o PATH] [--remote]` | Draw with this machine's image model through the daemon, or with `--remote` with the paired machine's (`-m` then names one of its models, and without it that machine's default draws); one live line (queued, loading, sampling step/total, decoding), each PNG saved to `PATH` or `gglib-<unix>.png`, `-1`, `-2`, … for more than one, and `[image WxH] <path>` printed for each |
 | `attachment save <id> [path] [--force]` | Write a stored image, such as one a tool made, to a file; `<id>` is the whole id or at least the 8 characters a chat's marker shows; an existing file is replaced only with `--force` |
 | `run start -m <model> <prompt> [--follow]` | Start a reply the daemon finishes and print its id, or the reply as it arrives with `--follow` |
 | `run list` | List the daemon's runs, newest first |
@@ -289,14 +289,15 @@ nothing can draw (no image runtime or model, or a `--remote` session, whose
 model is on the other machine).
 
 ```bash
-You: /draw
-the next message draws, with flux1-schnell
-You: a red fox in the snow at dawn
+You: /draw a red fox in the snow at dawn
 ```
 
+`/draw` on its own arms the next message instead, and the description goes
+on the line after it.
+
 With more than one image model on the daemon, `/draw list` prints them,
-`/draw <model>` chooses one for the session by name or id and arms the next
-message, and `/draw default` goes back to the daemon's default. The choice
+`/draw with <model>` chooses one for the session by name or id and arms the
+next message, and `/draw default` goes back to the daemon's default. The choice
 lasts until the session ends, said on each turn that draws, and is not saved
 with the chat; a chosen model
 that can no longer draw is refused with the reason, never swapped for the
@@ -306,8 +307,8 @@ default.
 You: /draw list
      7  qwen-image-q8  (Qwen-Image 2.1)
 *    3  flux1-schnell  (Flux.1, default, loaded)
-  /draw <name or id> chooses one for this session; /draw default forgets it
-You: /draw qwen
+  /draw with <name or id> chooses one for this session; /draw default forgets it
+You: /draw with qwen
 the next message draws, with qwen-image-q8, this session's image model
 ```
 

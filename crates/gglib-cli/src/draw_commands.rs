@@ -1,4 +1,4 @@
-//! `gglib image`'s arguments.
+//! `gglib draw`'s arguments.
 
 use std::path::PathBuf;
 
@@ -16,12 +16,12 @@ fn strength(text: &str) -> Result<f32, String> {
         .ok_or_else(|| format!("\"{text}\" is not a strength from 0.05 to 1"))
 }
 
-/// `gglib image "<prompt>"`: draw with this machine's image model, through
+/// `gglib draw "<prompt>"`: draw with this machine's image model, through
 /// the daemon, or with `--remote` with the paired machine's, and save what it
 /// drew here. With `--from` it draws from a picture:
 /// all of it again, or with `--mask` only where the mask is white.
 #[derive(Args, Debug, Clone)]
-pub struct ImageCommandArgs {
+pub struct DrawCommandArgs {
     /// What to draw
     pub prompt: String,
     /// The size, as `WIDTHxHEIGHT` (each side a multiple of 64, or 32 for

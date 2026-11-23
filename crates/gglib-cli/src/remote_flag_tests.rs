@@ -34,7 +34,7 @@ fn each_command_that_reaches_the_paired_machine_takes_the_flag() {
         &["gglib", "proxy", "dashboard", "--remote"],
         &["gglib", "proxy", "cache-clear", "--remote"],
         &["gglib", "daemon", "stop", "--remote"],
-        &["gglib", "image", "a cat", "--remote"],
+        &["gglib", "draw", "a cat", "--remote"],
     ] {
         assert!(remote(argv), "{}", argv.join(" "));
         let without: Vec<&str> = argv.iter().copied().filter(|a| *a != "--remote").collect();

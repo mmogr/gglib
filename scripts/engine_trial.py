@@ -36,7 +36,7 @@ lets the bump merge. Before it posts, `approve` refuses when:
 * the engine was not used since it was installed. For llama.cpp that is a
   reply saved after the install: the app, `gglib chat` and `gglib q` save
   one. For stable-diffusion.cpp it is a picture drawn in a chat after the
-  install. `gglib image` leaves nothing gglib keeps, so it does not count.
+  install. `gglib draw` leaves nothing gglib keeps, so it does not count.
 
 It then asks for the release to be typed on a terminal, and refuses where
 there is none: approving is a person's act, not a script's. `--print` stops
@@ -246,7 +246,7 @@ def not_used(engine: str, used: dict[str, int], since: datetime.datetime) -> str
     return (
         f"stable-diffusion.cpp has not drawn in a chat since it was installed ({at}). "
         "Draw a picture in a chat, in the app or with /draw in `gglib chat`, then approve. "
-        "`gglib image` does not count: gglib keeps nothing of it."
+        "A picture from `gglib draw` does not count: gglib keeps nothing of it."
     )
 
 
@@ -637,7 +637,7 @@ def self_test() -> bool:
     refused("a record with no time", lambda: record_time("{}"), "has no time in it")
 
     # 4. What was used since: rows before the install do not count, a picture
-    #    is a tool's row that starts `Drew`, and `gglib image` leaves no row.
+    #    is a tool's row that starts `Drew`, and `gglib draw` leaves no row.
     with tempfile.TemporaryDirectory() as folder:
         path = os.path.join(folder, "gglib.db")
         planted_database(
@@ -659,7 +659,7 @@ def self_test() -> bool:
         check("a used stable-diffusion.cpp is a trial", not_used("sd", used, at) is None)
         check("an unused llama.cpp says to chat", "has saved no reply" in (not_used("llama", later, at) or ""))
         said_sd = not_used("sd", {"replies": 5, "pictures": 0}, at) or ""
-        check("replies are not a trial of stable-diffusion.cpp", "`gglib image` does not count" in said_sd, said_sd)
+        check("replies are not a trial of stable-diffusion.cpp", "A picture from `gglib draw` does not count" in said_sd, said_sd)
         refused("a database that is not there", lambda: used_since(os.path.join(folder, "none.db"), at), "could not be read")
 
     # 5. `gglib config paths`, and a line fit for a pull request.

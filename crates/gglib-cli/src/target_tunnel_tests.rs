@@ -52,10 +52,7 @@ const ROUTES: &[(&str, Reached)] = &[
         By(&[&["gglib", "chat", "7"], &["gglib", "q", "hi"]]),
     ),
     ("/v1/embeddings", Exempt("no gglib command embeds")),
-    (
-        "/v1/images/generations",
-        By(&[&["gglib", "image", "a cat"]]),
-    ),
+    ("/v1/images/generations", By(&[&["gglib", "draw", "a cat"]])),
     (
         "/v1/gglib/images/drawing",
         Exempt(

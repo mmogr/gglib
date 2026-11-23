@@ -60,7 +60,7 @@ Grouped as `gglib --help` groups them.
 | | [`chat <model>`](chat.md#chat) | An interactive session with tools |
 | | [`q`](chat.md#q) | One question, pipe-friendly |
 | | [`run`](chat.md#run) | A reply the daemon finishes while you do something else |
-| | [`image`](image.md) | Draw a picture with this machine's image model, or with `--remote` the paired machine's |
+| | [`draw`](draw.md) | Draw a picture with this machine's image model, or with `--remote` the paired machine's |
 | | [`attachment save`](chat.md#attachment-save) | Write an image a chat stored to a file |
 | **Interfaces** | [`gui`](proxy.md#gui-and-web) / [`web`](proxy.md#gui-and-web) | The desktop app and the web page |
 | | [`proxy`](proxy.md) | The OpenAI-compatible endpoint, every model, swapped on demand |
@@ -95,9 +95,9 @@ only.
 |---|---|---|
 | `-c` | `--context-size` | `serve`, `model load`, `benchmark` |
 | `-f` | `--follow` | `run start`, `run show` |
-| `-m` | `--model` | `q`, `image`, `run start`, `benchmark` |
+| `-m` | `--model` | `q`, `draw`, `run start`, `benchmark` |
 | `-n` | `--limit` | `chat history`, `benchmark list`, `model search`, `model browse` |
-| `-o` | `--output` | `image` |
+| `-o` | `--output` | `draw` |
 | `-p` | `--port` | `up`, `serve`, `proxy` and its subcommands |
 | `-q` | `--quantization` | `model download` |
 | `-s` | `--system-prompt` | `chat`, `benchmark compare` |

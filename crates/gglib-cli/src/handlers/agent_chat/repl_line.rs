@@ -7,6 +7,7 @@
 use gglib_core::domain::attachment::AttachmentId;
 
 use super::branches::Ask;
+use super::draw::DrawAsk;
 use super::images::TurnImages;
 
 /// A line typed at the prompt, trimmed.
@@ -26,10 +27,8 @@ pub(super) enum Line {
     /// `/image`: what to tell the user, be it the receipt of the image now
     /// attached to the next message, the usage, or why it was refused.
     Image(String),
-    /// `/draw`: let the model draw for the next message. With a word
-    /// after it, that word: `list`, `default`, or an image model's name or
-    /// id.
-    Draw(Option<String>),
+    /// `/draw`, and what the words after it ask ([`DrawAsk`]).
+    Draw(DrawAsk),
     /// Anything else is the user's next message. It carries every image
     /// attached since the last one, and none waits after it.
     Send {
@@ -53,8 +52,7 @@ pub(super) async fn read(input: &str, images: &mut TurnImages<'_>) -> Line {
     if let Some(what) = input.strip_prefix("/draw")
         && (what.is_empty() || what.starts_with(char::is_whitespace))
     {
-        let what = what.trim();
-        return Line::Draw((!what.is_empty()).then(|| what.to_owned()));
+        return Line::Draw(DrawAsk::of(what));
     }
     if let Some(text) = input.strip_prefix("/edit")
         && (text.is_empty() || text.starts_with(char::is_whitespace))

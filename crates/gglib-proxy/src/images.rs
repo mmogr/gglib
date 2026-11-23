@@ -1,6 +1,6 @@
 //! `POST /v1/images/generations`: `OpenAI`'s Images API over the daemon's image
 //! driver, and the same handler body at the daemon's
-//! `POST /api/images/generations`, which `gglib image` calls.
+//! `POST /api/images/generations`, which `gglib draw` calls.
 //!
 //! The body and the answer are `OpenAI`'s (`gglib_core::contracts::http::images`
 //! says which fields, and what was checked against the SDKs): a prompt, an

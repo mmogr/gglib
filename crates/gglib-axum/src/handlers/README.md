@@ -21,7 +21,7 @@ every message after. Both are thin over core's `AttachmentService`.
 
 `images.rs` is `POST /api/images/generations`: the proxy's
 `/v1/images/generations` handler body, mounted at the daemon's door over the
-same image driver, so `gglib image` draws when the proxy is stopped or
+same image driver, so `gglib draw` draws when the proxy is stopped or
 keyed. `GET /api/images/drawing` (query `far`, `calls_tools`, `image_model`)
 says whether a message sent with Draw pressed can draw here, and why not,
 lists this machine's image models, and with `image_model=<id>` judges that
