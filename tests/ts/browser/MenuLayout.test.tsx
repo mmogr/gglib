@@ -31,6 +31,15 @@ const ROW_FONT = "14px 'IBM Plex Sans Variable'";
 
 /** The widest a menu is, in px: 24rem. */
 const WIDEST = 384;
+/** The widest a submenu is, in px: 20rem. */
+const WIDEST_SUB = 320;
+/**
+ * The room the composer's `[+]` has to its right at the app's smallest
+ * window, in px: 800 (`minWidth` in src-tauri/tauri.conf.json), less the
+ * sidebar's 240 and the 32 the composer sets `[+]` in from the chat's edge.
+ * The chat clips what is drawn past it.
+ */
+const ROOM = 800 - 240 - 32;
 
 const choice = (label: string, checked = false): MenuItem => ({ label, checked, onPick: () => {} });
 
@@ -163,7 +172,10 @@ describe('Menu rows in a browser engine', () => {
     expect(lines.length).toBeGreaterThan(1);
     for (const line of lines) expect(Math.abs(line.left - lines[0].left)).toBeLessThan(0.5);
     const box = menu.getBoundingClientRect();
-    expect(box.width).toBe(WIDEST);
+    expect(box.width).toBe(WIDEST_SUB);
+    // The submenu at its widest, beside the menu it opens from, in the room `[+]` has.
+    const plus = document.querySelector('[aria-label="Add to the message"]')!.getBoundingClientRect();
+    expect(box.right - plus.left).toBeLessThanOrEqual(ROOM);
     expect(long.getBoundingClientRect().right).toBeLessThanOrEqual(box.right);
   });
 
@@ -171,7 +183,7 @@ describe('Menu rows in a browser engine', () => {
     const menu = openDraw([choice('Default', true), choice('x'.repeat(120)), choice('After it')]);
     expectRowsApart(menu);
     const box = menu.getBoundingClientRect();
-    expect(box.width).toBeLessThanOrEqual(WIDEST);
+    expect(box.width).toBeLessThanOrEqual(WIDEST_SUB);
     for (const line of linesOf(rowsOf(menu)[1])) expect(line.right).toBeLessThanOrEqual(box.right + 0.5);
   });
 
@@ -186,5 +198,18 @@ describe('Menu rows in a browser engine', () => {
     const menu = view.getByRole('menu');
     expectRowsApart(menu);
     for (const row of rowsOf(menu)) expect(linesOf(row)).toHaveLength(1);
+  });
+
+  it('is no wider than 24rem under its own button, a longer label wrapped', () => {
+    const view = render(
+      <div style={{ position: 'fixed', right: 40, bottom: 40 }}>
+        <Menu label="Qwen3-4B" side="above" items={[choice(LONG), choice('After it')]} />
+      </div>,
+    );
+    fireEvent.click(view.getByRole('button', { name: 'Qwen3-4B' }));
+    const menu = view.getByRole('menu');
+    expectRowsApart(menu);
+    expect(menu.getBoundingClientRect().width).toBe(WIDEST);
+    expect(linesOf(rowsOf(menu)[0]).length).toBeGreaterThan(1);
   });
 });

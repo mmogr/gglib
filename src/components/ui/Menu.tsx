@@ -7,8 +7,8 @@
  * drawn as one. A heading names the items after it, as a group, and a note
  * is a line of text that does nothing. A disabled item with a reason says it
  * under itself, in a line it is described by, not only on hover. A menu is
- * as wide as its widest row, between 200px and 24rem (90% of a narrow
- * window): a row's label is one line where it fits and wraps under itself,
+ * as wide as its widest row, between 200px and 24rem (a submenu 20rem, and
+ * either 90% of a narrow window): a row's label is one line where it fits and wraps under itself,
  * the row growing with it, where it does not; a note or a reason wraps at
  * the width the rows set. The menu closes on a pick, a click outside, or
  * Escape, and a pick or Escape gives the focus back to its button; Escape in
@@ -188,7 +188,14 @@ const MenuList: FC<ListProps> = ({ label, items, className, toward, side, close 
             toward={toward}
             side={side}
             close={close}
-            className={cn(toward === 'right' ? 'left-full ml-xs' : 'right-full mr-xs', side === 'above' ? 'bottom-0' : 'top-0')}
+            className={cn(
+              toward === 'right' ? 'left-full ml-xs' : 'right-full mr-xs',
+              side === 'above' ? 'bottom-0' : 'top-0',
+              // Narrower than a menu, since it starts a menu's width in: beside
+              // the composer's `[+]` menu, 20rem ends inside the chat at the
+              // app's smallest window.
+              'max-w-[min(20rem,90vw)]',
+            )}
           />
         )}
       </div>
@@ -210,7 +217,7 @@ const MenuList: FC<ListProps> = ({ label, items, className, toward, side, close 
       className={cn(
         // As wide as its widest row, up to a width a row's label wraps at:
         // left to itself, a box hung beside its button is as narrow as its
-        // words allow, and every label of two words is two lines.
+        // words allow, and a label wider than the 200px floor wraps.
         'absolute z-popover flex w-max min-w-[200px] max-w-[min(24rem,90vw)] flex-col rounded-base bg-surface-elevated p-xs wrap-anywhere shadow-lg',
         // A long list scrolls; one with a submenu cannot, since a scrolling
         // box would clip the submenu that opens beside it.
