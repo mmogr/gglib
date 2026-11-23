@@ -4,6 +4,7 @@ mod extract;
 mod fetch;
 mod install;
 mod pin;
+mod place;
 mod record;
 mod release;
 
@@ -34,3 +35,7 @@ pub(crate) use release::{GITHUB_API, selector_from_override};
 #[cfg(test)]
 #[path = "install_tests.rs"]
 mod install_tests;
+
+#[cfg(test)]
+#[path = "place_tests.rs"]
+mod place_tests;
