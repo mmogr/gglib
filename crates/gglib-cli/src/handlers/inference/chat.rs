@@ -5,6 +5,7 @@
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
+use crate::conversation_settings::step_limit;
 use crate::shared_args::ChatSamplingArgs;
 use crate::target::Target;
 
@@ -37,8 +38,14 @@ pub(crate) struct ChatArgs {
     pub thinking: Option<gglib_core::domain::Thinking>,
 }
 
-/// Execute the chat command — always routes to the agentic REPL.
+/// Execute the chat command — always routes to the agentic REPL, with its
+/// `--max-tool-iterations` held to the ceiling.
 pub(crate) async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
+    let max_iterations = step_limit(args.max_iterations, &mut std::io::stderr())?;
+    let args = ChatArgs {
+        max_iterations,
+        ..args
+    };
     crate::handlers::agent_chat::run(ctx, &args).await
 }
 

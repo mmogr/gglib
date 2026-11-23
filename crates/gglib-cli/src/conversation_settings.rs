@@ -1,11 +1,42 @@
 //! Builds [`ConversationSettings`](gglib_core::domain::chat::ConversationSettings)
-//! from the CLI argument groups.
+//! from the CLI argument groups, and holds `--max-tool-iterations` to the
+//! ceiling a run takes ([`step_limit`]).
 //!
 //! Lifted out of [`shared_args`](super::shared_args) whole: it is the one
 //! thing in that module that is not an `#[derive(Args)]` group, and the module
 //! is where the flag surface lives.
 
+use std::io;
+
+use gglib_core::MAX_ITERATIONS_CEILING;
+
 use crate::shared_args::ChatSamplingArgs;
+
+/// The step limit a session runs with for the `--max-tool-iterations` it
+/// was `asked`: the value asked, up to [`MAX_ITERATIONS_CEILING`]. A value
+/// above the ceiling is not refused, so a script that passes one keeps
+/// working; it runs with the ceiling, and one line on `said` names both.
+/// `chat` and `q` each take the flag through here, once.
+///
+/// # Errors
+///
+/// The line could not be written to `said`.
+pub(crate) fn step_limit(
+    asked: Option<usize>,
+    said: &mut impl io::Write,
+) -> io::Result<Option<usize>> {
+    match asked {
+        Some(n) if n > MAX_ITERATIONS_CEILING => {
+            writeln!(
+                said,
+                "--max-tool-iterations {n} is more than the {MAX_ITERATIONS_CEILING} steps a run \
+                 may take; it runs with {MAX_ITERATIONS_CEILING}."
+            )?;
+            Ok(Some(MAX_ITERATIONS_CEILING))
+        }
+        _ => Ok(asked),
+    }
+}
 
 /// Builder for [`ConversationSettings`](gglib_core::domain::chat::ConversationSettings)
 /// from CLI argument groups.
@@ -81,3 +112,7 @@ impl ConversationSettingsBuilder {
         self.settings
     }
 }
+
+#[cfg(test)]
+#[path = "conversation_settings_tests.rs"]
+mod conversation_settings_tests;
