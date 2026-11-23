@@ -17,8 +17,12 @@
 //! - **kitty and Ghostty**: the kitty graphics protocol, which takes a PNG
 //!   as it is (`f=100`). A JPEG is not sent; its marker stands.
 //!
-//! Inside tmux or screen neither is sent: both need wrapping there, and a
-//! multiplexer that does not pass it on prints it.
+//! Inside tmux or screen neither is sent. tmux passes a picture on only
+//! wrapped, and only where its `allow-passthrough` is on; it does not know
+//! the rows a picture it passed on takes, so the lines after it are written
+//! over it; and what a pane's environment says of the terminal outside is
+//! that of the one tmux was started from, which need not be the one
+//! attached now. None of that can be told without asking tmux.
 
 use std::fmt::Write as _;
 
@@ -155,7 +159,7 @@ fn text(part: &[u8]) -> &str {
 
 /// Whether `version` ("3.7.7", "3.5.0beta10") is `least` (major, minor) or
 /// later. One that does not start with two numbers is not.
-fn at_least(version: &str, least: (u32, u32)) -> bool {
+pub(super) fn at_least(version: &str, least: (u32, u32)) -> bool {
     let mut numbers = version.split('.').map(|part| {
         let digits = part.bytes().take_while(u8::is_ascii_digit).count();
         part[..digits].parse::<u32>().ok()

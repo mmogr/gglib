@@ -124,6 +124,18 @@ fn a_terminal_known_to_draw_pictures_is_read_from_its_environment() {
             None,
         ),
         (vec![("TERM", "xterm-kitty"), ("STY", "1.pts-0.host")], None),
+        // tmux 3.4, which gets links, gets no picture.
+        (
+            vec![
+                ("TERM", "tmux-256color"),
+                ("TMUX", "/tmp/t,1,0"),
+                ("TERM_PROGRAM", "tmux"),
+                ("TERM_PROGRAM_VERSION", "3.4"),
+                ("LC_TERMINAL", "iTerm2"),
+                ("LC_TERMINAL_VERSION", "3.7.7"),
+            ],
+            None,
+        ),
     ] {
         assert_eq!(Inline::of_terminal(env(&set)), inline, "{set:?}");
     }

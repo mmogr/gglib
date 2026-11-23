@@ -28,7 +28,8 @@ independently readable:
   and a reply's figure line ("41 s · 13 t/s · 2,100 tokens reused", core's
   `TurnUsage::figure_line`, the GUI thread's words)
 - `pictures` — a chat's pictures in the terminal: each image's marker a
-  link that opens a copy of it, on a terminal that opens links, and an
+  link that opens a copy of it, on a terminal that opens links (tmux from
+  3.4 among them), and an
   image a tool made drawn under its line on one that draws pictures
 - `inline_picture` — which terminals draw a picture (iTerm2, `WezTerm`,
   kitty, Ghostty), what is written to draw one, and how wide
