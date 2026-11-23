@@ -180,6 +180,58 @@ fn a_root_behind_a_link_takes_either_form() {
     }
 }
 
+/// A root reached through a link, holding a link `name` to `target`. The
+/// link to the root, then the root's canonical form.
+fn a_linked_root_holding(tmp: &Path, name: &str, target: &Path) -> (PathBuf, PathBuf) {
+    let real = tmp.join("real");
+    fs::create_dir_all(real.join("src")).unwrap();
+    fs::write(real.join("src").join("main.rs"), "fn main() {}").unwrap();
+    link_folder(target, real.join(name));
+    let root = tmp.join("link");
+    link_folder(&real, &root);
+    let canon_root = gglib_core::paths::canonical(&real).unwrap();
+    (root, canon_root)
+}
+
+/// A path through a link inside the root is shown by the names it was
+/// written with, whichever name of the root it starts from.
+#[test]
+fn a_path_through_a_link_inside_keeps_its_names_under_either_root_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let real_src = tmp.path().join("real").join("src");
+    let (root, canon_root) = a_linked_root_holding(tmp.path(), "code", &real_src);
+    let file = gglib_core::paths::canonical(real_src.join("main.rs")).unwrap();
+
+    for base in [&root, &canon_root] {
+        let given = base.join("code").join("main.rs");
+        let resolved = resolve_sandboxed_path(&root, given.to_str().unwrap()).unwrap();
+        assert_eq!(resolved.path, file, "{}", given.display());
+        assert_eq!(resolved.shown, "code/main.rs", "{}", given.display());
+    }
+}
+
+/// A path through a link that leads out of the root is refused as outside,
+/// named by its part under the root, whichever name of the root it starts
+/// from: the refusal never prints the root.
+#[test]
+fn a_path_through_a_link_out_is_outside_under_either_root_name() {
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(outside.path().join("secret.txt"), "no").unwrap();
+    let tmp = tempfile::tempdir().unwrap();
+    let (root, canon_root) = a_linked_root_holding(tmp.path(), "escape", outside.path());
+
+    for base in [&root, &canon_root] {
+        let given = base.join("escape").join("secret.txt");
+        let err = resolve_sandboxed_path(&root, given.to_str().unwrap()).unwrap_err();
+        assert_eq!(
+            err,
+            format!("'escape/secret.txt' {OUTSIDE}."),
+            "{}",
+            given.display()
+        );
+    }
+}
+
 #[test]
 fn dotdot_escape_rejected() {
     let dir = tempfile::tempdir().unwrap();
