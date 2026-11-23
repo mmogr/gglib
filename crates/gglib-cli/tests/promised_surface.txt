@@ -65,6 +65,8 @@ gglib chat
     off
   --tool-timeout-ms
   --tools
+gglib chat export
+  --force
 gglib chat history
   --limit -n
 gglib completions
