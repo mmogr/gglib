@@ -1,15 +1,16 @@
 /**
- * The seconds a pairing code has left, ticking once a second while there is
- * one. Read from the code's own deadline, never from when the caller
- * mounted, so a page or a line drawn a minute later shows the minute gone.
+ * The seconds left until a deadline (a pairing code's, or the end of a wait
+ * for Hugging Face's rate limit), ticking once a second while there is one.
+ * Read from the deadline itself, never from when the caller mounted, so a
+ * page or a line drawn a minute later shows the minute gone.
  *
- * @module places/devices/useSecondsLeft
+ * @module hooks/useSecondsLeft
  */
 
 import { useEffect, useState } from 'react';
-import { secondsLeft } from './devices';
+import { secondsLeft } from '../utils/countdown';
 
-/** Seconds until `expiresAt`, or `null` with no code on offer. */
+/** Seconds until `expiresAt`, or `null` with no deadline. */
 export function useSecondsLeft(expiresAt: number | null): number | null {
   const [left, setLeft] = useState(() => (expiresAt === null ? null : secondsLeft(expiresAt)));
 

@@ -19,8 +19,9 @@ import { StatusMark } from '../../components/status/StatusMark';
 import { Button } from '../../components/ui/Button';
 import { useRemoteState } from '../../services/remoteRegistry';
 import type { PairingOffer } from '../../services/remoteOffer';
-import { clock, codeGroups, qrPayload } from './devices';
-import { useSecondsLeft } from './useSecondsLeft';
+import { useSecondsLeft } from '../../hooks/useSecondsLeft';
+import { clock } from '../../utils/countdown';
+import { codeGroups, qrPayload } from './devices';
 
 /** How long "<label> joined." stays before the sheet closes. */
 const JOINED_MS = 2_500;

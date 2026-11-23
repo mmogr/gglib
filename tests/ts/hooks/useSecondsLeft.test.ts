@@ -1,12 +1,12 @@
 /**
- * `places/devices/useSecondsLeft`: the seconds left read from the deadline
- * at once when it changes, `null` once there is no code, and no timer left
+ * `hooks/useSecondsLeft`: the seconds left read from the deadline at once
+ * when it changes, `null` once there is no deadline, and no timer left
  * behind when the reader goes.
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { useSecondsLeft } from '../../../src/places/devices/useSecondsLeft';
+import { useSecondsLeft } from '../../../src/hooks/useSecondsLeft';
 
 describe('useSecondsLeft', () => {
   afterEach(() => vi.useRealTimers());
@@ -22,7 +22,7 @@ describe('useSecondsLeft', () => {
     expect(result.current).toBe(90);
   });
 
-  it('is null once there is no code', () => {
+  it('is null once there is no deadline', () => {
     vi.useFakeTimers();
     const { result, rerender } = renderHook(({ at }: { at: number | null }) => useSecondsLeft(at), {
       initialProps: { at: Date.now() + 30_000 } as { at: number | null },

@@ -26,9 +26,8 @@ by its fingerprint.
 | `PairingSheet.tsx` | The code on offer, under This Mac whenever the registry holds one: the QR for ggchat (the string uppercased, level M, quiet zone, black on white), the code in 3+3, the join string, the time left from the code's deadline; "<label> joined." then closed, "Expired." with New code |
 | `PairedList.tsx` | Paired devices: each row's name (the id beside a label two rows share) and the daemon's description, no reach dot (the wire has none per device); ⋯ Forget… asked first, the list read again before anything is said; the tool servers shared with them while shared, Change › to Settings › Tools; the fingerprint and peers on one mono line |
 | `JoinBlock.tsx` | Use another machine: Join with a string ("Reaching it…" in place, a refusal as it came), Reconnect only with a pairing and key remembered; joined, the daemon's reach line (the name and reach word until a read brings it after an event), since when it has been away and the daemon's note on what becomes of it, its address ⧉, the command that prints its key ⧉, where its models are, Disconnect, ⋯ Stop <name>'s gglib… asked first; after a disconnect, the pairing remembered with Reconnect |
-| `devices.ts` | Pure: the countdown as m:ss, the code as 3+3, the seconds left, the away time as HH:MM, the QR payload |
+| `devices.ts` | Pure: the code as 3+3, the away time as HH:MM, the QR payload; the time left is `hooks/useSecondsLeft` and `utils/countdown` |
 | `pageActions.ts` | The page's actions counted, so an error a block shows goes when its field changes or any other action on the page runs (`useBlockError`) |
-| `useSecondsLeft.ts` | The seconds a code has left, ticking once a second from its own deadline; the sidebar's line reads it too |
 
 ## Words this folder says that Rust does not
 
