@@ -29,6 +29,19 @@ fn noting(requests: Arc<AtomicUsize>) -> (crate::cli_exec::NoticeCallback, Notes
     (notice, notes)
 }
 
+/// [`noting`], whose first note also cancels the download with `cancel`.
+fn noting_then_cancelling(
+    requests: Arc<AtomicUsize>,
+    cancel: CancellationToken,
+) -> (crate::cli_exec::NoticeCallback, Notes) {
+    let (record, notes) = noting(requests);
+    let notice = Arc::new(move |note: &str| {
+        record(note);
+        cancel.cancel();
+    });
+    (notice, notes)
+}
+
 /// The file, whole, with its digest.
 fn the_file(body: &[u8]) -> Reply {
     Reply::File {
@@ -123,40 +136,80 @@ async fn a_download_refused_five_times_in_a_row_gives_up() {
 }
 
 /// With the file allowance already closed, as another request left it,
-/// nothing is asked until it opens: the wait is shown first, with no
-/// request made, and then the file is fetched with one.
+/// nothing is asked while it stays closed: the wait is shown with no
+/// request made. (A download that waits and then fetches is
+/// [`a_refused_download_waits_and_completes`].)
 #[tokio::test]
-async fn a_closed_allowance_is_not_asked_until_it_opens() {
-    let body = body_of(2048);
-    let server = TestServer::start(vec![the_file(&body)]).await;
+async fn a_closed_allowance_is_not_asked_while_it_is_closed() {
+    let server = TestServer::start(vec![the_file(&body_of(2048))]).await;
     let fx = Fixture::new();
     let gate = HubGate::new();
     gate.note(
         HubLimit {
             bucket: HubBucket::Resolvers,
             remaining: 0,
-            resets_in: Duration::from_secs(1),
+            resets_in: Duration::from_mins(2),
         },
         tokio::time::Instant::now(),
     );
-    let (notice, notes) = noting(server.counter());
+    let cancel = CancellationToken::new();
+    let (notice, notes) = noting_then_cancelling(server.counter(), cancel.clone());
     let url = server.resolve_url();
     let req = super::super::native::NativeDownload {
         notice: Some(notice),
-        ..request(&url, &fx.dest, Some(body.len() as u64), None)
+        cancel: Some(cancel),
+        ..request(&url, &fx.dest, None, None)
     };
 
-    download_gated(&build_client(), &req, &gate)
+    let ended = download_gated(&build_client(), &req, &gate).await;
+
+    assert!(
+        matches!(ended, Err(NativeError::Cancelled)),
+        "got {ended:?}"
+    );
+    assert_eq!(server.request_count(), 0);
+    let notes = notes.lock().unwrap().clone();
+    let (first, asked) = notes.first().expect("the wait is shown");
+    assert!(
+        first.starts_with("waiting for Hugging Face's rate limit, "),
+        "{first}"
+    );
+    assert_eq!(*asked, 0, "the wait comes before any request");
+}
+
+/// A refusal after bytes have arrived carries on from them once it is
+/// waited out, and bytes start the count of refusals in a row again: four
+/// refusals, a connection that brings part of the file and breaks, four
+/// more, and the file, which a count kept across the bytes would have
+/// given up on.
+#[tokio::test]
+async fn a_refusal_after_bytes_carries_on_from_them_and_counts_again() {
+    let body = body_of(8192);
+    let kept = 3000;
+    let mut script = vec![Reply::Limited { t: 1 }; 4];
+    script.push(Reply::Truncated {
+        body: body.clone(),
+        limit: kept,
+    });
+    script.extend(vec![Reply::Limited { t: 1 }; 4]);
+    script.push(the_file(&body));
+    let server = TestServer::start(script).await;
+    let fx = Fixture::new();
+    let url = server.resolve_url();
+    let req = request(&url, &fx.dest, Some(body.len() as u64), None);
+
+    download_gated(&build_client(), &req, &HubGate::new())
         .await
-        .expect("the download completes once the allowance opens");
+        .expect("the download completes");
 
     assert_eq!(std::fs::read(&fx.dest).unwrap(), body);
-    assert_eq!(server.request_count(), 1);
-    let notes = notes.lock().unwrap().clone();
+    let resumed = Some(format!("bytes={kept}-"));
+    let mut asked = vec![None; 5];
+    asked.extend(vec![resumed; 5]);
     assert_eq!(
-        notes.first(),
-        Some(&(waiting_sentence(Duration::from_secs(1)), 0)),
-        "the wait comes before any request"
+        server.ranges(),
+        asked,
+        "each ask after the bytes is for the rest"
     );
 }
 

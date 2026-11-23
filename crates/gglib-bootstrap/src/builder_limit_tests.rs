@@ -8,6 +8,37 @@ use gglib_core::ports::{DownloadManagerConfig, NoopEmitter};
 
 use super::*;
 
+/// The core is wired with the gate the download manager keeps, which the
+/// Hub client keeps too ([`holders`]).
+#[tokio::test]
+async fn the_wired_core_keeps_the_download_managers_gate() {
+    let dir = tempfile::tempdir().unwrap();
+    let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(RoleParser);
+    let pool = gglib_db::setup_database(&dir.path().join("gglib.db"), gguf_parser.as_ref())
+        .await
+        .unwrap();
+    let config = BootstrapConfig::for_db(dir.path().join("gglib.db"));
+    let Holders {
+        download_config,
+        core,
+        ..
+    } = holders(&config, || None);
+    let gate = Arc::clone(&download_config.hub_gate);
+    let repos = CoreFactory::build_repos(pool.clone());
+
+    let built = wire(
+        pool,
+        repos,
+        Arc::new(FakeHub::default()),
+        gguf_parser,
+        download_config,
+        core,
+        Arc::new(NoopEmitter::new()),
+    );
+
+    assert!(Arc::ptr_eq(&built.app.hub_gate(), &gate));
+}
+
 /// The head that says what the asked-for variant is was refused: the queue
 /// answers the limit, with its allowance, and queues nothing.
 #[tokio::test]

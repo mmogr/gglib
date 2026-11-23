@@ -241,3 +241,55 @@ async fn no_variants_is_an_error() {
     let refused = select(Repo::of(&[]), None, None).await.unwrap_err();
     assert!(refused.contains("No GGUF files"), "{refused}");
 }
+
+/// A repository whose pick's reads met the Hub's rate limit: its reader
+/// reads what [`Repo`]'s does, and says a read met the limit.
+struct LimitedRepo(Repo);
+
+impl VariantSource for LimitedRepo {
+    fn reader<'a>(
+        &'a self,
+        _repo_id: &'a str,
+        _variants: &[HfQuantInfo],
+    ) -> Box<dyn HubReader + 'a> {
+        Box::new(Self(self.0.clone()))
+    }
+}
+
+#[async_trait]
+impl VariantReader for LimitedRepo {
+    async fn head(&self, index: usize) -> Option<HeadFacts> {
+        self.0.head(index).await
+    }
+
+    async fn header(&self, index: usize) -> Option<GgufMetadata> {
+        self.0.header(index).await
+    }
+}
+
+impl HubReader for LimitedRepo {
+    fn limited(&self) -> Option<DownloadError> {
+        Some(DownloadError::from_hub(
+            gglib_core::ports::HfPortError::RateLimited {
+                bucket: gglib_core::hub_limit::HubBucket::Resolvers,
+                resets_in: std::time::Duration::from_mins(2),
+            },
+            |_| unreachable!("a rate limit"),
+        ))
+    }
+}
+
+/// A pick whose reads met the Hub's rate limit is not taken: the selection
+/// is the limit, though the reads it had would have named a variant.
+#[tokio::test]
+async fn a_pick_whose_reads_met_the_rate_limit_is_the_limit() {
+    let repo = Repo::of(&["Q4_K_M", "Q8_0"]);
+    let selector = QuantizationSelector::new(Arc::new(repo.clone()), Arc::new(LimitedRepo(repo)));
+
+    let picked = selector.select("test/model", None, Some(GB)).await;
+
+    assert!(
+        matches!(picked, Err(DownloadError::HubLimited { .. })),
+        "got {picked:?}"
+    );
+}
