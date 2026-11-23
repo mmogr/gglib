@@ -1,16 +1,16 @@
 {
-  "release": "master-1098-b521db4",
+  "release": "master-1106-532d2c1",
   "trial": {
     "backend": "Metal",
-    "binary": "stable-diffusion.cpp version unknown, commit b521db4",
-    "gglib": "0.38.0-rc.1 (1a0d6a49d254)",
-    "installed_at": "2026-11-17T13:27:36Z",
+    "binary": "stable-diffusion.cpp version unknown, commit 532d2c1",
+    "gglib": "0.39.1-rc.1 (e9070a875015)",
+    "installed_at": "2026-11-23T09:52:22Z",
     "machine": "macOS 27.2.1 arm64",
     "platform": "macOS universal (Metal)",
-    "pull_request": 2094,
+    "pull_request": 2202,
     "used": {
       "pictures": 1,
-      "replies": 3
+      "replies": 2
     }
   }
 }

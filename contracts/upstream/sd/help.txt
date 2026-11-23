@@ -1,4 +1,4 @@
-stable-diffusion.cpp version unknown, commit b521db4
+stable-diffusion.cpp version unknown, commit 532d2c1
 Usage: sd-server [options]
 
 Svr Options:
@@ -64,10 +64,10 @@ Context Options:
                                            during automatic graph-cut execution. Accepts a single value or assignments
                                            by backend/device, e.g. 6 or cuda0=6,vulkan0=4. 0 uses live free VRAM without
                                            an explicit budget; a negative value reserves that much free VRAM
-  -t, --threads <int>                      number of threads to use during computation (default: -1). If threads <= 0,
-                                           then threads will be set to the number of CPU physical cores
-  --conditioning-cache-size <int>          maximum number of conditioning results cached per model context (default: 4,
-                                           0 disables caching)
+  -t, --threads <int>                      positive number of computation threads; unset uses the library CPU core
+                                           selection
+  --conditioning-cache-size <int>          maximum cached conditioning results; unset uses the library default, 0
+                                           disables caching
   --list-devices                           list available ggml backend devices, including --rpc-servers (one
                                            'name<TAB>description' per line), and exit; the names are the device names
                                            accepted by --backend and --params-backend
@@ -184,7 +184,7 @@ Default Generation Options:
   -b, --batch-count <int>                  batch count
   --qwen-image-layers <int>                number of Qwen Image Layered layers; latent/output count is layers + 1
                                            (default: 3)
-  --video-frames <int>                     video frames (default: 1)
+  --video-frames <int>                     video frames; unset uses the library default
   --fps <int>                              fps (default: 24)
   --timestep-shift <int>                   shift timestep for NitroFusion models (default: 0). recommended N for
                                            NitroSD-Realism around 250 and 500 for NitroSD-Vibrant
@@ -240,7 +240,7 @@ Default Generation Options:
                                            (default: 256x256 image pixels)
   --temporal-tiling                        enable temporal tiling for supported video VAE decode
   --hires                                  enable highres fix
-  -s, --seed                               RNG seed (default: 42, use random seed for < 0)
+  -s, --seed                               RNG seed; unset or a negative value requests a random seed
   --sampling-method                        sampling method, one of [euler, euler_a, heun, dpm2, dpm++2s_a, dpm++2m,
                                            dpm++2mv2, ipndm, ipndm_v, lcm, ddim_trailing, tcd, res_multistep, res_2s,
                                            er_sde, euler_cfg_pp, euler_a_cfg_pp, euler_ge, dpm++2m_sde, dpm++2m_sde_bt,
@@ -261,8 +261,8 @@ Default Generation Options:
                                            "0.85,0.725,0.421875,0.0") or preset: qwen-image-2.1-turbo, p-h3-image,
                                            minimax-h3-image, hyperflow-h3-flash-4, hyperflow-h3-flash-6,
                                            hyperflow-h3-flash-8.
-  --skip-layers                            layers to skip for SLG steps (default: [7,8,9])
-  --high-noise-skip-layers                 (high noise) layers to skip for SLG steps (default: [7,8,9])
+  --skip-layers                            layers to skip for SLG steps; unset uses the library default
+  --high-noise-skip-layers                 (high noise) layers to skip for SLG steps; unset uses the library default
   -r, --ref-image                          reference image for Flux Kontext or MiniMax-H3 Ref2VA (can be used multiple
                                            times)
   --ref-video                              MiniMax-H3 Ref2VA reference video frame directory at 24 fps (can be used
