@@ -284,7 +284,10 @@ async fn a_refused_image_model_leaves_the_resident_running() {
             !core_w.has_exited(RESIDENT_ID),
             "{case}: the resident was stopped"
         );
-        core_w.kill(RESIDENT_ID).await.unwrap();
+        core_w
+            .kill(RESIDENT_ID, crate::process::StopReason::Asked)
+            .await
+            .unwrap();
     }
 }
 
@@ -437,7 +440,8 @@ async fn an_image_model_launches_on_sd_server_into_the_second_slot() {
     assert!(!recorded.exists(), "the stand-in was not started again");
     drop(again);
 
-    set.recycle(1, &core).await;
+    set.recycle(1, &core, crate::process::StopReason::Asked)
+        .await;
     assert!(!core.read().await.is_running(PLACED_ID));
 }
 

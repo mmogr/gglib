@@ -118,6 +118,14 @@ impl OutputTail {
         let _ = tokio::time::timeout(within, open.wait_for(|open| *open == 0)).await;
     }
 
+    /// Wait until every stream has been read to its end, however long that
+    /// takes: for a watch on a server that runs for hours.
+    pub(crate) async fn ended(&self) {
+        let mut open = self.open.subscribe();
+        // `self` holds the sender, so this wait ends only at zero.
+        let _ = open.wait_for(|open| *open == 0).await;
+    }
+
     /// The lines kept, oldest first.
     pub(crate) fn lines(&self) -> Vec<String> {
         self.lines

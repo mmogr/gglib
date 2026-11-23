@@ -184,7 +184,11 @@ async fn the_other_slots_residents_are_netted_out_of_the_plans_ram_cache() {
         .expect("auto-sized")
         .parse()
         .unwrap();
-    core.write().await.kill(BESIDE_ID).await.unwrap();
+    core.write()
+        .await
+        .kill(BESIDE_ID, crate::process::StopReason::Asked)
+        .await
+        .unwrap();
 
     assert!(
         with_secondary < alone || alone == 0,

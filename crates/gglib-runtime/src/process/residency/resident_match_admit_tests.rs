@@ -212,5 +212,9 @@ async fn a_launched_resident_records_its_projector_and_serves_the_next_request()
     let reused = second.target.narration.as_ref().and_then(|n| n.fit.clone());
     assert_eq!(reused, Some(fit));
 
-    core.write().await.kill(LAUNCHED_ID).await.ok();
+    core.write()
+        .await
+        .kill(LAUNCHED_ID, crate::process::StopReason::Asked)
+        .await
+        .ok();
 }

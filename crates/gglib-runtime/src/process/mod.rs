@@ -3,6 +3,7 @@ pub mod admission;
 mod broadcaster;
 mod core;
 mod events;
+mod exit_report;
 mod health;
 mod logs;
 mod manager;
@@ -24,6 +25,7 @@ pub use admission::{AdmissionQueue, PRIMARY_SLOT, RENDER_STOPPED, Resident, SLOT
 pub use broadcaster::{ServerEventBroadcaster, get_event_broadcaster};
 pub use core::GuiProcessCore;
 pub use events::{ServerEvent, ServerStateInfo, ServerStatus};
+pub use exit_report::StopReason;
 pub use health::{check_http_health, wait_for_http_health};
 pub use logs::{ServerLogEntry, ServerLogManager, get_log_manager};
 pub use manager::ProcessManager;
