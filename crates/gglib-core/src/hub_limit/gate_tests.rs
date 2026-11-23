@@ -77,9 +77,11 @@ fn an_answer_that_leaves_none_closes_the_allowance() {
     );
 }
 
-/// An answer with some left opens an allowance a refusal closed.
+/// An answer with some left, read after a refusal, was made before it
+/// (nothing is sent while an allowance is closed): it does not reopen an
+/// allowance that still has time to wait.
 #[test]
-fn an_answer_with_some_left_opens_the_allowance() {
+fn an_answer_with_some_left_does_not_reopen_the_allowance() {
     let gate = HubGate::new();
     let now = Instant::now();
     gate.note(limit(HubBucket::Api, 0, 10), now);
@@ -91,7 +93,29 @@ fn an_answer_with_some_left_opens_the_allowance() {
 
     assert_eq!(
         gate.closed(HubBucket::Api, now + Duration::from_secs(1)),
-        None
+        Some(Duration::from_secs(9))
+    );
+}
+
+/// Of two closures, the later reset holds, whichever is read last.
+#[test]
+fn the_later_of_two_resets_holds() {
+    let gate = HubGate::new();
+    let now = Instant::now();
+
+    gate.note(limit(HubBucket::Api, 0, 30), now);
+    gate.note(limit(HubBucket::Api, 0, 10), now + Duration::from_secs(1));
+
+    assert_eq!(
+        gate.closed(HubBucket::Api, now),
+        Some(Duration::from_secs(30))
+    );
+
+    gate.note(limit(HubBucket::Api, 0, 60), now + Duration::from_secs(2));
+
+    assert_eq!(
+        gate.closed(HubBucket::Api, now),
+        Some(Duration::from_secs(62))
     );
 }
 
