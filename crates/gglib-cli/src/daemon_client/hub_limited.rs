@@ -5,8 +5,9 @@
 //! 429, the type `hub_rate_limited` and the seconds until the limit lifts:
 //! it does not hold the request while it waits. A call a one-shot command
 //! makes on the user's behalf waits them out, its status line counting
-//! down, and is sent again, at most [`LIMITED_IN_A_ROW`] times. Any other
-//! answer, a 429 of another type among them, is the call's own.
+//! down, and is sent again: it is sent at most [`LIMITED_IN_A_ROW`] times
+//! in all, so it waits at most one time fewer. Any other answer, a 429 of
+//! another type among them, is the call's own.
 
 use std::time::Duration;
 

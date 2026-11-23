@@ -36,7 +36,8 @@ nothing.
 `hub_limited.rs` sends a call again when the daemon answers that Hugging
 Face's rate limit refused a Hub read it needed (429, type
 `hub_rate_limited`): it waits the seconds the answer names, its status line
-counting down, at most five times. The daemon does not hold a request while
+counting down, and sends it again, five times in all at most, so it waits
+at most four times. The daemon does not hold a request while
 the limit lasts, so a one-shot command's call waits here; the queue of
 `gglib model download` goes through it. A 429 of any other type is the
 call's own.
