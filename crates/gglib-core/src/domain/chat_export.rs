@@ -125,8 +125,8 @@ impl ChatExport {
         format!("conversation-{}.json", self.conversation.id)
     }
 
-    /// The file's text: the export as indented JSON, two spaces a level,
-    /// as the page's `JSON.stringify(file, null, 2)` writes it.
+    /// The file's text: the export as indented JSON, two spaces a level.
+    /// The page and the command line both save this text as it is.
     ///
     /// # Panics
     ///
