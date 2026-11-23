@@ -107,9 +107,15 @@ impl ProxyOps {
         if let Err(e) = self.stop_unlocked().await {
             tracing::debug!("the switch's stop: {e}");
         }
+        // A refused bind is said as its fact, not as the status's "is off",
+        // since what follows says whether the endpoint is back. What was
+        // running was started here, which cleared any earlier reason, so a
+        // reason kept now is this start's.
         let refused = match self.start_unlocked(config, pin).await {
             Ok(address) => return Ok(address),
-            Err(refused) => reason(refused),
+            Err(refused) => self
+                .unbound()
+                .map_or_else(|| reason(refused), |why| why.fact()),
         };
         if self
             .start_unlocked(previous.config, previous.pin)

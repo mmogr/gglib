@@ -44,7 +44,8 @@ pub(crate) struct ProxyStatus {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub pinned_model_id: Option<i64>,
     /// Why the endpoint is off, while it is off because a start could not
-    /// bind its port: the port, and what holds it when that can be told.
+    /// bind it: a port that is taken, and what holds it when that can be
+    /// told, or the system's reason its address could not be opened.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub refused: Option<String>,

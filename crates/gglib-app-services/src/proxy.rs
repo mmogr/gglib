@@ -97,10 +97,11 @@ pub struct ProxyOps {
     /// Held across a start that may compare and switch, so two of them
     /// cannot interleave a stop and a start.
     switching: tokio::sync::Mutex<()>,
-    /// Why the last start did not bind, in words, until a start binds: the
-    /// reason an endpoint that should be on is off, the service's own launch
-    /// above all, which nobody is watching when it fails.
-    refused: std::sync::RwLock<Option<String>>,
+    /// Why the last start did not bind, until a start binds: the reason an
+    /// endpoint that should be on is off, the service's own launch above
+    /// all, which nobody is watching when it fails. Said by [`Self::refused`],
+    /// and by the refusal of the start that could not bind.
+    refused: std::sync::RwLock<Option<crate::proxy_refusal::Unbound>>,
 }
 
 impl ProxyOps {
@@ -266,7 +267,7 @@ impl ProxyOps {
         {
             tracing::debug!("could not put back the running endpoint's pin: {e}");
         }
-        started.map_err(Self::map_start_error)
+        started.map_err(|e| self.start_error(e))
     }
 
     /// Shared setup behind [`Self::start`] and [`Self::ensure_running`],
@@ -314,11 +315,17 @@ impl ProxyOps {
                 self.core.settings().repo(),
             )
             .await;
-        // A port another program holds is kept as the reason the endpoint is
-        // off, so every surface that shows the endpoint can say why; the
-        // next start that binds clears it.
-        if let Err(SupervisorError::BindFailed { address, .. }) = &started {
-            let why = crate::proxy_refusal::port_in_use(address).await;
+        // A bind refused, its port taken or its address one this machine
+        // cannot open, is kept as the reason the endpoint is off, so every
+        // surface that shows the endpoint can say why; the next start that
+        // binds clears it.
+        if let Err(SupervisorError::BindFailed {
+            address,
+            reason,
+            kind,
+        }) = &started
+        {
+            let why = crate::proxy_refusal::unbound(address, *kind, reason).await;
             *self
                 .refused
                 .write()
@@ -363,21 +370,20 @@ impl ProxyOps {
 
     /// Translate a [`SupervisorError`] into the [`GuiError`] a caller sees.
     ///
-    /// `BindFailed` maps to `Conflict`, not `Internal`: from the OS's
-    /// perspective the port is simply taken, which is exactly the shape of
-    /// error a caller can act on (stop the other process, or use a different
-    /// port) — the same category as `AlreadyRunning`, just discovered a layer
-    /// lower. It reads as "unexpected" only when nothing else was expected to
-    /// be listening there.
-    fn map_start_error(e: SupervisorError) -> GuiError {
+    /// `BindFailed` maps to `Conflict`, not `Internal`: a port another
+    /// program holds, or an address this machine cannot open, is something
+    /// a caller can act on, the same category as `AlreadyRunning`, just
+    /// discovered a layer lower. Its words are the status's own sentence,
+    /// which [`Self::start_raw`] kept under the lock the caller still holds,
+    /// so the refusal and the status say one thing.
+    fn start_error(&self, e: SupervisorError) -> GuiError {
         match e {
             SupervisorError::AlreadyRunning(addr) => {
                 GuiError::Conflict(format!("Proxy already running at {addr}"))
             }
-            SupervisorError::BindFailed { address, reason } => GuiError::Conflict(format!(
-                "Port {address} is already in use ({reason}) — likely another `gglib serve` \
-                 or `gglib proxy` process. Stop it, or change the proxy port in Settings."
-            )),
+            e @ SupervisorError::BindFailed { .. } => {
+                GuiError::Conflict(self.refused().unwrap_or_else(|| e.to_string()))
+            }
             SupervisorError::NotRunning => {
                 GuiError::Internal("Proxy not running (unexpected)".to_string())
             }
@@ -409,20 +415,21 @@ impl ProxyOps {
     /// # Errors
     ///
     /// Returns `GuiError::Internal` if settings cannot be loaded, and whatever
-    /// `map_start_error` produces if the proxy cannot start — a bind failure or
-    /// an already-running supervisor both surface as `GuiError::Conflict`.
+    /// `start_error` produces if the proxy cannot start — a bind failure, in
+    /// the status's own sentence, or an already-running supervisor both
+    /// surface as `GuiError::Conflict`.
     pub async fn ensure_running(&self) -> Result<SocketAddr, GuiError> {
         // Under the lock every start and stop takes, so it cannot land
         // between a switch's stop and its start.
         let _one = self.switching.lock().await;
         self.ensure_running_unlocked()
             .await?
-            .map_err(Self::map_start_error)
+            .map_err(|e| self.start_error(e))
     }
 
     /// [`Self::ensure_running`], with `switching` already held, and the
-    /// start's own failure untranslated, so a caller can tell a port another
-    /// program holds from the rest (`proxy_or_off.rs`). The outer error is
+    /// start's own failure untranslated, so a caller can tell a refused bind
+    /// from the rest (`proxy_or_off.rs`). The outer error is
     /// the settings that could not be read.
     async fn ensure_running_unlocked(
         &self,
@@ -493,17 +500,23 @@ impl ProxyOps {
             SupervisorError::AlreadyRunning(addr) => {
                 GuiError::Internal(format!("Proxy unexpectedly running at {addr}"))
             }
-            SupervisorError::BindFailed { address, reason } => {
-                GuiError::Internal(format!("Unexpected bind error at {address}: {reason}"))
-            }
+            SupervisorError::BindFailed {
+                address, reason, ..
+            } => GuiError::Internal(format!("Unexpected bind error at {address}: {reason}")),
             SupervisorError::Internal(msg) => GuiError::Internal(msg),
         })
     }
 
     /// Why the endpoint is off when a start could not bind it, until a start
-    /// does: the port, and what holds it when that can be told.
+    /// does: a port that is taken, and what holds it when that can be told,
+    /// or the system's reason the address could not be opened.
     #[must_use]
     pub fn refused(&self) -> Option<String> {
+        self.unbound().map(|why| why.off())
+    }
+
+    /// [`Self::refused`], as its parts.
+    fn unbound(&self) -> Option<crate::proxy_refusal::Unbound> {
         self.refused
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)

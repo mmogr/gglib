@@ -81,9 +81,15 @@ pub enum SupervisorError {
     #[error("Proxy is already running on {0}")]
     AlreadyRunning(SocketAddr),
 
-    /// Failed to bind to address.
+    /// Failed to bind to address: the system's reason, in its words and as
+    /// its kind, so a port another program holds (`AddrInUse`) can be told
+    /// from an address this machine does not have or may not open.
     #[error("Failed to bind to {address}: {reason}")]
-    BindFailed { address: String, reason: String },
+    BindFailed {
+        address: String,
+        reason: String,
+        kind: std::io::ErrorKind,
+    },
 
     /// Proxy is not running.
     #[error("Proxy is not running")]
@@ -230,6 +236,7 @@ impl ProxySupervisor {
                 .map_err(|e| SupervisorError::BindFailed {
                     address: bind_addr.clone(),
                     reason: e.to_string(),
+                    kind: e.kind(),
                 })?;
 
         let bound_addr = listener

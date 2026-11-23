@@ -108,8 +108,9 @@ chat model or a recycle between turns makes the next request load it again,
 and a reply waiting behind an image render waits in the endpoint's queue,
 saying nothing. A key the endpoint does not admit (changed within its
 settings cache's window) fails the run in this machine's own words
-(`Door::key_refused`); an endpoint whose port another process holds fails
-it `conflict` with the endpoint's reason; a pinned endpoint (`gglib serve`)
+(`Door::key_refused`); an endpoint that cannot bind (its port taken, or an
+address this machine cannot open) fails it `conflict` in the sentence the
+endpoint's status says; a pinned endpoint (`gglib serve`)
 refuses a turn on another model with its `pinned_model_mismatch`. A
 cancelled run drops the reply it is reading, so the endpoint ends that
 request and lets go of the model.

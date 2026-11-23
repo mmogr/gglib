@@ -166,7 +166,10 @@ impl Opened {
         let run = self.state.runs.existing(scope, id).unwrap().unwrap();
         assert_eq!(run.status, RunStatus::Failed);
         let message = run.error.unwrap().message;
-        assert!(message.contains("already in use"), "{message}");
+        assert!(
+            message.contains("is in use by another program"),
+            "{message}"
+        );
     }
 }
 
