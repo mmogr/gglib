@@ -74,7 +74,9 @@ independently readable:
 A chat's limits and Thinking choice are the daemon's to resolve, by the
 rules it resolves the chat page's turns by: `--max-tool-iterations` is saved
 with the chat, and `--thinking on|off` is said on each of the session's
-turns, which the daemon remembers on the chat.
+turns, which the daemon remembers on the chat. A `--max-tool-iterations`
+above the most steps a run takes is saved as that most, and a line on stderr
+says so.
 
 One thing is asked of the daemon before anything is stored. `--continue`
 on a chat the daemon is still replying to, for the page or a paired

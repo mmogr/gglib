@@ -197,6 +197,12 @@ itself differs per backend: `Rect` exists only where click events carry one,
 `Point` only where SNI reports activation coordinates. Show panel, a menu
 entry, reports `Unknown`, because no gesture located the icon, and the startup anchor stands.
 
+On macOS and Windows the panel is centred under the icon's `rect`, kept
+between the monitor's left and right edges, and put above the icon when below
+would cross the monitor's bottom edge, as on a bottom-of-screen taskbar.
+`placement::panel_origin` does those sums, pure and tested on every system,
+against the whole monitor as `current_monitor` reports it, not its work area.
+
 Guessing is deliberately avoided. `cursor_position` looks like a fallback but
 returns `(0, 0)` on Wayland rather than failing, so anchoring to it would fling
 the panel into the corner of the screen.

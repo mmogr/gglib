@@ -13,7 +13,7 @@ use anyhow::{Result, anyhow};
 use gglib_core::domain::hub_chats::LocalTurn;
 
 use crate::bootstrap::CliContext;
-use crate::conversation_settings::ConversationSettingsBuilder;
+use crate::conversation_settings::{ConversationSettingsBuilder, step_limit};
 use crate::daemon_client;
 use crate::dispatch::AlreadySaid;
 use crate::handlers::agent_chat::files::{self, Chat};
@@ -159,8 +159,10 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         sampling,
         profile,
     } = args;
+    let mut receipts = io::stderr();
+    let max_iterations = step_limit(max_iterations, &mut receipts)?;
     // A file that cannot be attached ends the command before any model lookup.
-    let (attachments, mut receipts) = (ctx.app.attachments(), io::stderr());
+    let attachments = ctx.app.attachments();
     let mut images = TurnImages::attach(attachments, &images, quiet, &mut receipts).await?;
 
     // If no model was specified, look up the default from settings
