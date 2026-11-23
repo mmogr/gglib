@@ -1,7 +1,10 @@
 //! The REPL's `/image` command: what counts as it, what it attaches, what
 //! it answers, and the marker a stored image is shown by.
 
-use super::images_tests::{attached, file, png, service};
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
+
+use super::images_tests::{attached, drawn_attached, file, png, service};
 use super::*;
 
 #[test]
@@ -71,6 +74,29 @@ async fn the_image_command_names_a_file_it_cannot_attach_and_attaches_nothing() 
             .starts_with(&format!("image '{}': ", path.display()))
     );
     assert!(images.take().is_empty());
+}
+
+#[tokio::test]
+async fn the_image_command_draws_the_image_under_its_receipt_and_nothing_under_a_refusal() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let bytes = png(16, 16);
+    let (path, text) = (file(&dir, "dot.png", &bytes), file(&dir, "a.txt", b"text"));
+    let (service, _) = service();
+    let (mut images, _) = drawn_attached(&service, &[], false, Some(Inline::Kitty))
+        .await
+        .unwrap();
+
+    let reply = images.command(&format!("/image {}", path.display())).await;
+    let refusal = images.command(&format!("/image {}", text.display())).await;
+
+    // The line the picture ends is the one the reply is printed with.
+    let encoded = STANDARD.encode(&bytes);
+    assert_eq!(
+        reply.unwrap(),
+        format!("  image dot.png: 16x16, ~1 tokens\n  \x1b_Ga=T,f=100,q=2,c=2,m=0;{encoded}\x1b\\")
+    );
+    assert!(!refusal.unwrap().contains('\x1b'));
+    assert_eq!(images.command("/image").await.as_deref(), Some(USAGE));
 }
 
 #[tokio::test]

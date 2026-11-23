@@ -1,9 +1,10 @@
 //! Tests for [`super::measured_len`], and for what
 //! [`truncate_history`](super::super::truncation::truncate_history) does to
-//! a request with images once it measures them this way.
+//! a request with images or audio once it measures them this way.
 
 use serde_json::json;
 
+use super::super::audio::AUDIO_PART_TOKENS;
 use super::super::image_fixtures::png_url_of;
 use super::super::images::MAX_IMAGE_TOKENS;
 use super::super::tests_support::chars;
@@ -207,4 +208,103 @@ fn an_image_in_a_message_that_is_kept_survives_trimming_byte_for_byte() {
         request["messages"][1]["content"][1]["image_url"]["url"],
         small
     );
+}
+
+/// An 8,192-token context at the static ratio.
+const CONTEXT_8K: ContextBudget = ContextBudget {
+    chars: 32_768,
+    tokens: 8_192,
+};
+
+/// The base64 of a wav clip of about 3 MB: 4 MB as text.
+fn clip() -> String {
+    let data = format!("UklGRiQAAABXQVZF{}", "A".repeat(4_000_000));
+    assert!(data.len() > 4_000_000);
+    data
+}
+
+fn audio_part(data: &str) -> Value {
+    json!({"type": "input_audio", "input_audio": {"data": data, "format": "wav"}})
+}
+
+fn user_with_audio(text: &str, data: &str) -> Value {
+    json!({"role": "user", "content": [{"type": "text", "text": text}, audio_part(data)]})
+}
+
+#[test]
+fn an_audio_clip_is_counted_at_its_stand_in_in_place_of_its_base64() {
+    let data = clip();
+    let body = body(&[user_with_audio("what is said here?", &data)]);
+    let without_data = wire_len(&body) - data.len();
+
+    assert_eq!(
+        measured_len(&body, CONTEXT_32K),
+        without_data + AUDIO_PART_TOKENS * 4
+    );
+    // The same clip under a learned ratio of 3.3 characters a token.
+    let learned = ContextBudget {
+        chars: 99_000,
+        tokens: 30_000,
+    };
+    assert_eq!(measured_len(&body, learned), without_data + 1_690);
+}
+
+/// A 4 MB clip is a hundred and twenty times an 8k context by its length.
+/// It is forwarded whole.
+#[test]
+fn a_clip_of_megabytes_under_an_8k_context_is_kept_whole_and_not_refused() {
+    let data = clip();
+    let mut request = body(&[user_with_audio("what is said here?", &data)]);
+    let before = request.clone();
+    assert!(wire_len(&request) > CONTEXT_8K.chars * 100);
+
+    let report = truncate_history(&mut request, CONTEXT_8K).expect("it fits by its stand-in");
+
+    assert_eq!(request, before, "nothing is trimmed");
+    assert_eq!(report.messages_truncated, 0);
+    assert!(report.payload_chars_before < CONTEXT_8K.chars, "{report:?}");
+}
+
+/// The control: the same base64 as text is what it looks like, and is
+/// refused.
+#[test]
+fn the_same_base64_as_text_is_refused() {
+    let data = clip();
+    let mut request = body(&[user_with(&data, &[])]);
+
+    let err = truncate_history(&mut request, CONTEXT_8K).unwrap_err();
+
+    let TruncationError::ExceedsBudgetAfterTruncation { payload_chars, .. } = err;
+    assert!(payload_chars > 4_000_000);
+}
+
+/// Trimming an older tool result leaves a clip in an older message, and one
+/// beside the elided text, the bytes the client sent.
+#[test]
+fn a_clip_in_an_older_message_survives_trimming_byte_for_byte() {
+    let data = clip();
+    let small = "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjMuMTAw";
+    let mut messages = vec![
+        user_with_audio("first, this recording", &data),
+        json!({"role": "tool", "tool_call_id": "c1", "content": [
+            {"type": "text", "text": "x".repeat(60_000)},
+            {"type": "input_audio", "input_audio": {"data": small, "format": "mp3"}},
+        ]}),
+    ];
+    messages.extend((0..PROTECTED_TAIL_COUNT).map(|_| json!({"role": "user", "content": "ok"})));
+    let mut request = body(&messages);
+    let before = request.clone();
+
+    let report = truncate_history(&mut request, chars(40_000)).expect("trimmed to fit");
+
+    assert_eq!(report.messages_truncated, 1);
+    assert_eq!(
+        request["messages"][1]["content"][0]["text"],
+        TOOL_TRUNCATION_PLACEHOLDER
+    );
+    assert_eq!(
+        request["messages"][1]["content"][1],
+        before["messages"][1]["content"][1]
+    );
+    assert_eq!(request["messages"][0], before["messages"][0]);
 }

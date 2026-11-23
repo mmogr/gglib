@@ -108,7 +108,7 @@ describe("ChatPlace, the title ▾", () => {
     expect(item).toHaveAttribute('title', 'Start a server to generate titles');
   });
 
-  it('Export reads the saved thread and hands it over as a file', async () => {
+  it("Export asks the daemon for the chat's file and hands it over", async () => {
     const user = userEvent.setup();
     const made = vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:export');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -118,7 +118,7 @@ describe("ChatPlace, the title ▾", () => {
     await fromTitleMenu(user, 'Export');
 
     await waitFor(() => expect(clicked).toHaveBeenCalledTimes(1));
-    expect(call('getThread')).toHaveBeenCalledWith(1);
+    expect(call('exportConversation')).toHaveBeenCalledWith(1);
     expect(made).toHaveBeenCalledTimes(1);
   });
 

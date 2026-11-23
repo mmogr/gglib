@@ -89,8 +89,10 @@ async fn each_runtime_runs_its_own_binary() {
         .collect();
     listed.sort_unstable_by_key(|(id, _)| *id);
 
-    core.kill(SD).await.ok();
-    core.kill(LLAMA).await.ok();
+    core.kill(SD, crate::process::StopReason::Asked).await.ok();
+    core.kill(LLAMA, crate::process::StopReason::Asked)
+        .await
+        .ok();
     delete_pidfile(SD_ID).ok();
     delete_pidfile(LLAMA_ID).ok();
 

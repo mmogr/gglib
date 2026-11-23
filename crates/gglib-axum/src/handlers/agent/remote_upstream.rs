@@ -82,8 +82,9 @@ async fn launched_context(
 ///
 /// # Errors
 ///
-/// `conflict` (409) with the endpoint's own reason when it cannot be turned
-/// on (its port held by another process); `invalid_request` (400) naming
+/// `conflict` (409) when it cannot be turned on (its port taken, or an
+/// address this machine cannot open), in the sentence its status says;
+/// `invalid_request` (400) naming
 /// that it is off, should it stop between the two; `internal_error` (500)
 /// when the settings that hold its key cannot be read.
 pub(super) async fn this_machines_door(state: &AppState) -> Result<Door, HttpError> {

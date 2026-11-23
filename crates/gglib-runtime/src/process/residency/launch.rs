@@ -31,10 +31,11 @@ use super::spawned_child::{LIVENESS_TICK, SpawnedChild};
 use super::vram;
 use crate::launch_narration::NarrationInputs;
 use crate::llama::args::{CacheRamResolution, KvCacheTypeResolution, SlotRestoreResolution};
-use crate::process::SpawnConfig;
 use crate::process::admission::{AdmissionQueue, PRIMARY_SLOT, Resident};
 use crate::process::core::GuiProcessCore;
+use crate::process::exit_report;
 use crate::process::health::wait_for_http_health;
+use crate::process::{SpawnConfig, StopReason};
 use crate::sd::SdServerConfig;
 use crate::server_config::{ResolvedCapabilities, build_server_config_narrated};
 
@@ -229,7 +230,7 @@ async fn launch(
         // unload is announced here, before the kill, as a stop announces one.
         observer.unloaded(*model_id);
         let mut core_w = core.write().await;
-        if let Err(e) = core_w.kill(*model_id).await {
+        if let Err(e) = core_w.kill(*model_id, StopReason::Replaced).await {
             warn!(error = %e, "Failed to stop displaced model cleanly, continuing");
         }
     }
@@ -326,6 +327,9 @@ async fn launch(
             .spawn(config)
             .map_err(|e| failed(not_started(&e, runtime, &binary)))?;
         let output = core_w.output_of(spec.id).unwrap_or_default();
+        // So an exit nobody asked for is in gglib's log when it happens,
+        // whether the launch is still waiting or the model has long served.
+        exit_report::watch(core, spec.id, pid, output.clone());
         (port, pid, SpawnedChild::arm(core, spec.id, pid), output)
     };
 

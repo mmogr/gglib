@@ -84,6 +84,8 @@ gglib-test-proc = { workspace = true }
 # The in-process engine the contract recorder asks what it asks the pinned
 # llama-server, on loopback.
 gglib-engine-llama = { workspace = true }
+# A log a test reads back: what gglib's log says when a server stops.
+tracing-subscriber = { workspace = true }
 
 [lints]
 workspace = true

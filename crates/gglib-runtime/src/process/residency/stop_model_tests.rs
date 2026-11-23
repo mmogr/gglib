@@ -169,7 +169,11 @@ async fn stopping_an_image_model_mid_render_leaves_the_slots_next_model_its_requ
             }
             let held = queue.slot(1).map(|r| (r.model_id, r.inflight));
             let kill = async {
-                core.write().await.kill(RENDERING_ID).await.unwrap();
+                core.write()
+                    .await
+                    .kill(RENDERING_ID, crate::process::StopReason::Asked)
+                    .await
+                    .unwrap();
             };
             queue.retire_render(turn, RENDERING_ID, kill).await;
             held

@@ -291,7 +291,13 @@ async fn a_running_sd_server_is_listed_with_its_runtime() {
         .into_iter()
         .map(|handle| handle.runtime)
         .collect();
-    manager.core.write().await.kill(SD_ID).await.ok();
+    manager
+        .core
+        .write()
+        .await
+        .kill(SD_ID, crate::process::StopReason::Asked)
+        .await
+        .ok();
     crate::pidfile::delete_pidfile(i64::from(SD_ID)).ok();
 
     assert_eq!(listed, [RuntimeKind::StableDiffusion]);
@@ -381,6 +387,18 @@ async fn the_server_list_carries_each_residents_launch_facts() {
         .expect("listed");
     assert!(without.launch.is_none(), "no resident, no facts");
 
-    manager.core.write().await.kill(999_641).await.unwrap();
-    manager.core.write().await.kill(999_642).await.unwrap();
+    manager
+        .core
+        .write()
+        .await
+        .kill(999_641, crate::process::StopReason::Asked)
+        .await
+        .unwrap();
+    manager
+        .core
+        .write()
+        .await
+        .kill(999_642, crate::process::StopReason::Asked)
+        .await
+        .unwrap();
 }

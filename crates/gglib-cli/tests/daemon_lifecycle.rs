@@ -1,53 +1,173 @@
 //! End-to-end daemon lifecycle tests against the real `gglib` binary.
 //!
-//! Ignored by default: the daemon binds the fixed loopback port (9887 by
-//! design — see `gglib_core::daemon_port`), so these tests contend with any
-//! daemon already running on the machine. Run them explicitly with
-//! `cargo test -p gglib-cli --test daemon_lifecycle -- --ignored` on a
-//! machine with no daemon up. Data is isolated via `GGLIB_DATA_DIR`; the
-//! port cannot be.
+//! Each test's daemon runs over a data folder and a daemon port of the
+//! test's own (`GGLIB_DATA_DIR`, `GGLIB_DAEMON_PORT`), with its endpoint
+//! kept off, and the test asks only that port for `/health`. So no test
+//! reaches another test's daemon or one already running on the machine.
 
 #[path = "support/data_dir.rs"]
 mod data_dir;
 
 use gglib_core::utils::process::cmd;
-use std::process::{Child, Command, Stdio};
+use gglib_core::utils::process::test_stop::{ask_to_stop, stoppable};
+use std::io::Read;
+use std::path::Path;
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
+
+/// How long a daemon has to answer `/health`, and to exit once stopped:
+/// well past what it takes, so a slow CI runner does not fail the test.
+const BUDGET: Duration = Duration::from_secs(30);
 
 fn gglib() -> Command {
     cmd(env!("CARGO_BIN_EXE_gglib"))
 }
 
-/// `gglib daemon run` over `data_dir`, with its endpoint kept off
-/// ([`data_dir::keep_the_endpoint_off`]).
-fn spawn_daemon(data_dir: &std::path::Path) -> Child {
-    data_dir::keep_the_endpoint_off(data_dir);
-    let mut cmd = gglib();
-    cmd.args(["daemon", "run"])
-        .env("GGLIB_DATA_DIR", data_dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    cmd.spawn().expect("spawning gglib daemon run")
+/// A data folder with its endpoint kept off
+/// ([`data_dir::keep_the_endpoint_off`]), and a port nothing answered on
+/// when it was picked, for this test's daemons.
+struct Place {
+    dir: tempfile::TempDir,
+    port: u16,
 }
 
-fn wait_for_health(budget: Duration) -> bool {
-    let deadline = Instant::now() + budget;
-    while Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(250));
-        if let Ok(body) = ureq_get_health()
-            && body.contains("gglib-daemon")
-        {
-            return true;
+impl Place {
+    fn new() -> Self {
+        let dir = tempfile::tempdir().expect("a data folder");
+        data_dir::keep_the_endpoint_off(dir.path());
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port")
+            .port();
+        Self { dir, port }
+    }
+
+    fn data(&self) -> &Path {
+        self.dir.path()
+    }
+
+    /// `command`, a command for the `gglib` binary, as `gglib daemon run`
+    /// over this data folder and port.
+    fn daemon_run(&self, mut command: Command) -> Command {
+        command
+            .args(["daemon", "run"])
+            .env("GGLIB_DATA_DIR", self.data())
+            .env("GGLIB_DAEMON_PORT", self.port.to_string())
+            .stdin(Stdio::null());
+        command
+    }
+
+    /// Start `gglib daemon run` here and wait until it answers `/health`.
+    fn start(&self) -> Daemon {
+        self.start_from(gglib())
+    }
+
+    /// [`Self::start`], from `command`, a command for the `gglib` binary.
+    fn start_from(&self, command: Command) -> Daemon {
+        let mut daemon = Daemon::start(self.daemon_run(command));
+        daemon.wait_until_up(self.port);
+        daemon
+    }
+}
+
+/// A running `gglib daemon run`, its stderr read on a thread of its own so
+/// the pipe never fills. Dropping it kills the daemon, so a failed test
+/// leaves none running.
+struct Daemon {
+    child: Child,
+    stderr: Option<JoinHandle<String>>,
+}
+
+impl Daemon {
+    fn start(mut command: Command) -> Self {
+        let mut child = command
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("gglib daemon run starts");
+        let mut pipe = child.stderr.take().expect("its stderr");
+        let stderr = std::thread::spawn(move || {
+            let mut text = String::new();
+            let _ = pipe.read_to_string(&mut text);
+            text
+        });
+        Self {
+            child,
+            stderr: Some(stderr),
         }
     }
-    false
+
+    /// Wait until the daemon answers `/health` on `port`, as a daemon.
+    ///
+    /// # Panics
+    ///
+    /// When it exits first, or does not answer within [`BUDGET`], with what
+    /// it wrote to stderr.
+    fn wait_until_up(&mut self, port: u16) {
+        let deadline = Instant::now() + BUDGET;
+        loop {
+            if let Some(status) = self.child.try_wait().expect("its status") {
+                panic!("the daemon exited with {status}: {}", self.stderr());
+            }
+            if health(port).is_ok_and(|body| body.contains("gglib-daemon")) {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the daemon never answered on {port}: {}",
+                self.stderr()
+            );
+            std::thread::sleep(Duration::from_millis(250));
+        }
+    }
+
+    /// Wait until the daemon exits, after `asked`.
+    ///
+    /// # Panics
+    ///
+    /// When it has not exited within [`BUDGET`], with what it wrote to
+    /// stderr.
+    fn wait_for_exit(&mut self, asked: &str) -> ExitStatus {
+        let deadline = Instant::now() + BUDGET;
+        loop {
+            if let Some(status) = self.child.try_wait().expect("its status") {
+                return status;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the daemon did not exit after {asked}: {}",
+                self.stderr()
+            );
+            std::thread::sleep(Duration::from_millis(250));
+        }
+    }
+
+    /// What the daemon wrote to stderr, once it has exited, killing it first
+    /// if it has not. The daemon starts no other program here, so its
+    /// stderr closes when it exits.
+    fn stderr(&mut self) -> String {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        self.stderr
+            .take()
+            .and_then(|reader| reader.join().ok())
+            .unwrap_or_default()
+    }
 }
 
-/// Plain-std HTTP GET of /health — no client crate needed for one probe.
-fn ureq_get_health() -> std::io::Result<String> {
-    use std::io::{Read, Write};
-    let mut stream = std::net::TcpStream::connect(("127.0.0.1", gglib_core::daemon_port()))?;
+impl Drop for Daemon {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Plain-std HTTP GET of /health on `port`, no client crate needed for one
+/// probe.
+fn health(port: u16) -> std::io::Result<String> {
+    use std::io::Write;
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port))?;
     stream.set_read_timeout(Some(Duration::from_millis(500)))?;
     stream.write_all(b"GET /health HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")?;
     let mut response = String::new();
@@ -58,18 +178,12 @@ fn ureq_get_health() -> std::io::Result<String> {
 /// The singleton guarantee, end to end: a second `gglib daemon run` refuses
 /// to start while the first holds the lock, and names the running daemon.
 #[test]
-#[ignore = "binds the fixed daemon port; run explicitly on a machine with no daemon up"]
 fn a_second_daemon_refuses_to_start() {
-    let dir = tempfile::tempdir().unwrap();
-    let mut first = spawn_daemon(dir.path());
-    assert!(
-        wait_for_health(Duration::from_secs(15)),
-        "daemon never came up"
-    );
+    let place = Place::new();
+    let _first = place.start();
 
-    let second = gglib()
-        .args(["daemon", "run"])
-        .env("GGLIB_DATA_DIR", dir.path())
+    let second = place
+        .daemon_run(gglib())
         .output()
         .expect("running second daemon");
     assert!(
@@ -81,55 +195,33 @@ fn a_second_daemon_refuses_to_start() {
         stderr.contains("already running"),
         "refusal must name the running daemon: {stderr}"
     );
-
-    let _ = first.kill();
-    let _ = first.wait();
 }
 
-/// SIGTERM produces a clean, bounded exit: the ordered teardown runs (no
-/// force-exit), and the lock is released so the next daemon can start.
+/// An orderly stop produces a clean, bounded exit: the ordered teardown
+/// runs (no force-exit), and the lock is released so the next daemon can
+/// start. The stop is what a service manager or a terminal sends: SIGTERM
+/// on macOS and Linux, Ctrl-Break on Windows ([`ask_to_stop`]).
 #[test]
-#[ignore = "binds the fixed daemon port; run explicitly on a machine with no daemon up"]
-// Unix only: SIGTERM is a signal.
-#[cfg(unix)]
-fn sigterm_shuts_the_daemon_down_cleanly() {
-    let dir = tempfile::tempdir().unwrap();
-    let mut daemon = spawn_daemon(dir.path());
-    assert!(
-        wait_for_health(Duration::from_secs(15)),
-        "daemon never came up"
-    );
+fn an_orderly_stop_shuts_the_daemon_down_cleanly() {
+    let place = Place::new();
+    let mut daemon = place.start_from(stoppable(env!("CARGO_BIN_EXE_gglib")));
 
-    // SIGTERM — what a service manager sends.
-    send_sigterm(daemon.id());
-
-    let deadline = Instant::now() + Duration::from_secs(15);
-    let status = loop {
-        if let Some(status) = daemon.try_wait().unwrap() {
-            break status;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "daemon did not exit after SIGTERM"
-        );
-        std::thread::sleep(Duration::from_millis(250));
+    let stop = if cfg!(windows) {
+        "Ctrl-Break"
+    } else {
+        "SIGTERM"
     };
-    assert!(status.success(), "teardown must exit cleanly, got {status}");
+    ask_to_stop(&daemon.child).unwrap_or_else(|e| panic!("{stop} was not sent: {e}"));
+
+    let status = daemon.wait_for_exit(stop);
+    assert!(
+        status.success(),
+        "teardown after {stop} must exit cleanly, got {status}: {}",
+        daemon.stderr()
+    );
 
     // The lock is free again: a new daemon can start immediately.
-    let mut next = spawn_daemon(dir.path());
-    assert!(
-        wait_for_health(Duration::from_secs(15)),
-        "restart after SIGTERM failed — lock not released?"
-    );
-    let _ = next.kill();
-    let _ = next.wait();
-}
-
-/// Send SIGTERM via the `kill` binary — no libc dependency for one signal.
-#[cfg(unix)]
-fn send_sigterm(pid: u32) {
-    let _ = cmd("kill").args(["-15", &pid.to_string()]).status();
+    let _next = place.start();
 }
 
 /// What every test that starts a real service stores first: the endpoint

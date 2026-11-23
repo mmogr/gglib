@@ -132,7 +132,11 @@ async fn an_engine_known_not_to_work_is_refused_before_anything_starts() {
         .expect_err("an engine known not to work is refused");
 
     let ran = last_run(&argv);
-    core.write().await.kill(REFUSED_ID).await.ok();
+    core.write()
+        .await
+        .kill(REFUSED_ID, crate::process::StopReason::Asked)
+        .await
+        .ok();
     // The refusal's kind is what says nothing was started: a server that
     // was started and then exited would be `Stopped`, whenever it is read.
     let ModelRuntimeError::LoadFailed(failure) = &refusal else {
@@ -206,7 +210,11 @@ async fn a_refusal_leaves_the_loaded_model_running() {
         .residents()
         .iter()
         .any(|(_, r)| r.model_id == RESIDENT_ID);
-    core.write().await.kill(RESIDENT_ID).await.ok();
+    core.write()
+        .await
+        .kill(RESIDENT_ID, crate::process::StopReason::Asked)
+        .await
+        .ok();
     assert!(
         matches!(refusal, ModelRuntimeError::LoadFailed(_)),
         "{refusal:?}"
@@ -347,7 +355,9 @@ async fn an_exit_reaped_by_another_launch_is_still_read() {
 
     let exit = core.exited(REAPED_ID);
     let other_running = !core.has_exited(OTHER_ID);
-    core.kill(OTHER_ID).await.ok();
+    core.kill(OTHER_ID, crate::process::StopReason::Asked)
+        .await
+        .ok();
 
     assert!(
         matches!(exit, Some(crate::process::core::Exit::Status(status)) if status.code() == Some(3)),
@@ -382,7 +392,11 @@ async fn an_engine_mended_since_it_was_found_not_working_is_started() {
         .to_string();
 
     let ran = last_run(&argv);
-    core.write().await.kill(MENDED_ID).await.ok();
+    core.write()
+        .await
+        .kill(MENDED_ID, crate::process::StopReason::Asked)
+        .await
+        .ok();
     assert!(
         ran.iter().any(|arg| arg == "--port"),
         "a mended engine is started: {ran:?}"
@@ -407,7 +421,11 @@ async fn a_server_that_stops_while_loading_says_why() {
         .expect_err("a server that exits does not load")
         .to_string();
 
-    core.write().await.kill(STOPPED_ID).await.ok();
+    core.write()
+        .await
+        .kill(STOPPED_ID, crate::process::StopReason::Asked)
+        .await
+        .ok();
     // Kept for this model, by its id, as it failed: what the daemon's proof
     // reads for `gglib up`. No other model's is.
     let kept = set.last_load_failure(STOPPED_ID).expect("kept");
@@ -461,7 +479,11 @@ async fn a_server_never_ready_says_so_and_what_it_printed_last() {
     .expect_err("a server never ready does not load")
     .to_string();
 
-    core.write().await.kill(NEVER_READY_ID).await.ok();
+    core.write()
+        .await
+        .kill(NEVER_READY_ID, crate::process::StopReason::Asked)
+        .await
+        .ok();
     assert!(failure.contains("not ready within 8 s"), "{failure}");
     assert!(
         failure.contains("load_tensors: loading model tensors, this can take a while..."),

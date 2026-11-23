@@ -7,7 +7,6 @@ use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::types::{
     HfModelSummary, HfPickResponse, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
-    ToolSupportResponse,
 };
 
 /// Search `HuggingFace` for GGUF models.
@@ -35,14 +34,6 @@ pub(crate) async fn pick(
     Path(model_id): Path<String>,
 ) -> Result<Json<HfPickResponse>, HttpError> {
     Ok(Json(state.downloads.get_model_pick(&model_id).await?))
-}
-
-/// Check if a model supports tool/function calling.
-pub(crate) async fn tool_support(
-    State(state): State<AppState>,
-    Path(model_id): Path<String>,
-) -> Result<Json<ToolSupportResponse>, HttpError> {
-    Ok(Json(state.downloads.get_hf_tool_support(&model_id).await?))
 }
 
 /// Get model summary by exact repo ID (direct API lookup).

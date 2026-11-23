@@ -62,8 +62,9 @@ pub(crate) async fn stop(app: &AppHandle) -> Result<(), String> {
 /// thread.
 ///
 /// The menus' one Turn On / Off item, labelled from the same snapshot this
-/// reads. A failed turn-on is put on screen in the daemon's words ("Port 8080
-/// is already in use …" names the fix); a failed turn-off is only logged,
+/// reads. A failed turn-on is put on screen in the daemon's words ("The
+/// endpoint is off: port 8080 is in use by another program. Stop it, or
+/// choose another port …" names the fix); a failed turn-off is only logged,
 /// since the stop route is idempotent and a failure there means the endpoint
 /// is already gone.
 pub(crate) fn spawn_switch(app: &AppHandle) {

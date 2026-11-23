@@ -59,7 +59,11 @@ async fn dropping_an_armed_guard_stops_the_child() {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
     // Leave nothing behind before failing.
-    core.write().await.kill(ARMED_ID).await.ok();
+    core.write()
+        .await
+        .kill(ARMED_ID, crate::process::StopReason::Asked)
+        .await
+        .ok();
     panic!("an armed guard must stop the child it owns");
 }
 
@@ -78,7 +82,11 @@ async fn a_disarmed_guard_leaves_the_child_alone() {
     let survived = core.read().await.count();
 
     // Always clean up: `kill` stops the child and removes its pidfile.
-    core.write().await.kill(DISARMED_ID).await.ok();
+    core.write()
+        .await
+        .kill(DISARMED_ID, crate::process::StopReason::Asked)
+        .await
+        .ok();
 
     assert_eq!(survived, 1, "a disarmed guard must not stop the child");
 }
@@ -139,7 +147,11 @@ async fn a_cancelled_launch_still_stops_the_child() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
-    core.write().await.kill(CANCELLED_ID).await.ok();
+    core.write()
+        .await
+        .kill(CANCELLED_ID, crate::process::StopReason::Asked)
+        .await
+        .ok();
     panic!("a cancelled launch must still stop its child");
 }
 
@@ -157,7 +169,7 @@ async fn a_guard_does_not_stop_a_replacement_process() {
     // exactly as a retry would.
     core.write()
         .await
-        .kill(ABA_ID)
+        .kill(ABA_ID, crate::process::StopReason::Asked)
         .await
         .expect("kill original");
     let (_, replacement_pid) = core.write().await.spawn(config).expect("respawn");
@@ -170,7 +182,11 @@ async fn a_guard_does_not_stop_a_replacement_process() {
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
     let survived = core.read().await.count();
-    core.write().await.kill(ABA_ID).await.ok();
+    core.write()
+        .await
+        .kill(ABA_ID, crate::process::StopReason::Asked)
+        .await
+        .ok();
     assert_eq!(
         survived, 1,
         "the guard must not stop a process it never owned"

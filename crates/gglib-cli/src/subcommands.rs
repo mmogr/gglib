@@ -23,6 +23,23 @@ pub enum ChatCommand {
         #[arg(short = 'n', long, default_value = "20")]
         limit: usize,
     },
+    /// Write a conversation to a JSON file, its images in it, as the chat
+    /// page's Export does
+    ///
+    /// The file is the one the page saves: the conversation, and every saved
+    /// message with each image's bytes beside its info as a `data:` URL.
+    /// Without a path it is saved as `conversation-<ID>.json` here; a
+    /// directory saves it there by that name. An existing file is not
+    /// replaced without `--force`.
+    Export {
+        /// The conversation's ID, as `gglib chat history` lists it
+        id: i64,
+        /// File or directory to write it to
+        path: Option<std::path::PathBuf>,
+        /// Replace the file if it exists
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 /// Subcommands available under `gglib attachment`.

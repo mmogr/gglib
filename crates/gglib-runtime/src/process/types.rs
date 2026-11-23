@@ -49,6 +49,9 @@ pub struct RunningProcess {
     pub child: Child,
     /// The last lines it printed, which a launch that fails reads.
     pub(crate) output: OutputTail,
+    /// Whether gglib's log has said how it stopped (`exit_report`), so it
+    /// is said once.
+    pub(crate) told: bool,
 }
 
 impl RunningProcess {
@@ -57,6 +60,7 @@ impl RunningProcess {
             info,
             child,
             output: OutputTail::default(),
+            told: false,
         }
     }
 }

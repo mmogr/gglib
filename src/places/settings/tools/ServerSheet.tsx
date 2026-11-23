@@ -62,9 +62,6 @@ function fieldsOf(editing: McpServerInfo | undefined): Fields {
 function refusal(fields: Fields): string | null {
   if (!fields.name.trim()) return 'A server needs a name';
   if (!fields.command.trim()) return 'A server needs a command';
-  if (fields.command.trim().includes(' ')) {
-    return 'Command is one executable, such as npx; its arguments go in Arguments';
-  }
   return null;
 }
 
@@ -156,7 +153,7 @@ export const ServerSheet: FC<ServerSheetProps> = ({ editing, onClose, onSave }) 
         <Field id="mcp-name" label="Name">
           <Input id="mcp-name" value={fields.name} onChange={(e) => set({ name: e.target.value })} placeholder="My tool server" disabled={saving} />
         </Field>
-        <Field id="mcp-command" label="Command" hint="One executable, found on PATH: npx, python3, node.">
+        <Field id="mcp-command" label="Command" hint="One executable, found on PATH (npx, python3, node), or its full path.">
           <Input id="mcp-command" value={fields.command} onChange={(e) => set({ command: e.target.value })} placeholder="npx" disabled={saving} />
         </Field>
         <Field id="mcp-args" label="Arguments" hint="Separated by spaces.">

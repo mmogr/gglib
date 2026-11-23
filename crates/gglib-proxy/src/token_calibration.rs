@@ -114,9 +114,10 @@ impl TokenCalibration {
     /// Fold one observation into `model`'s rolling ratio.
     ///
     /// `payload_chars` is the size of the body actually forwarded upstream,
-    /// or `None` for a request that carried an image: an image's tokens come
-    /// from its pixels, so such a request's characters say nothing about the
-    /// tokenizer and it is ignored. `prompt_tokens` is the count llama.cpp
+    /// or `None` for a request that carried an image or an audio clip: an
+    /// image's tokens come from its pixels and a clip's from its length in
+    /// time, so such a request's characters say nothing about the tokenizer
+    /// and it is ignored. `prompt_tokens` is the count llama.cpp
     /// reported for it; a zero count is ignored, and an out-of-range ratio is
     /// clamped.
     pub(crate) fn record(&self, model: &str, payload_chars: Option<usize>, prompt_tokens: u32) {

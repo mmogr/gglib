@@ -109,7 +109,6 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `GET` | `/api/models/hf/model/{*model_id}` | One `HuggingFace` repo's summary, by its `owner/repo` id |
 | `GET` | `/api/models/hf/quantizations/{model_id}` | The quantizations a repo offers, `picked` on the one a download takes when their heads tell it |
 | `GET` | `/api/models/hf/pick/{model_id}` | The quantization a download without one takes, as the download picks it (`label`, `null` for a repo with no model); slower than the listing |
-| `GET` | `/api/models/hf/tool-support/{model_id}` | Whether a repo's model supports tool calling |
 | `GET` | `/api/config/settings` | Get application settings |
 | `PUT` | `/api/config/settings` | Update application settings |
 | `PATCH` | `/api/config/settings` | The same as `PUT` |
@@ -159,6 +158,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `GET` | `/api/conversations/{id}` | One conversation |
 | `PUT` | `/api/conversations/{id}` | Update a conversation |
 | `DELETE` | `/api/conversations/{id}` | Delete a conversation and its messages; refused while a reply to it is being written |
+| `GET` | `/api/conversations/{id}/export` | A chat as its export file holds it: its messages, each image's bytes beside its info as a `data:` URL; what the chat page's Export saves and `gglib chat export` writes |
 | `GET` | `/api/conversations/{id}/thread` | A chat as the page reads it: its messages, its branch points, and whether it ends in an unanswered question |
 | `POST` | `/api/conversations/{id}/changes` | An edit, a regenerate or a branch of a chat (ADR 0017) |
 | `POST` | `/api/conversations/{id}/pictures` | Keep a picture beside the one it was made from (ADR 0018) |

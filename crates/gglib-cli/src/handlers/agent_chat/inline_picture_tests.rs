@@ -55,17 +55,12 @@ fn a_terminal_known_to_draw_pictures_is_read_from_its_environment() {
             vec![xterm, iterm, ("TERM_PROGRAM_VERSION", "3.5.0beta10")],
             Some(Inline::ITerm),
         ),
-        // Before multipart, and with no version to go by.
-        (vec![xterm, iterm, ("TERM_PROGRAM_VERSION", "3.4.23")], None),
+        // No version to go by.
         (vec![xterm, iterm], None),
         // A shell on another machine: only LC_TERMINAL travels.
         (
             vec![xterm, from_iterm[0], from_iterm[1], ssh],
             Some(Inline::ITerm),
-        ),
-        (
-            vec![xterm, from_iterm[0], ("LC_TERMINAL_VERSION", "3.4.23"), ssh],
-            None,
         ),
         (vec![("TERM", "xterm-ghostty")], Some(Inline::Kitty)),
         (
@@ -129,6 +124,65 @@ fn a_terminal_known_to_draw_pictures_is_read_from_its_environment() {
             None,
         ),
         (vec![("TERM", "xterm-kitty"), ("STY", "1.pts-0.host")], None),
+        // tmux 3.4, which gets links, gets no picture.
+        (
+            vec![
+                ("TERM", "tmux-256color"),
+                ("TMUX", "/tmp/t,1,0"),
+                ("TERM_PROGRAM", "tmux"),
+                ("TERM_PROGRAM_VERSION", "3.4"),
+                ("LC_TERMINAL", "iTerm2"),
+                ("LC_TERMINAL_VERSION", "3.7.7"),
+            ],
+            None,
+        ),
+    ] {
+        assert_eq!(Inline::of_terminal(env(&set)), inline, "{set:?}");
+    }
+}
+
+#[test]
+fn wezterm_and_an_iterm_before_3_5_are_told_by_what_they_set() {
+    let xterm = ("TERM", "xterm-256color");
+    let iterm = ("TERM_PROGRAM", "iTerm.app");
+    let ssh = ("SSH_CONNECTION", "10.0.0.2 50000 10.0.0.1 22");
+    let wezterm = ("TERM_PROGRAM", "WezTerm");
+    for (set, inline) in [
+        // Before multipart: the one-sequence form, back to 3.0.
+        (
+            vec![xterm, iterm, ("TERM_PROGRAM_VERSION", "3.4.23")],
+            Some(Inline::ITermSingle),
+        ),
+        (
+            vec![xterm, iterm, ("TERM_PROGRAM_VERSION", "3.0.0")],
+            Some(Inline::ITermSingle),
+        ),
+        (
+            vec![
+                xterm,
+                ("LC_TERMINAL", "iTerm2"),
+                ("LC_TERMINAL_VERSION", "3.4.23"),
+                ssh,
+            ],
+            Some(Inline::ITermSingle),
+        ),
+        // Before inline images, and with no version to go by.
+        (vec![xterm, iterm, ("TERM_PROGRAM_VERSION", "2.1.4")], None),
+        (vec![xterm, iterm, ("TERM_PROGRAM_VERSION", "")], None),
+        (vec![xterm, ("LC_TERMINAL", "iTerm2"), ssh], None),
+        // WezTerm, by the program it names, with or without its version.
+        (
+            vec![
+                xterm,
+                wezterm,
+                ("TERM_PROGRAM_VERSION", "20240203-110809-5046fc22"),
+            ],
+            Some(Inline::ITermSingle),
+        ),
+        (vec![xterm, wezterm], Some(Inline::ITermSingle)),
+        (vec![xterm, ("TERM_PROGRAM", "wezterm")], None),
+        (vec![xterm, ("WEZTERM_PANE", "0")], None),
+        (vec![xterm, wezterm, ("TMUX", "/tmp/t,1,0")], None),
     ] {
         assert_eq!(Inline::of_terminal(env(&set)), inline, "{set:?}");
     }
@@ -214,6 +268,39 @@ fn iterm_is_sent_a_large_picture_in_parts_that_join_to_its_bytes() {
 }
 
 #[test]
+fn wezterm_and_an_older_iterm_are_sent_a_small_picture_in_one_sequence() {
+    let drawn = Inline::ITermSingle.drawn(&png(b"png"), 12).unwrap();
+
+    assert_eq!(
+        drawn,
+        "\x1b]1337;File=inline=1;size=3;name=M2Y5YTJjMWUucG5n;\
+         width=12;preserveAspectRatio=1:cG5n\x07\n"
+    );
+}
+
+#[test]
+fn wezterm_and_an_older_iterm_are_sent_a_large_picture_whole_in_one_sequence() {
+    let picture = bytes(10_000);
+
+    let drawn = Inline::ITermSingle.drawn(&png(&picture), 40).unwrap();
+
+    let sequences = payloads(&drawn, "\x1b]1337;File=", "\x07");
+    assert_eq!(sequences.len(), 1);
+    let (arguments, data) = sequences[0].split_once(':').unwrap();
+    assert_eq!(
+        arguments,
+        "inline=1;size=10000;name=M2Y5YTJjMWUucG5n;width=40;preserveAspectRatio=1"
+    );
+    assert_eq!(STANDARD.decode(data).unwrap(), picture);
+    assert!(drawn.ends_with("\x07\n"));
+    let jpeg = Picture {
+        mime: "image/jpeg",
+        ..png(&picture)
+    };
+    assert!(Inline::ITermSingle.drawn(&jpeg, 40).is_some());
+}
+
+#[test]
 fn kitty_is_sent_a_small_png_whole_and_asked_to_answer_nothing() {
     let drawn = Inline::Kitty.drawn(&png(b"png"), 12).unwrap();
 
@@ -253,4 +340,5 @@ fn kitty_is_not_sent_a_jpeg() {
 fn a_picture_with_no_bytes_is_not_sent() {
     assert_eq!(Inline::Kitty.drawn(&png(b""), 40), None);
     assert_eq!(Inline::ITerm.drawn(&png(b""), 40), None);
+    assert_eq!(Inline::ITermSingle.drawn(&png(b""), 40), None);
 }

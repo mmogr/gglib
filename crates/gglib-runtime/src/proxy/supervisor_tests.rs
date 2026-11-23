@@ -214,5 +214,42 @@ async fn test_restart_after_stop() {
     supervisor.stop().await.unwrap();
 }
 
+/// A refused bind carries the system's kind: a port held here is
+/// `AddrInUse`, and an address this machine does not have (TEST-NET-1) is
+/// something else, so the two can be said apart.
+#[tokio::test]
+async fn a_refused_bind_says_whether_the_port_was_taken() {
+    let held = std::net::TcpListener::bind("127.0.0.1:0").expect("hold a port");
+    let port = held.local_addr().unwrap().port();
+    let refused = |host: &str| ProxyConfig {
+        host: host.to_owned(),
+        port,
+        ..ProxyConfig::default()
+    };
+
+    let mut kinds = Vec::new();
+    for host in ["127.0.0.1", "192.0.2.1"] {
+        let (runtime, catalog) = make_ports();
+        let started = ProxySupervisor::new()
+            .start(
+                refused(host),
+                runtime,
+                catalog,
+                make_mcp(),
+                make_settings_repo(),
+            )
+            .await;
+        let Err(SupervisorError::BindFailed { address, kind, .. }) = started else {
+            panic!("{host}: the bind is refused");
+        };
+        assert_eq!(address, format!("{host}:{port}"));
+        kinds.push(kind);
+    }
+    drop(held);
+
+    assert_eq!(kinds[0], std::io::ErrorKind::AddrInUse);
+    assert_ne!(kinds[1], std::io::ErrorKind::AddrInUse);
+}
+
 #[path = "supervisor_trip_sink_tests.rs"]
 mod trip_sink;

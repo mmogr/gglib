@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
 use gglib_core::domain::attachment::AttachmentBlob;
 use gglib_core::ports::AttachmentStore;
 
@@ -84,8 +86,18 @@ pub(crate) async fn attached<'a>(
     paths: &[PathBuf],
     quiet: bool,
 ) -> Result<(TurnImages<'a>, String)> {
+    drawn_attached(service, paths, quiet, None).await
+}
+
+/// [`attached`], on a terminal that draws pictures as `drawing` does.
+pub(crate) async fn drawn_attached<'a>(
+    service: &'a AttachmentService,
+    paths: &[PathBuf],
+    quiet: bool,
+    drawing: Option<Inline>,
+) -> Result<(TurnImages<'a>, String)> {
     let mut receipts = Vec::new();
-    let images = TurnImages::attach(service, paths, quiet, &mut receipts).await?;
+    let images = TurnImages::attach(service, paths, quiet, &mut receipts, drawing).await?;
     Ok((images, String::from_utf8(receipts).expect("text")))
 }
 
@@ -207,4 +219,55 @@ async fn a_bad_file_after_a_good_one_fails_the_whole_command() {
     let refusal = attached(&service, &paths, false).await.err().unwrap();
 
     assert!(refusal.to_string().contains("gone.png"));
+}
+
+#[tokio::test]
+async fn an_image_is_drawn_under_its_receipt_where_the_terminal_draws_pictures() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let bytes = png(16, 16);
+    let paths = [file(&dir, "dot.png", &bytes)];
+    let (service, _) = service();
+    let (encoded, id) = (STANDARD.encode(&bytes), AttachmentId::of(&bytes));
+    // A 16-pixel picture is 2 columns, whatever the window.
+    let name = STANDARD.encode(format!("{}.png", &id.as_str()[..8]));
+
+    let (_, kitty) = drawn_attached(&service, &paths, false, Some(Inline::Kitty))
+        .await
+        .unwrap();
+    let (_, iterm) = drawn_attached(&service, &paths, false, Some(Inline::ITerm))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        kitty,
+        format!(
+            "  image dot.png: 16x16, ~1 tokens\n  \x1b_Ga=T,f=100,q=2,c=2,m=0;{encoded}\x1b\\\n"
+        )
+    );
+    assert_eq!(
+        iterm,
+        format!(
+            "  image dot.png: 16x16, ~1 tokens\n  \
+             \x1b]1337;MultipartFile=inline=1;size={};name={name};\
+             width=2;preserveAspectRatio=1\x07\
+             \x1b]1337;FilePart={encoded}\x07\
+             \x1b]1337;FileEnd\x07\n",
+            bytes.len()
+        )
+    );
+}
+
+#[tokio::test]
+async fn a_quiet_receipt_draws_nothing_and_a_plain_terminal_gets_the_receipt_alone() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let paths = [file(&dir, "dot.png", &png(16, 16))];
+    let (service, _) = service();
+
+    let (_, quiet) = drawn_attached(&service, &paths, true, Some(Inline::Kitty))
+        .await
+        .unwrap();
+    let (_, plain) = drawn_attached(&service, &paths, false, None).await.unwrap();
+
+    assert_eq!(quiet, "");
+    assert_eq!(plain, "  image dot.png: 16x16, ~1 tokens\n");
 }

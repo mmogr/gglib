@@ -9,6 +9,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
+use crate::process::StopReason;
 use crate::process::core::GuiProcessCore;
 
 /// How often a launch checks that the server it is waiting for still exists.
@@ -91,7 +92,12 @@ impl Drop for SpawnedChild {
         // from `Drop` would be worse than the leak it is preventing.
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             handle.spawn(async move {
-                match core.write().await.kill_if_pid(model_id, pid).await {
+                match core
+                    .write()
+                    .await
+                    .kill_if_pid(model_id, pid, StopReason::LaunchAbandoned)
+                    .await
+                {
                     Ok(true) => {
                         warn!(model_id = %model_id, pid = %pid, "stopped the child of a failed launch");
                     }

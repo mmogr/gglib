@@ -4,6 +4,7 @@ mod app_core;
 mod app_core_fixture;
 mod attachments;
 mod catalog;
+mod chat_export;
 mod chat_history;
 mod component_choices;
 mod drawing;

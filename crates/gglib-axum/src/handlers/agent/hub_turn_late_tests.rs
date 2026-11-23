@@ -359,7 +359,10 @@ async fn a_refusal_at_the_endpoint_ends_the_run_failed_and_writes_no_row() {
         .unwrap()
         .unwrap();
     let message = run.error.unwrap().message;
-    assert!(message.contains("already in use"), "{message}");
+    assert!(
+        message.contains(&format!("port {port} is in use by another program")),
+        "{message}"
+    );
     assert_eq!(saved(&state, id).await.len(), 2, "no row was written");
     let (events, end) = drain(state.runs.events(&device("phone"), "d1", 0).unwrap()).await;
     assert_eq!(events, 0, "the loop never ran");

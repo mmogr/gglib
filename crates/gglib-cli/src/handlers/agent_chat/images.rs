@@ -6,12 +6,13 @@
 //! process, as it is on disk: the message then names it by id. A file that
 //! is missing, is not a PNG or a JPEG, or is over the cap is an error that
 //! names its path, before anything is asked of a model. What an image
-//! costs is said once, on stderr, when it is attached. Whether the chat's
-//! model can read it is the daemon's to say, when the turn that carries it
-//! is sent.
+//! costs is said once, on stderr, when it is attached, and on a terminal
+//! that draws pictures the image is drawn under that line. Whether the
+//! chat's model can read it is the daemon's to say, when the turn that
+//! carries it is sent.
 
 use std::fmt::Write as _;
-use std::io;
+use std::io::{self, IsTerminal as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow, bail};
@@ -20,7 +21,9 @@ use gglib_core::ports::attachment_store::AttachmentError;
 use gglib_core::request_pipeline::MAX_IMAGE_BYTES;
 use gglib_core::services::AttachmentService;
 
+use super::inline_picture::{Inline, Picture, columns};
 use super::pictures::{self, Links};
+use crate::handlers::attachment::extension;
 
 /// What `/image` with no path answers.
 const USAGE: &str = "usage: /image <path>  (a PNG or a JPEG, attached to your next message)";
@@ -29,11 +32,15 @@ const USAGE: &str = "usage: /image <path>  (a PNG or a JPEG, attached to your ne
 pub(crate) struct TurnImages<'a> {
     service: &'a AttachmentService,
     pending: Vec<AttachmentId>,
+    /// How an image is drawn under its receipt, when it is.
+    drawing: Option<Inline>,
 }
 
 impl<'a> TurnImages<'a> {
     /// Store the files `--image` named, in order, for the first message.
-    /// One receipt line a file goes to `receipts`, unless `quiet`.
+    /// One receipt line a file goes to `receipts`, unless `quiet`, with the
+    /// image drawn under it as `drawing` draws it. So is the receipt of
+    /// each file `/image` attaches later.
     ///
     /// # Errors
     ///
@@ -44,10 +51,12 @@ impl<'a> TurnImages<'a> {
         paths: &[PathBuf],
         quiet: bool,
         receipts: &mut W,
+        drawing: Option<Inline>,
     ) -> Result<Self> {
         let mut images = Self {
             service,
             pending: Vec::new(),
+            drawing,
         };
         for path in paths {
             let receipt = images.add(path).await?;
@@ -82,13 +91,44 @@ impl<'a> TurnImages<'a> {
         })
     }
 
-    /// Store the file at `path` for the next message, and say what it is.
+    /// Store the file at `path` for the next message, and say what it is:
+    /// its receipt, and the image drawn under it on a terminal that draws
+    /// it, two columns in as the receipt starts. The line the picture ends
+    /// is left for the receipt's own, so it is printed as one line is.
     async fn add(&mut self, path: &Path) -> Result<String> {
-        let upload = ingest_file(self.service, path).await?;
-        let receipt = receipt(path, &upload);
+        let (upload, bytes) = ingest_file(self.service, path).await?;
+        let mut receipt = receipt(path, &upload);
+        if let Some(drawn) = self.drawn(&upload.info, &bytes) {
+            let drawn = drawn.strip_suffix('\n').unwrap_or(&drawn);
+            let _ = write!(receipt, "\n  {drawn}");
+        }
         self.pending.push(upload.info.id);
         Ok(receipt)
     }
+
+    /// What to write to draw the image `info` with `bytes`, as stored, sized
+    /// to the terminal's window: none where it is not drawn.
+    fn drawn(&self, info: &AttachmentInfo, bytes: &[u8]) -> Option<String> {
+        let inline = self.drawing?;
+        let window = crossterm::terminal::size().ok().map(|(columns, _)| columns);
+        let name = format!("{}.{}", short_id(&info.id), extension(&info.mime));
+        let picture = Picture {
+            name: &name,
+            mime: &info.mime,
+            bytes,
+        };
+        inline.drawn(&picture, columns(info.width, info.height, window))
+    }
+}
+
+/// How a receipt on stderr draws its image: as the terminal draws pictures,
+/// when stderr is one and the receipt is printed, which `quiet` says it is
+/// not.
+pub(crate) fn drawing_on_stderr(quiet: bool) -> Option<Inline> {
+    let to_terminal = !quiet && io::stderr().is_terminal();
+    to_terminal
+        .then(|| Inline::of_terminal(|name| std::env::var(name).ok()))
+        .flatten()
 }
 
 /// What a REPL line that is the `/image` command asks for.
@@ -120,8 +160,12 @@ fn image_command(input: &str) -> Option<ImageCommand> {
     })
 }
 
-/// The file at `path` through core's ingest, as it is on disk.
-async fn ingest_file(service: &AttachmentService, path: &Path) -> Result<AttachmentUpload> {
+/// The file at `path` through core's ingest, as it is on disk, and the
+/// bytes it stored.
+async fn ingest_file(
+    service: &AttachmentService,
+    path: &Path,
+) -> Result<(AttachmentUpload, Vec<u8>)> {
     let shown = path.display();
     let unreadable = |e: std::io::Error| anyhow!("cannot read image '{shown}': {e}");
     let len = std::fs::metadata(path).map_err(unreadable)?.len();
@@ -129,10 +173,11 @@ async fn ingest_file(service: &AttachmentService, path: &Path) -> Result<Attachm
         bail!("image '{shown}': {}", AttachmentError::TooLarge);
     }
     let bytes = std::fs::read(path).map_err(unreadable)?;
-    service
+    let upload = service
         .ingest(&bytes)
         .await
-        .map_err(|refused| anyhow!("image '{shown}': {refused}"))
+        .map_err(|refused| anyhow!("image '{shown}': {refused}"))?;
+    Ok((upload, bytes))
 }
 
 /// The line that says what was attached and what it costs to send.

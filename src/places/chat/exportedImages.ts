@@ -1,54 +1,28 @@
 /**
- * A chat's saved rows as Export writes them: each image's bytes beside its
- * id, type and size, as a `data:` URL, so the file shows what was asked
- * about on a machine whose store never held the image. The bytes are read
- * from this machine's store with the page's credential, each image once
- * however many rows carry it.
- *
- * Nothing here logs an image or puts its bytes in an error.
+ * The images of an exported chat that are in the file by their id alone:
+ * the daemon writes each image's bytes beside its info as a `data:` URL
+ * (`GET /api/conversations/{id}/export`), and leaves the URL out of one its
+ * store could not give. The page saves the file's text as it comes, and
+ * says how many it could not read.
  *
  * @module places/chat/exportedImages
  */
 
-import { getTransport } from '../../services/transport';
-import type { ChatMessage } from '../../services/transport';
-import type { AttachmentInfo } from '../../types/generated/AttachmentInfo';
-import { base64Of } from '../../utils/pictureMask';
+import type { ChatExport } from '../../types/generated/ChatExport';
 
-/** An image in an exported chat: its info, and its bytes when the store gave them. */
-type ExportedImage = AttachmentInfo & { data_url?: string };
-
-/** A saved row as the export writes it. */
-type ExportedMessage = Omit<ChatMessage, 'images'> & { images?: ExportedImage[] };
-
-/** The image's bytes as a `data:` URL under the type the store recorded; `null` when they cannot be read. */
-async function dataUrlOf(image: AttachmentInfo): Promise<string | null> {
-  try {
-    const blob = await getTransport().fetchAttachmentBlob('this', image.id);
-    return `data:${image.mime};base64,${await base64Of(blob)}`;
-  } catch {
-    return null;
+/** How many images the file holds by their id alone, each counted once however many rows carry it. */
+export function unreadImages(file: ChatExport): number {
+  const unread = new Set<string>();
+  for (const image of file.messages.flatMap((message) => message.images ?? [])) {
+    if (image.data_url === undefined) unread.add(image.id);
   }
+  return unread.size;
 }
 
-/**
- * `messages` with every image's bytes beside its info, and how many images
- * the store could not give: those stay in the file as their info alone.
- */
-export async function withImageBytes(messages: ChatMessage[]): Promise<{ messages: ExportedMessage[]; unread: number }> {
-  const urls = new Map<string, string | null>();
-  for (const image of messages.flatMap((message) => message.images ?? [])) {
-    if (!urls.has(image.id)) urls.set(image.id, await dataUrlOf(image));
-  }
-  return {
-    messages: messages.map((message) => {
-      if (!message.images) return message;
-      const images = message.images.map((image) => {
-        const url = urls.get(image.id);
-        return url ? { ...image, data_url: url } : image;
-      });
-      return { ...message, images };
-    }),
-    unread: [...urls.values()].filter((url) => url === null).length,
-  };
+/** What the page says of the images in the file by their id alone; `null` when there are none. */
+export function unreadSentence(unread: number): string | null {
+  if (unread === 0) return null;
+  return unread === 1
+    ? '1 image could not be read. It is in the file by its id only.'
+    : `${unread} images could not be read. They are in the file by their ids only.`;
 }

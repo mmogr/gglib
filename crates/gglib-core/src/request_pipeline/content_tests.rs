@@ -120,3 +120,36 @@ fn content_with_no_image_part_carries_none() {
         assert_eq!(image_urls(&content).count(), 0, "{content}");
     }
 }
+
+#[test]
+fn an_arrays_audio_parts_are_read_in_order_from_among_the_others() {
+    let content = json!([
+        {"type": "text", "text": "what is said here?"},
+        {"type": "input_audio", "input_audio": {"data": "UklGRgAA", "format": "wav"}},
+        {"type": "image_url", "image_url": {"url": "u1"}},
+        {"type": "input_audio", "input_audio": {"data": "SUQzBAAA", "format": "mp3"}},
+    ]);
+    assert_eq!(
+        audio_data(&content).collect::<Vec<_>>(),
+        ["UklGRgAA", "SUQzBAAA"]
+    );
+    assert_eq!(image_urls(&content).collect::<Vec<_>>(), ["u1"]);
+    assert_eq!(text_len(&content), "what is said here?".len());
+}
+
+#[test]
+fn content_with_no_audio_part_carries_none() {
+    for content in [
+        json!("an input_audio part"),
+        json!(null),
+        json!({"input_audio": {"data": "not in an array"}}),
+        json!([]),
+        json!([{"type": "text", "text": "input_audio"}]),
+        json!([{"type": "input_audio"}]),
+        json!([{"type": "input_audio", "input_audio": "UklGRgAA"}]),
+        json!([{"type": "input_audio", "input_audio": {"format": "wav"}}]),
+        json!([{"type": "input_audio", "input_audio": {"data": 7}}]),
+    ] {
+        assert_eq!(audio_data(&content).count(), 0, "{content}");
+    }
+}

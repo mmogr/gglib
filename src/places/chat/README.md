@@ -18,7 +18,7 @@ system prompt line.
 |------|------|
 | `ChatPlace.tsx` | The place: a conversation on this machine's model, the paired machine's model, or one of that machine's own chats (read and carried on, never changed); hands up the conversation it opens (a first send, a branch, Start over) and a delete of the open one, so the address follows |
 | `useConversationActions.ts` | What the title ▾ does to the open chat: Rename, Start over (same prompt), Export, the system prompt, Delete… (asked first, shared with the sidebar's ⋯); each acts on this machine's daemon and does nothing on a far chat |
-| `exportedImages.ts` | A chat's saved rows as Export writes them: each image's bytes beside its info as a `data:` URL, read from this machine's store once per image; an image the store cannot give stays as its info alone, and is counted |
+| `exportedImages.ts` | The images of an exported chat that are in the file by their id alone, counted once each, and the sentence the page says of them; the file itself is the daemon's text (`GET /api/conversations/{id}/export`), saved as it comes |
 
 The words this place says that are its own, not the daemon's (state words
 come from `components/status/words.ts`):

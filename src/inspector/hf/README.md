@@ -6,8 +6,8 @@ The inspector's Hugging Face subject: a repo, at `/get/:owner/:name`, so
 back, forward and reload keep it. From the top: `owner/name` ↗ and ×; the
 summary (the parameter count as a search gives it: the Hub's, unless the
 repo's file names contradict it and its largest weights hold theirs; and
-"calls tools" when the daemon read
-the chat template so); "Pick a size"; the
+"calls tools" when the summary says the daemon read the chat template
+so); "Pick a size"; the
 projector the selected variant brings; an image model's companions; ▸ About
 this model (the Hub's description, counts and tags), closed.
 

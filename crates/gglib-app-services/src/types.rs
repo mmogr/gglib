@@ -15,7 +15,6 @@ mod types_hf;
 pub use types_hf::{
     HfCompanion, HfImagePreview, HfModelKind, HfModelSummary, HfPickResponse, HfProjector,
     HfQuantization, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, HfSortField,
-    ToolSupportResponse,
 };
 #[path = "types_model_update.rs"]
 mod types_model_update;

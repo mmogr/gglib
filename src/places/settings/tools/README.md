@@ -53,14 +53,13 @@ daemon's words>"; "Devices may use it", "Disabled, so it offers no tools";
 "Couldn't read the tool servers: <the daemon's words>"; the sheet's "Add a
 server", "Edit <name>", "Quick start", each template's name and line,
 "Reading files is built in: choose a folder in a chat. Every template here
-needs an API key.", "Name", "Command", "One executable, found on PATH: npx,
-python3, node.", "Arguments", "Separated by spaces.", "Environment
+needs an API key.", "Name", "Command", "One executable, found on PATH (npx,
+python3, node), or its full path.", "Arguments", "Separated by spaces.", "Environment
 variables", "Add variable", "Use in chats", "Its tools are offered in
 chats.", "More", "Working directory", "An absolute path, if it needs one.",
 "Extra PATH", "Folders added to its PATH, separated by colons.", "Start when
 gglib starts", "Otherwise it starts the first time one of its tools is
 used.", "Cancel", "Add", "Save", "Saving…", "A server needs a name", "A
-server needs a command", "Command is one executable, such as npx; its
-arguments go in Arguments".
+server needs a command".
 
 <!-- module-docs:end -->

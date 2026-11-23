@@ -26,7 +26,7 @@ fn api_routes() -> Vec<(Method, String)> {
         .iter()
         .filter(|(_, path)| path.starts_with("/api/"))
         .map(|(methods, path)| (*methods, (*path).to_owned()));
-    let more: [(&[&str], String); 15] = [
+    let more: [(&[&str], String); 16] = [
         (
             daemon::REMOTE_FORGET_METHODS,
             daemon::remote_forget_path("dev-0a1b2c3d"),
@@ -44,6 +44,7 @@ fn api_routes() -> Vec<(Method, String)> {
         (&["POST"], "/api/secrets/reveal".to_owned()),
         (&["GET"], "/api/conversations".to_owned()),
         (&["GET"], "/api/conversations/1/thread".to_owned()),
+        (&["GET"], "/api/conversations/1/export".to_owned()),
         (&["POST"], "/api/conversations/1/changes".to_owned()),
         (&["POST"], "/api/conversations/1/pictures".to_owned()),
         (&["POST"], attachments::ATTACHMENTS_PATH.to_owned()),

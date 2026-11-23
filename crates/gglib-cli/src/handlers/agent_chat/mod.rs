@@ -50,7 +50,9 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // A file that cannot be attached ends the command before a conversation
     // is made or a model asked for.
     let (attachments, mut receipts) = (ctx.app.attachments(), std::io::stderr());
-    let images = TurnImages::attach(attachments, &args.images, false, &mut receipts).await?;
+    let drawing = images::drawing_on_stderr(false);
+    let images =
+        TurnImages::attach(attachments, &args.images, false, &mut receipts, drawing).await?;
     let (args, plan) = plan(ctx, args).await?;
     // The daemon runs the turns: found, or started, once the model is known
     // and before anything is written, so a chat is never made for a turn

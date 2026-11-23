@@ -120,25 +120,22 @@ fn the_queue_answer_is_the_id_alone() {
     assert_eq!(back, answer);
 }
 
-/// A Hub repo's tool answer is core's guess from its template and repo id,
-/// and the answer carries that yes/no alone. The mock Hub serves no
-/// template, so the repo id decides.
+/// A repo looked up by its ID says whether it calls tools by core's guess
+/// from its template and repo id. The mock Hub serves no template, so the
+/// repo id decides.
 #[tokio::test]
 async fn a_hub_repo_calls_tools_by_cores_guess() {
     let ops = make_ops(MockDownloadManager::new());
 
     let hermes = ops
-        .get_hf_tool_support("NousResearch/Hermes-3-Llama-3.1-8B-GGUF")
+        .get_model_summary("NousResearch/Hermes-3-Llama-3.1-8B-GGUF")
         .await
         .unwrap();
     let plain = ops
-        .get_hf_tool_support("owner/plain-chat-GGUF")
+        .get_model_summary("owner/plain-chat-GGUF")
         .await
         .unwrap();
 
-    assert_eq!(
-        serde_json::to_value(&hermes).unwrap(),
-        serde_json::json!({ "supports_tool_calls": true })
-    );
+    assert!(hermes.supports_tool_calls);
     assert!(!plain.supports_tool_calls);
 }

@@ -270,7 +270,14 @@ async fn a_refused_replacement_puts_the_endpoint_back_and_says_so() {
     let Err(GuiError::Conflict(reason)) = refused else {
         panic!("the port asked for is taken: {refused:?}");
     };
-    assert!(reason.contains(&taken.to_string()), "{reason}");
+    // The fact, without the status's "is off": the endpoint is back.
+    assert!(
+        reason.starts_with(&format!(
+            "Port {taken} is in use by another program. Stop it, or choose another port"
+        )),
+        "{reason}"
+    );
+    assert!(!reason.contains("The endpoint is off"), "{reason}");
     assert!(
         reason.ends_with(&format!(
             "The endpoint is back as it was, on at port {port}, serving every model."
