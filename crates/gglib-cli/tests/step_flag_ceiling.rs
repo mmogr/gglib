@@ -55,6 +55,9 @@ fn a_limit_above_the_ceiling_says_so_on_stderr_alone() {
             args.extend(["--max-tool-iterations", limit]);
             gglib(root.path(), &args)
         };
+        // A first run over a new data folder may say what a later one does
+        // not, so one run comes first and is not compared.
+        drop(with(&ceiling));
         let (at, over) = (with(&ceiling), with(&above));
         let (at_err, over_err) = (
             String::from_utf8_lossy(&at.stderr),
