@@ -389,16 +389,15 @@ describe('the add sheet', () => {
     await user.click(sheet().getByRole('button', { name: 'Add' }));
     expect(sheet().getByRole('alert')).toHaveTextContent('A server needs a command');
 
-    await user.type(sheet().getByLabelText('Command'), 'npx -y files');
-    await user.click(sheet().getByRole('button', { name: 'Add' }));
-    expect(sheet().getByRole('alert')).toHaveTextContent('Command is one executable, such as npx; its arguments go in Arguments');
-    expect(transport.addMcpServer).not.toHaveBeenCalled();
-
+    // A command with a space is sent as typed: whether it is the path of a
+    // program is the daemon's to say (#2188).
     daemon.refuse = 'a server named files already exists';
-    await user.clear(sheet().getByLabelText('Command'));
-    await user.type(sheet().getByLabelText('Command'), 'npx');
+    await user.type(sheet().getByLabelText('Command'), '/Applications/My Tools/files');
     await user.click(sheet().getByRole('button', { name: 'Add' }));
     expect(await sheet().findByText('a server named files already exists')).toBeInTheDocument();
+    expect(transport.addMcpServer).toHaveBeenCalledWith(
+      expect.objectContaining({ config: expect.objectContaining({ command: '/Applications/My Tools/files' }) }),
+    );
     expect(sheet().getByLabelText('Name')).toHaveValue('files');
   });
 });
