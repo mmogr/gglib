@@ -49,8 +49,8 @@ independently readable:
   while a reply is still being written; the turn after a change that leaves
   a question says `answer_saved`, and adds no message
 - [`images`]   — the images a turn carries: `--image` and the REPL's `/image`,
-  each file through core's one ingest, with a receipt line on stderr;
-  whether the chat's model can read them is the daemon's to say
+  each file through core's one ingest, with a receipt line on stderr and
+  the image drawn under it on a terminal that draws pictures; whether the chat's model can read them is the daemon's to say
 - [`draw`]     — `/draw`, the session's Draw switch: it asks the daemon
   whether it can draw and arms the next message, whose turn says `draw`,
   and is off again once that message is sent; `/draw <description>` arms
