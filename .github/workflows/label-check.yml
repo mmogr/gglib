@@ -38,9 +38,14 @@ on:
 # Default to nothing; each job opts in to the minimum it needs.
 permissions: {}
 
-concurrency:
-  group: label-check-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+# No concurrency group, deliberately. Opening a pull request with labels starts one run
+# per event at once, and a group that cancels all but one leaves the cancelled runs
+# reporting too: `label-check` runs under always(), so in a cancelled run it reports a
+# verdict read before `enrich` had applied anything, or is cut off itself. GitHub reads
+# the required check from whichever "Label Check" was created last, so a pull request
+# whose labels were all present could be held as blocked (#2190). Every run here runs to
+# its end instead: each applies what can be derived, then verifies what the API says, so
+# whichever reports last reports the truth. A run is two short jobs.
 
 jobs:
   enrich:
@@ -293,9 +298,19 @@ jobs:
               ].filter(Boolean).join('\n'));
             }
 
-            const existing = (await github.paginate(github.rest.issues.listComments, {
+            // Runs for one pull request overlap (see the note on concurrency above), and
+            // two that both found no comment each post one. The first is the comment;
+            // any other is removed here, by whichever run comes next.
+            const [existing, ...extra] = (await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number, per_page: 100,
-            })).find(c => c.body?.includes(MARKER));
+            })).filter(c => c.body?.includes(MARKER));
+            for (const c of extra) {
+              try {
+                await github.rest.issues.deleteComment({ owner, repo, comment_id: c.id });
+              } catch (e) {
+                core.warning(`Could not delete a second assist comment: ${e.message}`);
+              }
+            }
 
             // Only ever comment when something is actually needed. When nothing is
             // missing, say nothing at all — a green check plus the labels themselves
