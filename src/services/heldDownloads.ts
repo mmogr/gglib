@@ -22,8 +22,8 @@ export interface HeldDownload {
   /** The repository, as the queue takes it. */
   repo: string;
   quantization?: string;
-  /** When the limit lifts (epoch ms) and the request is sent again. */
-  liftsAt: number;
+  /** When the limit lifts (epoch ms) and the request is sent again; `null` while it is being sent, when it can no longer be dropped. */
+  liftsAt: number | null;
 }
 
 const store = createEventStore<HeldDownload[]>([]);
@@ -42,6 +42,13 @@ export function holdDownload(held: HeldDownload, stop: () => void): void {
   const rest = store.getState().filter((h) => h.id !== held.id);
   const at = store.getState().findIndex((h) => h.id === held.id);
   store.setState(at === -1 ? [...rest, held] : [...rest.slice(0, at), held, ...rest.slice(at)]);
+}
+
+/** Held download `id`'s request is being sent again: it shows so, and is not offered to be dropped. */
+export function markSending(id: string): void {
+  const state = store.getState();
+  if (!state.some((h) => h.id === id && h.liftsAt !== null)) return;
+  store.setState(state.map((h) => (h.id === id ? { ...h, liftsAt: null } : h)));
 }
 
 /** Forget `id`: it was queued, dropped, or failed. */

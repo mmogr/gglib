@@ -309,6 +309,34 @@ describe('setup', () => {
     }
   });
 
+  it('offers Get it again when a held Get it then fails', async () => {
+    transport.queueDownload
+      .mockRejectedValueOnce(
+        new TransportError('INTERNAL', "Could not queue the download: Hugging Face's rate limit lifts in 0:09", {
+          status: 429,
+          statusText: 'Too Many Requests',
+          type: 'hub_rate_limited',
+          metadata: { bucket: 'resolvers', retry_after_secs: 9 },
+        }),
+      )
+      .mockRejectedValueOnce(new Error('queue full: max 10 downloads'));
+    const { user } = start();
+    await reach(user, 'First model');
+    const region = await step('First model');
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await user.click(within(region).getByRole('button', { name: 'Get it' }));
+      expect(await within(region).findByText(/^waiting for Hugging Face's rate limit, /)).toBeInTheDocument();
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(await within(region).findByRole('button', { name: 'Get it' })).toBeInTheDocument();
+      expect(within(region).queryByText(/waiting for Hugging Face/)).not.toBeInTheDocument();
+      expect(transport.queueDownload).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("says a refusal as it came, with Retry", async () => {
     transport.queueDownload.mockRejectedValueOnce(new Error('queue full: max 10 downloads'));
     const { user } = start();

@@ -79,6 +79,7 @@ vi.mock('../../../src/services/clients/proxyDashboard', () => ({
 import { TransportError } from '../../../src/services/transport/errors';
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { cleanupDownloadEvents, initDownloadEvents, onDownloadEndings } from '../../../src/services/downloadsEvents';
+import { takeQueueSnapshot } from '../../../src/services/downloadsRegistry';
 import { cleanupServerEvents, initServerEvents } from '../../../src/services/serverEvents';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import { applyProxyStatus, ingestProxyEvent, resetProxyState } from '../../../src/services/proxyRegistry';
@@ -534,11 +535,78 @@ describe('the library place', () => {
       await screen.findByRole('group', { name: 'owner/zeta-GGUF' });
       await act(() => vi.advanceTimersByTimeAsync(10_000));
 
-      await waitFor(() => expect(failed).toHaveBeenCalledWith({ id: 'owner/zeta-GGUF:Q8_0', text: 'queue full: max 10 downloads' }));
+      await waitFor(() => expect(failed).toHaveBeenCalledWith({ id: 'owner/zeta-GGUF:Q8_0', text: 'owner/zeta-GGUF:Q8_0 was not queued: queue full: max 10 downloads' }));
       stop();
       expect(screen.queryByRole('group', { name: 'owner/zeta-GGUF' })).not.toBeInTheDocument();
       expect(screen.getByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).toBeInTheDocument();
       expect(transport.queueDownload).toHaveBeenCalledTimes(2);
+    });
+
+    it('says it is being queued, with no ×, while the request is sent again after the wait', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      downloads.queue = queueSnapshot({ revision: 3, finished: [failedEnding('owner/zeta-GGUF', 'Q8_0')] });
+      let answer: (r: { id: string }) => void = () => {};
+      transport.queueDownload.mockRejectedValueOnce(hubLimited(9)).mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+      renderLibrary();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('button', { name: 'Retry' }));
+      const held = await screen.findByRole('group', { name: 'owner/zeta-GGUF' });
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+
+      await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledTimes(2));
+      expect(held).toHaveTextContent('queueing…');
+      expect(within(held).queryByRole('button', { name: 'Drop owner/zeta-GGUF' })).not.toBeInTheDocument();
+
+      downloads.queue = queueSnapshot({ revision: 4, active: runningRow({ id: 'owner/zeta-GGUF:Q8_0' }), waiting: [] });
+      await act(async () => answer({ id: 'owner/zeta-GGUF:Q8_0' }));
+      await waitFor(() => expect(screen.queryByRole('group', { name: 'owner/zeta-GGUF' })).not.toBeInTheDocument());
+    });
+
+    it("gives way to the queue's own row for the same download, and settles as it when the limit lifts", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      downloads.queue = queueSnapshot({ revision: 3, finished: [failedEnding('owner/zeta-GGUF', 'Q8_0')] });
+      transport.queueDownload.mockRejectedValueOnce(hubLimited(9));
+      const failed = vi.fn();
+      const stop = onDownloadEndings({ completed: () => {}, failed });
+      renderLibrary();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('button', { name: 'Retry' }));
+      await screen.findByRole('group', { name: 'owner/zeta-GGUF' });
+      // Queued meanwhile from elsewhere: the queue's row alone is shown.
+      downloads.queue = queueSnapshot({ revision: 10, active: runningRow({ id: 'owner/zeta-GGUF:Q8_0' }), waiting: [] });
+      act(() => takeQueueSnapshot(downloads.queue as ReturnType<typeof queueSnapshot>));
+      expect(screen.queryByRole('group', { name: 'owner/zeta-GGUF' })).not.toBeInTheDocument();
+      expect(within(screen.getByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('progressbar')).toBeInTheDocument();
+
+      // The daemon attaches the request to the download it has.
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledTimes(2));
+      expect(failed).not.toHaveBeenCalled();
+      stop();
+    });
+
+    it("settles a held upgrade the queue refuses as already running as that download, with no failure told", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      downloads.queue = queueSnapshot({ revision: 3, finished: [failedEnding('owner/zeta-GGUF', 'Q8_0', { upgrade_of: 7 })] });
+      transport.upgradeModel
+        .mockRejectedValueOnce(hubLimited(9))
+        .mockRejectedValueOnce(new TransportError('CONFLICT', 'A download of owner/zeta-GGUF:Q8_0 is already waiting or running. Upgrade the model once it has ended.'));
+      const failed = vi.fn();
+      const stop = onDownloadEndings({ completed: () => {}, failed });
+      renderLibrary();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('button', { name: 'Retry' }));
+      await screen.findByRole('group', { name: 'owner/zeta-GGUF' });
+      downloads.queue = queueSnapshot({ revision: 4, active: runningRow({ id: 'owner/zeta-GGUF:Q8_0' }), waiting: [] });
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+
+      await waitFor(() => expect(transport.upgradeModel).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(screen.queryByRole('group', { name: 'owner/zeta-GGUF' })).not.toBeInTheDocument());
+      expect(failed).not.toHaveBeenCalled();
+      stop();
     });
 
     it('holds a failed upgrade tried again the same way, and upgrades its model when the limit lifts', async () => {

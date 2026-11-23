@@ -102,7 +102,7 @@ const Join: FC<{ onJoined: () => void }> = ({ onJoined }) => {
 const Download: FC<{ first: FirstModel; onRetry: () => void }> = ({ first, onRetry }) => {
   const { held, row, finished } = first;
   const left = useSecondsLeft(held?.liftsAt ?? null);
-  if (left !== null) return <StatusMark kind="changing" word={waitingSentence(left)} />;
+  if (held) return <StatusMark kind="changing" word={left === null ? 'queueing…' : waitingSentence(left)} />;
   if (row) {
     const transferring = row.phase === 'downloading' && row.percent !== undefined;
     if (!transferring) return <StatusMark kind="changing" word={row.text.status} />;

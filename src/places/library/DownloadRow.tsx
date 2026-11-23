@@ -19,8 +19,9 @@
  * from its part on disk (an upgrade from its commit's own part); one whose
  * bytes failed their check starts over. × takes the ending off the queue,
  * so it does not come back. A download held until Hugging Face's rate
- * limit lifts is a row of its own (`HeldRow`) after the queue's, and a
- * failed one whose Retry is held shows only that row.
+ * limit lifts is a row of its own (`HeldRow`) after the queue's, unless the
+ * queue has it already (queued elsewhere meanwhile), and a failed one whose
+ * Retry is held shows only that row.
  *
  * @module places/library/DownloadRow
  */
@@ -145,8 +146,10 @@ export const Downloads: FC<{ query: string }> = ({ query }) => {
   const held = useHeldDownloads();
   const rows = snapshot ? [...(snapshot.active ? [snapshot.active] : []), ...snapshot.waiting] : [];
   const shown = rows.filter((row) => matchesDownload(row, query));
-  const heldShown = held.filter((h) => matchesDownload(h, query));
-  const again = new Set([...rows.map((row) => row.id), ...held.map((h) => h.id)]);
+  const inQueue = new Set(rows.map((row) => row.id));
+  // The queue's own row for a download says more than the page's held one.
+  const heldShown = held.filter((h) => !inQueue.has(h.id) && matchesDownload(h, query));
+  const again = new Set([...inQueue, ...held.map((h) => h.id)]);
   const failed = (snapshot?.finished ?? []).filter(
     (ended) => ended.outcome.kind === 'failed' && !again.has(ended.id) && matchesDownload(ended, query),
   );

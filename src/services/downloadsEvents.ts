@@ -17,7 +17,9 @@
  * A queue request (a Download, a Retry) Hugging Face's rate limit refused
  * is held (`heldDownloads`) and sent again when the limit lifts
  * (`whenHubAllows`), so the caller can move on; one that then fails is told
- * as a failure is, in the daemon's words.
+ * as a failure is, its download named before the daemon's words. One the
+ * queue already has by then is that download: a download's request attaches
+ * to it, and an upgrade's refusal for it (a conflict) is read as so.
  *
  * @module services/downloadsEvents
  */
@@ -25,15 +27,16 @@
 import { bridgeEvents } from './bridgeEvents';
 import {
   forgetQueueRevision,
+  isInQueue,
   markCancelling,
   resetDownloads,
   settleCancel,
   takeQueueSnapshot,
 } from './downloadsRegistry';
-import { dropAllHeld, heldId, holdDownload, releaseHeld, type HeldDownload } from './heldDownloads';
+import { dropAllHeld, heldId, holdDownload, markSending, releaseHeld, type HeldDownload } from './heldDownloads';
 import { refreshModels } from './modelEvents';
 import { appLogger } from './platform';
-import { getTransport } from './transport';
+import { getTransport, TransportError } from './transport';
 import { whenHubAllows } from './transport/hubLimit';
 import type { DownloadCompletionInfo, DownloadFailureInfo, FinishedDownload } from './transport/types/downloads';
 import type { DownloadEvent } from './transport/types/events';
@@ -131,7 +134,10 @@ function sendWhenAllowed<Id>(held: Omit<HeldDownload, 'liftsAt'>, send: () => Pr
     const queued = whenHubAllows(send, {
       signal: stop.signal,
       onWaiting: (liftsAt) => {
-        if (liftsAt === null) return;
+        if (liftsAt === null) {
+          markSending(held.id);
+          return;
+        }
         holdDownload({ ...held, liftsAt }, () => stop.abort());
         if (wasHeld) return;
         wasHeld = true;
@@ -143,9 +149,14 @@ function sendWhenAllowed<Id>(held: Omit<HeldDownload, 'liftsAt'>, send: () => Pr
           await bridge.refresh();
           return id;
         },
-        (err: unknown) => {
+        async (err: unknown) => {
           if (!wasHeld) throw err;
-          if (!isAbortError(err)) listeners.forEach((l) => l.failed({ id: held.id, text: formatError(err) }));
+          if (isAbortError(err)) return null;
+          if (TransportError.hasCode(err, 'CONFLICT')) {
+            await bridge.refresh();
+            if (isInQueue(held.id)) return held.id as Id;
+          }
+          listeners.forEach((l) => l.failed({ id: held.id, text: `${held.id} was not queued: ${formatError(err)}` }));
           return null;
         },
       )

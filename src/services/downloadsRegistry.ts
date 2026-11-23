@@ -46,6 +46,12 @@ export function takeQueueSnapshot(next: QueueSnapshot): void {
   store.setState({ snapshot: next, cancellingId: settled ? null : cancellingId });
 }
 
+/** Whether download `id` is in the queue as last served, running or waiting. */
+export function isInQueue(id: string): boolean {
+  const { snapshot } = store.getState();
+  return snapshot !== null && (snapshot.active?.id === id || snapshot.waiting.some((row) => row.id === id));
+}
+
 /** Forget the last revision: the daemon behind the stream may have restarted. */
 export function forgetQueueRevision(): void {
   revision = 0;
