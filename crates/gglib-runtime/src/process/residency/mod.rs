@@ -24,6 +24,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 use crate::process::RuntimeBinaries;
+use crate::process::StopReason;
 use crate::process::admission::{
     AdmissionDecision, AdmissionQueue, Candidate, PRIMARY_SLOT, Resident, Ticket, launch_timeout,
 };
@@ -476,7 +477,7 @@ impl ResidentSet {
 
         if resident_match::launched_differently(&resident, request) {
             drop(lease);
-            self.recycle(slot, core).await;
+            self.recycle(slot, core, StopReason::Replaced).await;
             return Ok(None);
         }
 
@@ -487,7 +488,7 @@ impl ResidentSet {
                 "resident model failed health check; recycling degraded instance"
             );
             drop(lease);
-            self.recycle(slot, core).await;
+            self.recycle(slot, core, StopReason::Unhealthy).await;
             return Ok(None);
         }
 
@@ -593,14 +594,19 @@ impl ResidentSet {
         }
     }
 
-    /// Stop and forget whatever is in `slot`.
-    pub(super) async fn recycle(&self, slot: usize, core: &Arc<RwLock<GuiProcessCore>>) {
+    /// Stop and forget whatever is in `slot`, `why` as the log says.
+    pub(super) async fn recycle(
+        &self,
+        slot: usize,
+        core: &Arc<RwLock<GuiProcessCore>>,
+        why: StopReason,
+    ) {
         if let Some(previous) = self.queue.evict(slot) {
             // Told before the kill, so a watcher stops looking at the server
             // before it goes.
             self.observer.unloaded(previous.model_id);
             let mut core_w = core.write().await;
-            if let Err(e) = core_w.kill(previous.model_id).await {
+            if let Err(e) = core_w.kill(previous.model_id, why).await {
                 warn!(error = %e, "Failed to stop resident model cleanly, continuing");
             }
         }
@@ -638,7 +644,7 @@ impl ResidentSet {
         self.observer.unloaded(previous.model_id);
         let mut core_w = core.write().await;
         core_w
-            .kill(previous.model_id)
+            .kill(previous.model_id, StopReason::Asked)
             .await
             .map_err(|e| ModelRuntimeError::Internal(e.to_string()))?;
         Ok(true)

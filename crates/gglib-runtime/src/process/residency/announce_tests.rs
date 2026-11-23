@@ -223,7 +223,8 @@ async fn a_recycle_announces_the_model_unloaded() {
     )
     .await;
 
-    set.recycle(PRIMARY_SLOT, &core).await;
+    set.recycle(PRIMARY_SLOT, &core, crate::process::StopReason::Asked)
+        .await;
 
     assert_eq!(told.all(), [unloaded_while_running(RECYCLED_ID)]);
     assert!(!core.read().await.is_running(RECYCLED_ID));
@@ -363,7 +364,8 @@ async fn a_launched_model_is_announced_loaded_once_healthy_with_its_port_and_pid
     assert_eq!(admission.target.port, port);
     drop(admission);
 
-    set.recycle(1, &core).await;
+    set.recycle(1, &core, crate::process::StopReason::Asked)
+        .await;
     assert_eq!(told.all().last(), Some(&unloaded_while_running(PLACED_ID)));
 }
 
@@ -390,7 +392,11 @@ async fn a_retired_render_announces_its_model_unloaded() {
         .await
         .expect("nothing else generates");
     let kill = async {
-        core.write().await.kill(RENDERING_ID).await.unwrap();
+        core.write()
+            .await
+            .kill(RENDERING_ID, crate::process::StopReason::Asked)
+            .await
+            .unwrap();
     };
 
     let retired = set.retire_render(turn, RENDERING_ID, kill).await;
@@ -432,7 +438,11 @@ async fn a_retire_whose_slot_moved_on_announces_nothing() {
     // Emptied past the set, so nothing is announced for it here.
     assert!(queue.evict(1).is_some());
     let kill = async {
-        core.write().await.kill(MOVED_ON_ID).await.unwrap();
+        core.write()
+            .await
+            .kill(MOVED_ON_ID, crate::process::StopReason::Asked)
+            .await
+            .unwrap();
     };
 
     let retired = set.retire_render(turn, MOVED_ON_ID, kill).await;

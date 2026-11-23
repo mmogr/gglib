@@ -8,6 +8,7 @@
 //!
 //! [#849]: https://github.com/mmogr/gglib/pull/849
 
+use super::exit_report::{self, StopReason};
 use super::output_tail::OutputTail;
 use super::ports::{allocate_port, is_port_available};
 use super::shutdown::shutdown_child;
@@ -174,9 +175,11 @@ impl GuiProcessCore {
         self.binaries.for_runtime(runtime)
     }
 
-    /// Kill a running process with graceful shutdown
-    pub async fn kill(&mut self, model_id: u32) -> Result<()> {
-        let running = self
+    /// Kill a running process with graceful shutdown, and say in gglib's
+    /// log that it was stopped and `why`; or, if it had already exited by
+    /// itself, how it ended and what it printed last.
+    pub async fn kill(&mut self, model_id: u32, why: StopReason) -> Result<()> {
+        let mut running = self
             .processes
             .remove(&model_id)
             .ok_or_else(|| anyhow!("Model {model_id} is not running"))?;
@@ -184,8 +187,21 @@ impl GuiProcessCore {
         let pid = running.info.pid;
         debug!(model_id = %model_id, pid = %pid, port = %running.info.port, "Stopping process");
 
+        // Read before it is signalled, which would end it either way.
+        let ended_by_itself = match running.child.try_wait() {
+            Ok(Some(status)) => Some(status),
+            Ok(None) | Err(_) => None,
+        };
+        let (info, output, told) = (running.info.clone(), running.output.clone(), running.told);
+
         // Use graceful shutdown with SIGTERM → SIGKILL
         let _ = shutdown_child(running.child).await;
+
+        match ended_by_itself {
+            _ if told => {}
+            Some(status) => exit_report::exited_by_itself(&info, status, output),
+            None => exit_report::stopped(&info, why),
+        }
 
         // Remove PID file
         if let Err(e) = delete_pidfile(i64::from(model_id)) {
@@ -197,7 +213,8 @@ impl GuiProcessCore {
 
     /// Kill every child outright and wait for none of them: for a process
     /// with seconds left, such as the service after its console window is
-    /// closed on Windows.
+    /// closed on Windows. Each still running is told of as stopped because
+    /// gglib is shutting down, after every kill is sent.
     ///
     /// Each child is killed through its own handle: `start_kill` is SIGKILL
     /// on Unix and `TerminateProcess` on Windows, needs no runtime, and
@@ -207,10 +224,20 @@ impl GuiProcessCore {
     /// deletes its pidfile as it always does, and if the process ends first
     /// the next start's sweep finds the pidfile.
     pub fn kill_all_now(&mut self) {
+        let mut stopped = Vec::new();
         for (model_id, running) in &mut self.processes {
+            // One that has already exited is left to be told of as an exit
+            // by itself.
+            if !running.told && matches!(running.child.try_wait(), Ok(None)) {
+                running.told = true;
+                stopped.push(running.info.clone());
+            }
             if let Err(e) = running.child.start_kill() {
                 debug!(model_id = %model_id, error = %e, "could not kill the child at once");
             }
+        }
+        for info in &stopped {
+            exit_report::stopped(info, StopReason::Shutdown);
         }
     }
 
@@ -221,11 +248,11 @@ impl GuiProcessCore {
     /// not an error: the process this caller owned is already gone, and what
     /// holds the id now belongs to somebody else. Killing it because the names
     /// match would take down a healthy server that had just replaced it.
-    pub async fn kill_if_pid(&mut self, model_id: u32, pid: u32) -> Result<bool> {
+    pub async fn kill_if_pid(&mut self, model_id: u32, pid: u32, why: StopReason) -> Result<bool> {
         if self.processes.get(&model_id).map(|p| p.info.pid) != Some(pid) {
             return Ok(false);
         }
-        self.kill(model_id).await?;
+        self.kill(model_id, why).await?;
         Ok(true)
     }
 
@@ -269,6 +296,30 @@ impl GuiProcessCore {
         }
     }
 
+    /// Tell gglib's log that the child `pid`, filed under `model_id`, exited
+    /// by itself, if it has and nothing has told of it yet. Answers whether
+    /// it is still running, so [`exit_report::watch`] knows to look again.
+    ///
+    /// The child stays tracked: a stop asked of it afterwards still finds
+    /// it, and says nothing more.
+    pub(crate) fn tell_if_exited(&mut self, model_id: u32, pid: u32) -> bool {
+        let Some(running) = self.processes.get_mut(&model_id) else {
+            return false;
+        };
+        if running.info.pid != pid || running.told {
+            return false;
+        }
+        match running.child.try_wait() {
+            Ok(None) => true,
+            Ok(Some(status)) => {
+                running.told = true;
+                exit_report::exited_by_itself(&running.info, status, running.output.clone());
+                false
+            }
+            Err(_) => false,
+        }
+    }
+
     /// The last lines the child tracked for `model_id` printed, kept as it
     /// runs and after it exits.
     pub(crate) fn output_of(&self, model_id: u32) -> Option<OutputTail> {
@@ -301,7 +352,8 @@ impl GuiProcessCore {
         self.processes.len()
     }
 
-    /// Remove dead processes from tracking and clean PID files
+    /// Remove dead processes from tracking and clean PID files, telling
+    /// gglib's log of each exit nothing has told of yet.
     pub fn cleanup_dead(&mut self) -> Vec<u32> {
         debug!(process_count = %self.processes.len(), "cleanup_dead called");
         let mut dead = Vec::new();
@@ -327,7 +379,12 @@ impl GuiProcessCore {
 
         for id in &dead {
             debug!(id = %id, "Removing dead process from map");
-            self.processes.remove(id);
+            if let Some(running) = self.processes.remove(id)
+                && !running.told
+                && let Some(status) = self.reaped.get(id)
+            {
+                exit_report::exited_by_itself(&running.info, *status, running.output);
+            }
             // Remove PID file for naturally exited process
             if let Err(e) = delete_pidfile(i64::from(*id)) {
                 debug!("Failed to delete PID file for {}: {}", id, e);

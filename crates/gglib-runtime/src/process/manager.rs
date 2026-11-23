@@ -10,6 +10,7 @@
 //! both the state and the launch sequence that mutates it.
 
 use super::core::GuiProcessCore;
+use super::exit_report::StopReason;
 use super::spawn_config::RuntimeBinaries;
 use anyhow::Result;
 use gglib_core::cache_config::CacheRamSetting;
@@ -235,7 +236,9 @@ impl ProcessManager {
     /// See
     /// [`ModelRuntimePort::recycle_current`](gglib_core::ports::ModelRuntimePort::recycle_current).
     pub async fn recycle_current(&self) {
-        self.residency.recycle(PRIMARY_SLOT, &self.core).await;
+        self.residency
+            .recycle(PRIMARY_SLOT, &self.core, StopReason::Unhealthy)
+            .await;
     }
 
     /// List running servers as [`ProcessHandle`]s.
@@ -318,7 +321,12 @@ impl ProcessManager {
     pub async fn retire_render(&self, turn: GenerationTurn, model_id: u32) -> Option<Resident> {
         let core = Arc::clone(&self.core);
         let kill = async move {
-            if let Err(e) = core.write().await.kill(model_id).await {
+            if let Err(e) = core
+                .write()
+                .await
+                .kill(model_id, StopReason::RenderEnded)
+                .await
+            {
                 tracing::warn!(model_id, error = %e, "could not stop the image model cleanly");
             }
         };
