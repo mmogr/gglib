@@ -5,14 +5,16 @@
 //! token count taken at some chars-per-token ratio, and [`ContextBudget`]
 //! keeps both numbers.
 //!
-//! The ratio is needed again for the one part of a request whose length says
-//! nothing about its cost: an image. A screenshot is a megabyte of base64 and
-//! a few thousand prompt tokens, so [`measured_len`] counts each image at
-//! [`image_url_tokens`] times the budget's ratio, in place of its URL's
-//! length.
+//! The ratio is needed again for the two parts of a request whose length
+//! says nothing about their cost: an image and an audio clip. A screenshot is
+//! a megabyte of base64 and a few thousand prompt tokens, so [`measured_len`]
+//! counts each image at [`image_url_tokens`] times the budget's ratio, in
+//! place of its URL's length. A clip is counted the same way at
+//! [`AUDIO_PART_TOKENS`], a stand-in, in place of the length of its base64.
 
 use serde_json::Value;
 
+use super::audio::{AUDIO_PART_TOKENS, request_audio_data};
 use super::images::{image_url_tokens, request_image_urls};
 
 /// A history-truncation budget: the characters a request may measure, and the
@@ -38,14 +40,21 @@ impl ContextBudget {
 }
 
 /// The length `body` is measured at under `budget`: its bytes once
-/// serialized, with each image counted at its estimated tokens, at the
-/// budget's chars-per-token ratio, in place of the length of its URL.
+/// serialized, with each image counted at its estimated tokens in place of
+/// the length of its URL, and each audio clip at [`AUDIO_PART_TOKENS`] in
+/// place of the length of its base64, both at the budget's chars-per-token
+/// ratio.
 ///
-/// A request with no images measures exactly its serialized length.
+/// A request with no images and no audio measures exactly its serialized
+/// length.
 pub(super) fn measured_len(body: &Value, budget: ContextBudget) -> usize {
-    request_image_urls(body).fold(serialized_len(body), |len, url| {
+    let with_images = request_image_urls(body).fold(serialized_len(body), |len, url| {
         len.saturating_sub(url.len())
             .saturating_add(budget.chars_for(image_url_tokens(url)))
+    });
+    request_audio_data(body).fold(with_images, |len, data| {
+        len.saturating_sub(data.len())
+            .saturating_add(budget.chars_for(AUDIO_PART_TOKENS))
     })
 }
 

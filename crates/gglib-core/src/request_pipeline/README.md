@@ -40,8 +40,9 @@ does either.
   the catalog does not hold rather than degrade it.
 - [`content`] — [`text_len()`] and [`for_each_text_mut()`], the two shapes a
   message's `content` takes (a string, or an array of parts), read and
-  rewritten in one place for every stage that handles message text; and
-  [`image_urls()`], the one walk over a message's `image_url` parts.
+  rewritten in one place for every stage that handles message text;
+  [`image_urls()`], the one walk over a message's `image_url` parts; and
+  `audio_data()`, the one walk over its `input_audio` parts.
 - [`images`] — the one image policy. [`estimate_image_tokens()`] prices an
   image by its pixels (one token per 32x32 square, at most 4,096), and
   [`image_url_tokens()`] prices a URL, at the cap when its size cannot be
@@ -50,6 +51,10 @@ does either.
   [`MAX_IMAGE_BYTES`] (8 MiB) is the most one stored image may be, and
   [`MAX_REQUEST_IMAGE_BYTES`] (16 MiB) the most raw image bytes one request
   to a model may carry.
+- [`audio`] — what an audio clip costs: no reading of any audio encoder's
+  rate exists, so every `input_audio` part is charged `AUDIO_PART_TOKENS`
+  (512, small so that several clips fit a small context), a stand-in and not
+  an estimate. [`has_audio()`] says whether a request carries one.
 - [`chat_runtime`] — [`refuse_unless_chats()`]: a model that draws is served
   by `sd-server`, which cannot chat, so every door that admits a model for
   chat refuses it first, with the code and words [`DrawsImages`] holds.
@@ -88,7 +93,8 @@ does either.
 - [`measure`] — [`ContextBudget`], the characters a request may measure and
   the context in tokens they stand for, and the measurement stage 3 takes: a
   request's serialized length, with each image counted at its estimated
-  tokens in place of the length of its URL.
+  tokens in place of the length of its URL, and each audio clip at its
+  stand-in in place of the length of its base64.
 - [`sampling`] — [`resolve_sampling()`] and [`SamplingLayers`], stage 4: the
   sampling hierarchy. Everything that
   touches top-level sampling keys.

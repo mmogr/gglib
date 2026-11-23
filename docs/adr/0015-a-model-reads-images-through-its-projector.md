@@ -400,9 +400,11 @@ it again.
 ## Out of scope
 
 - **Audio and video.** gglib's own surfaces attach PNG and JPEG images
-  alone, and nothing here measures, refuses or stores an audio or a video
-  part, though `/props` reported `video: true` with the projector:
-  [#1259](https://github.com/mmogr/gglib/issues/1259).
+  alone, and nothing here refuses or stores an audio or a video part, though
+  `/props` reported `video: true` with the projector. An outside client's
+  `input_audio` part is measured at a small stand-in rather than its base64,
+  so it is not refused for length
+  ([#1259](https://github.com/mmogr/gglib/issues/1259)).
 - **Pasting from the clipboard in the CLI.** `--image` and `/image` read a
   file: [#1260](https://github.com/mmogr/gglib/issues/1260).
 - **A dashboard row for what a request's images cost,** estimated and
