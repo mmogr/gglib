@@ -70,6 +70,7 @@ is for these.
 |---|---|---|
 | `gglib-runtime` `llm_completion/retry/execute.rs` | **yes** | Many clients can collide on one model's startup; decorrelating them is exactly what full jitter is for. |
 | `gglib-proxy` `slots.rs` | no | A single-writer disk save. Jitter exists to decorrelate competing callers and there are none, so exponential growth would only make the second attempt slower for no benefit. |
+| `gglib-core` `hub_limit/` | no | Hugging Face's rate limit is waited out to the reset time the Hub names, up to its five-minute window. `decide` caps a server's hint at 15 s and the whole sequence at 60 s, so it cannot hold that wait, and the Hub's limit has its own module. |
 | `gglib-proxy` `sse_stream.rs` | no | Its "retry" is a `select!` arm over a first-byte deadline and client keepalives, and it fires on *deadline expiry with no other active connection* — a queue-position judgement, not a transient error. Different control structure, different trigger. |
 
 **One-shot recovery with different configuration** — not retries at all. These

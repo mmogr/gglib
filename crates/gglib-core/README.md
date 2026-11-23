@@ -102,6 +102,7 @@ DEPENDS ON ───────────────────────
 - **`request_pipeline/`** — Request shaping for every inference path: `resolve` reads what the catalog knows of a model into a `ModelContext`, and `apply` runs the ordered stages (reasoning strip, capability coalescing, tool stripping, truncation, sampling) on the outgoing body. Called by the proxy's forwarding path, the runtime's completion adapter and the daemon's chat-title request
 - **`access/`** — Who may reach the proxy: the bearer token, the Host allowlist and the Origin check, carried together in `ProxyAccessConfig`; and, on disk, the keys issued to paired devices and the daemon's own token
 - **`retry/`** — The backoff policy for retryable upstream failures, as the pure `decide`; the caller owns the clock, the randomness and the sleeping
+- **`hub_limit/`** — Hugging Face's rate limit: the `RateLimit` header read as an allowance and a reset (`parse`), the gate that keeps a spent allowance from being asked (`HubGate`), and the wait a one-shot command makes, with the one sentence every surface shows (`wait_out`, `waiting_sentence`)
 - **`contracts/`** — HTTP route constants the daemon, the proxy and the CLI share, and the bodies of a few routes: the drawing route's request, answer and streamed events, and where an image attachment is sent and read
 - **`utils/`** — Shared utility functions and helpers
 - **`settings.rs`** — Application settings and configuration types

@@ -74,7 +74,8 @@ required-features = ["test-utils"]
 [dev-dependencies]
 gglib-test-proc = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["io-util", "macros", "rt", "time"] }
+# `test-util` for `start_paused`, so a wait is tested on a clock that does not run.
+tokio = { workspace = true, features = ["io-util", "macros", "rt", "test-util", "time"] }
 
 [lints]
 workspace = true
