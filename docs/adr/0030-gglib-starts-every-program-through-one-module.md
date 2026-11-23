@@ -83,6 +83,21 @@ comment).
 > test cannot raise the console events; a run on the Windows VM is their
 > proof. The engines' kill is tested on every OS.
 
+> **Amended 2026-11-23 ([#2189](https://github.com/mmogr/gglib/issues/2189)).**
+> A test raises one of the console events, Ctrl-Break.
+> `gglib_core::utils::process::test_stop`, compiled only in gglib-core's
+> tests and with its `test-utils` feature, starts a child on the test's
+> console in a process group of its own (`CREATE_NEW_PROCESS_GROUP`) and
+> sends it `GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, …)`, from `host.rs`
+> beside the other calls. Setting that flag is one more `disallowed_methods`
+> exception, in `host.rs`, so the count of the first kill criterion rises
+> by one; `windows_sys::` is still in `host.rs` alone.
+> `crates/gglib-cli/tests/daemon_lifecycle.rs` holds the service to a clean
+> exit that frees its lock after that stop on Windows, and after SIGTERM on
+> macOS and Linux. The console closing, a logoff and a
+> shutdown are still raised by no test; a run on the Windows VM is their
+> proof.
+
 > **Amendment, 2026-11-16 ([#1985](https://github.com/mmogr/gglib/issues/1985)).**
 > On Windows the engines end with the process that started them, however
 > it ends: `taskkill /F`, a crash, a console window closed during a

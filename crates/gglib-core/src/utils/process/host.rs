@@ -40,6 +40,11 @@
 //! a dark one (#2050). Off Windows there is no such taskbar, and the
 //! answer is `None`.
 //!
+//! In this crate's tests and with its `test-utils` feature it also sends
+//! Ctrl-Break to a child started on this process's
+//! console in a process group of its own, the orderly stop a test asks of a
+//! child on Windows (`test_stop`, #2189).
+//!
 //! These calls have no safe form in the standard library, so the Windows
 //! half of this file allows `unsafe`, and Windows is called directly from
 //! here only (ADR 0030).
@@ -158,6 +163,13 @@ fn not_kept() -> std::io::Error {
 /// [`super::tree`].
 #[cfg(windows)]
 pub(super) use windows::{TreeJob, resume, start_suspended};
+
+// --- An orderly stop a test asks of a child (#2189) ---
+
+/// Ctrl-Break, and the start on this process's console in a process group
+/// of its own that lets it reach a child; see [`super::test_stop`].
+#[cfg(all(windows, any(test, feature = "test-utils")))]
+pub(super) use windows::{ctrl_break, own_group_on_this_console};
 
 #[cfg(windows)]
 #[expect(
@@ -730,6 +742,75 @@ mod windows {
                 ERROR_FILE_NOT_FOUND => Ok(None),
                 other => Err(status_error(other)),
             }
+        }
+    }
+
+    // --- An orderly stop a test asks of a child (#2189) ---
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(in crate::utils::process) use console_stop::{ctrl_break, own_group_on_this_console};
+
+    #[cfg(any(test, feature = "test-utils"))]
+    mod console_stop {
+        use std::io;
+
+        use windows_sys::Win32::System::Console::{
+            AttachConsole, CTRL_BREAK_EVENT, FreeConsole, GenerateConsoleCtrlEvent,
+        };
+        use windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP;
+
+        /// Have `command` start its process on this process's console, in a
+        /// process group of its own whose id is the process's id. The flags
+        /// are replaced, not added to: the `CREATE_NO_WINDOW` that
+        /// [`crate::utils::process::cmd`] sets gives the child a console of
+        /// its own, which a Ctrl-Break sent from here does not reach. A new
+        /// group ignores Ctrl-C ("CTRL+C signals will be disabled for all
+        /// processes within the new process group", Process Creation Flags)
+        /// and still hears Ctrl-Break.
+        pub(in crate::utils::process) fn own_group_on_this_console(
+            command: &mut std::process::Command,
+        ) {
+            use std::os::windows::process::CommandExt as _;
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "a test child's creation flags are set here, in the process module"
+            )]
+            command.creation_flags(CREATE_NEW_PROCESS_GROUP);
+        }
+
+        /// Send Ctrl-Break to the process group `group`, started by
+        /// [`own_group_on_this_console`]. When this process has no console,
+        /// that child was given one of its own, and this process attaches
+        /// to it for the send and leaves it after.
+        pub(in crate::utils::process) fn ctrl_break(group: u32) -> io::Result<()> {
+            let Err(unsent) = send(group) else {
+                return Ok(());
+            };
+            // SAFETY: a plain value. It fails and changes nothing when this
+            // process already has a console ("If the calling process is
+            // already attached to a console, the error code returned is
+            // ERROR_ACCESS_DENIED", AttachConsole); the first error is
+            // then the one reported.
+            if unsafe { AttachConsole(group) } == 0 {
+                return Err(unsent);
+            }
+            let sent = send(group);
+            // SAFETY: no arguments. It detaches this process from the
+            // console it attached to above; the child keeps it.
+            unsafe { FreeConsole() };
+            sent
+        }
+
+        /// `GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, group)`.
+        fn send(group: u32) -> io::Result<()> {
+            // SAFETY: plain values. The event goes to the processes of the
+            // group `group` "that share the console associated with the
+            // calling process" (GenerateConsoleCtrlEvent); this process is
+            // in another group, so it is not sent it.
+            if unsafe { GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, group) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
         }
     }
 
