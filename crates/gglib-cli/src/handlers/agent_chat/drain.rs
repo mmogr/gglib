@@ -16,12 +16,12 @@ use tokio::sync::mpsc;
 
 use super::markdown::render_markdown;
 use super::pictures::{Links, Pictures};
-use super::progress_line;
 use super::renderer::{figure_line, render_event, tool_line};
 use super::thinking_dispatch::{
     Out, RenderContext, Said, close_thinking, emit_content, emit_reasoning, end_text,
     suspend_or_run,
 };
+use crate::presentation::status_line;
 
 /// Drain `rx` until the channel closes or a [`AgentEvent::FinalAnswer`]
 /// arrives, rendering each event. Nothing is saved here: the daemon saves
@@ -93,7 +93,7 @@ async fn drain(
             AgentEvent::ToolProgress { .. } | AgentEvent::Waiting { .. }
         );
         if progress_showing && !is_progress && !matches!(event, AgentEvent::ToolPreview { .. }) {
-            progress_line::wipe();
+            status_line::wipe();
             progress_showing = false;
         }
         progress_showing |= is_progress && !quiet;

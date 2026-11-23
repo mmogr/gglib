@@ -3,6 +3,7 @@
 //! This is the composition root for core services. Adapters (CLI, GUI, Web)
 //! receive an `AppCore` instance and use it to access all functionality.
 
+use crate::hub_limit::OnLimit;
 use crate::ports::{DownloadManagerPort, GgufParserPort, HfClientPort, Repos};
 use std::sync::Arc;
 
@@ -34,6 +35,7 @@ pub struct AppCore {
     verification: ModelVerificationService,
     secrets: SecretsService,
     hf_token: Option<String>,
+    on_hub_limit: OnLimit,
 }
 
 impl AppCore {
@@ -61,6 +63,7 @@ impl AppCore {
             chat_history: ChatHistoryService::new(repos.chat_history),
             attachments: AttachmentService::new(repos.attachments),
             hf_token: None,
+            on_hub_limit: OnLimit::Surface,
         }
     }
 
@@ -125,6 +128,21 @@ impl AppCore {
     #[must_use]
     pub fn hf_token(&self) -> Option<String> {
         self.hf_token.clone()
+    }
+
+    /// This core, meeting the Hub's rate limit as `on_limit` says in the
+    /// requests its own Hub client does not make.
+    #[must_use]
+    pub fn with_on_hub_limit(mut self, on_limit: OnLimit) -> Self {
+        self.on_hub_limit = on_limit;
+        self
+    }
+
+    /// What the requests [`Self::hf_token`] is for do at the Hub's rate
+    /// limit: what its process's own Hub client does.
+    #[must_use]
+    pub fn on_hub_limit(&self) -> OnLimit {
+        self.on_hub_limit.clone()
     }
 }
 

@@ -185,6 +185,18 @@ the stream is piped or redirected. `COLUMNS` is not read.
 - `stdout_width()` - Standard output's width
 - `stderr_width()` - Standard error's width
 
+### Status Line
+**Module:** `status_line.rs`
+
+One line on stderr that each report rewrites on a terminal, and wipes when
+what it reports is over; on a pipe each report is its own line. A chat's
+tool progress is shown on it, and so is a wait on Hugging Face's rate limit,
+which a pipe is told once a wait.
+
+**Key Functions:**
+- `show()` / `wipe()` - Write the line, and wipe it
+- `hub_wait_notice()` - The notice a one-shot command's Hub client is told a rate-limit wait through
+
 ## Usage Guidelines
 
 ### When to Use This Module

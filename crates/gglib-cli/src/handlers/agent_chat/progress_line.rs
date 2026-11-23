@@ -1,19 +1,9 @@
-//! A long tool's progress, and a wait before a reply, as one line on stderr
-//! that each new report rewrites: "drawing: sampling 2/4", or "Loading
-//! Qwen3-4B… 12 s" while the daemon loads the chat's model.
-//!
-//! On a terminal the line is redrawn in place and wiped when the tool
-//! completes; written to a pipe, each report is its own line (the agent loop
-//! sends at most about one a second).
-
-use std::io::{self, IsTerminal as _, Write as _};
+//! The words of a long tool's progress, and of a wait before a reply, for
+//! the status line ([`crate::presentation::status_line`]): "drawing:
+//! sampling 2/4", or "Loading Qwen3-4B… 12 s" while the daemon loads the
+//! chat's model. The agent loop sends at most about one a second.
 
 use gglib_core::domain::agent::{AgentEvent, ToolStage};
-
-use crate::presentation::style::{DIM, RESET};
-
-/// Wipes the terminal line the cursor is on and returns to its start.
-const WIPE: &str = "\r\x1b[2K";
 
 /// The words for a `ToolProgress` or `Waiting` event; `None` for any other.
 pub(super) fn progress_line(event: &AgentEvent) -> Option<String> {
@@ -48,26 +38,6 @@ pub(super) fn progress_line(event: &AgentEvent) -> Option<String> {
         // one: "Loading Qwen3-4B… 12 s".
         AgentEvent::Waiting { .. } => event.waiting_sentence(),
         _ => None,
-    }
-}
-
-/// Write `line`, rewriting the last one on a terminal.
-pub(super) fn show(line: &str) {
-    let mut err = io::stderr();
-    if err.is_terminal() {
-        let _ = write!(err, "{WIPE}  {DIM}{line}{RESET}");
-    } else {
-        let _ = writeln!(err, "  {line}");
-    }
-    let _ = err.flush();
-}
-
-/// Wipe a progress line, on a terminal, before what follows it is written.
-pub(super) fn wipe() {
-    let mut err = io::stderr();
-    if err.is_terminal() {
-        let _ = write!(err, "{WIPE}");
-        let _ = err.flush();
     }
 }
 

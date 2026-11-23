@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
+use gglib_core::hub_limit::OnLimit;
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, GgufParserPort, HfClientPort,
     ModelRegistrarPort, Repos,
@@ -30,8 +31,17 @@ struct Holders {
     /// they go under. With no directory the manager asks for the current one
     /// as a download starts.
     download_config: DownloadManagerConfig,
-    /// `AppCore`'s token, for an upgrade's check and its download.
-    core_token: Option<String>,
+    /// How `AppCore` asks the Hub in an upgrade's check and its download.
+    core: CoreHub,
+}
+
+/// How `AppCore` asks the Hub in the requests its Hub client does not make.
+#[derive(Default)]
+struct CoreHub {
+    /// The token it sends.
+    token: Option<String>,
+    /// What it does at the Hub's rate limit: what the Hub client does.
+    on_limit: OnLimit,
 }
 
 /// Each holder, for `config`: the download manager's config names its models
@@ -47,12 +57,17 @@ fn holders(config: &BootstrapConfig, env_token: impl FnOnce() -> Option<String>)
         .and_then(hf_token::normalised)
         .or_else(env_token);
     Holders {
-        client_config: HfClientConfig::default().with_optional_token(token.clone()),
+        client_config: HfClientConfig::default()
+            .with_optional_token(token.clone())
+            .with_on_limit(config.on_hub_limit.clone()),
         download_config: DownloadManagerConfig {
             models_directory: config.models_dir.clone(),
             ..DownloadManagerConfig::default().with_hf_token(token.clone())
         },
-        core_token: token,
+        core: CoreHub {
+            token,
+            on_limit: config.on_hub_limit.clone(),
+        },
     }
 }
 
@@ -141,7 +156,7 @@ impl CoreBootstrap {
         let Holders {
             client_config: _,
             mut download_config,
-            core_token,
+            core,
         } = holders;
 
         // Repositories. The model-files repository among them is the one the
@@ -164,7 +179,7 @@ impl CoreBootstrap {
             hf_client,
             gguf_parser,
             download_config,
-            core_token,
+            core,
             emitter,
         );
         built.upgraded_from = upgraded_from;
@@ -186,7 +201,7 @@ fn wire(
     hf_client: Arc<dyn HfClientPort>,
     gguf_parser: Arc<dyn GgufParserPort>,
     download_config: DownloadManagerConfig,
-    core_token: Option<String>,
+    core: CoreHub,
     emitter: Arc<dyn AppEventEmitter>,
 ) -> BuiltCore {
     // 4. Model registrar — composes model repository + GGUF parser so that
@@ -221,7 +236,8 @@ fn wire(
             Arc::clone(&downloads),
             gguf_parser.clone(),
         )
-        .with_hf_token(core_token),
+        .with_hf_token(core.token)
+        .with_on_hub_limit(core.on_limit),
     );
 
     BuiltCore {
@@ -265,7 +281,7 @@ mod tests {
     /// hold, or `None` when none of them holds one. The client's config
     /// shows only whether it has a token.
     fn the_token(holders: &Holders) -> Option<&str> {
-        let token = holders.core_token.as_deref();
+        let token = holders.core.token.as_deref();
         assert_eq!(holders.download_config.hf_token.as_deref(), token);
         assert_eq!(holders.client_config.has_token(), token.is_some());
         token
@@ -322,6 +338,25 @@ mod tests {
         let holders = holders(&config, || Some(ENV_TOKEN.to_owned()));
 
         assert_eq!(holders.download_config.models_directory, None);
+    }
+
+    /// A one-shot command's wait at the Hub's rate limit is the core's too,
+    /// for the Hub requests it makes itself.
+    #[test]
+    fn the_configs_rate_limit_policy_is_the_cores() {
+        let config = BootstrapConfig {
+            on_hub_limit: OnLimit::Wait(Arc::new(|_| {})),
+            ..BootstrapConfig::for_db(PathBuf::from("/data/gglib.db"))
+        };
+
+        let waiting = holders(&config, || None);
+        let surfacing = holders(
+            &BootstrapConfig::for_db(PathBuf::from("/data/gglib.db")),
+            || None,
+        );
+
+        assert!(matches!(waiting.core.on_limit, OnLimit::Wait(_)));
+        assert!(matches!(surfacing.core.on_limit, OnLimit::Surface));
     }
 
     #[test]

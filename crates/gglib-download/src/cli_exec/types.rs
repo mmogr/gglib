@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+use gglib_core::hub_limit::OnLimit;
 use gglib_core::ports::{CompletedDownload, ResolvedFile};
 
 /// Request to download a model from `HuggingFace`.
@@ -21,6 +22,8 @@ pub struct CliDownloadRequest {
     pub force: bool,
     /// `HuggingFace` API token (for private repos).
     pub token: Option<String>,
+    /// What the download's Hub reads do at the Hub's rate limit.
+    pub on_limit: OnLimit,
 }
 
 impl CliDownloadRequest {
@@ -32,6 +35,7 @@ impl CliDownloadRequest {
             models_dir,
             force: false,
             token: None,
+            on_limit: OnLimit::Surface,
         }
     }
 
@@ -119,6 +123,8 @@ pub struct CliUpdateRequest {
     pub models_dir: PathBuf,
     /// `HuggingFace` API token.
     pub token: Option<String>,
+    /// What the upgrade's Hub reads do at the Hub's rate limit.
+    pub on_limit: OnLimit,
 }
 
 /// Information about available model updates.

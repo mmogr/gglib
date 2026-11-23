@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
+use gglib_core::hub_limit::OnLimit;
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, GgufParserPort, HfClientPort, ModelCatalogPort,
     NoopEmitter, SettingsRepository,
@@ -18,6 +19,7 @@ use gglib_core::services::{AppCore, CatalogPortImpl};
 use gglib_db::{SqliteBenchmarkRepository, SqliteLoopGuardTripLog};
 use gglib_mcp::McpService;
 
+use crate::commands::Commands;
 use crate::console::CliConsole;
 use crate::daemon_client::LibraryChanges;
 
@@ -71,15 +73,17 @@ pub struct CliContext {
     pub(crate) library_changes: Arc<LibraryChanges>,
 }
 
-/// Bootstrap the CLI application.
+/// Bootstrap the CLI application to run `command`.
 ///
 /// Delegates all shared wiring to [`CoreBootstrap::build`] and adds the
 /// CLI-specific layer: the console, the MCP service, and the shared HTTP
-/// client.
-pub async fn bootstrap() -> Result<CliContext> {
+/// client. The Hub is asked as `command` asks it: a one-shot command waits
+/// out its rate limit, and any other surfaces it
+/// ([`on_hub_limit`](crate::hub_wait::on_hub_limit)).
+pub async fn bootstrap(command: &Commands) -> Result<CliContext> {
     // Resolve paths/env up-front so BootstrapConfig holds only resolved data.
     let bootstrap_config = BootstrapConfig::for_db(database_path()?);
-    let (ctx, upgraded_from) = bootstrap_with(bootstrap_config).await?;
+    let (ctx, upgraded_from) = bootstrap_with(bootstrap_config, Some(command)).await?;
     if upgraded_from.is_some() {
         crate::hand_over::say_who_is_left_behind();
     }
@@ -87,10 +91,12 @@ pub async fn bootstrap() -> Result<CliContext> {
 }
 
 /// [`bootstrap`] over the database `bootstrap_config` names, so a test can
-/// point it at a temporary directory. With the context, the schema
+/// point it at a temporary directory, asking the Hub as `command` does
+/// (with none, its rate limit is surfaced). With the context, the schema
 /// generation the library was upgraded from, when this upgraded it.
 pub(crate) async fn bootstrap_with(
     bootstrap_config: BootstrapConfig,
+    command: Option<&Commands>,
 ) -> Result<(CliContext, Option<i64>)> {
     // The console owns the progress bars and routes log lines around them.
     // The CLI subscribes to no application events: a download monitor reads
@@ -98,6 +104,12 @@ pub(crate) async fn bootstrap_with(
     // manager, so the shared bootstrap is handed an emitter that drops them.
     let console = Arc::new(CliConsole::new());
     let emitter: Arc<dyn AppEventEmitter> = Arc::new(NoopEmitter::new());
+    let bootstrap_config = BootstrapConfig {
+        on_hub_limit: command.map_or_else(OnLimit::default, |command| {
+            crate::hub_wait::on_hub_limit(command, &console)
+        }),
+        ..bootstrap_config
+    };
 
     let BuiltCore {
         app,
@@ -134,7 +146,7 @@ pub(crate) async fn bootstrap_with(
 /// [`bootstrap_with`] over a fresh database in `dir`, for a test.
 #[cfg(test)]
 pub(crate) async fn test_context(dir: &std::path::Path) -> CliContext {
-    bootstrap_with(BootstrapConfig::for_db(dir.join("gglib.db")))
+    bootstrap_with(BootstrapConfig::for_db(dir.join("gglib.db")), None)
         .await
         .expect("the database opens")
         .0

@@ -32,9 +32,10 @@ independently readable:
   image a tool made drawn under its line on one that draws pictures
 - `inline_picture` — which terminals draw a picture (iTerm2, kitty,
   Ghostty), what is written to draw one, and how wide
-- `progress_line` — a long tool's progress ("drawing: sampling 2/4") and a
-  wait before a reply ("Loading Qwen3-4B… 12 s", core's words), as one
-  stderr line each report rewrites; a preview frame is not shown
+- `progress_line` — the words of a long tool's progress ("drawing:
+  sampling 2/4") and of a wait before a reply ("Loading Qwen3-4B… 12 s",
+  core's words), shown on the shared status line
+  (`presentation/status_line.rs`); a preview frame is not shown
 - [`drain`]    — async event-stream consumer (spinner, thinking accumulator);
   prints the reply's figure line on stderr after it, from its last turn's
   usage, unless `--quiet`

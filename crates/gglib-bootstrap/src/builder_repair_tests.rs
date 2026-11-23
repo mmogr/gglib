@@ -43,7 +43,7 @@ async fn a_repair_leaves_a_running_download() {
             models_directory: Some(models_dir),
             ..DownloadManagerConfig::default()
         },
-        None,
+        CoreHub::default(),
         Arc::new(NoopEmitter::new()),
     );
 

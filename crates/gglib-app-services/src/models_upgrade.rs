@@ -10,6 +10,7 @@ use std::sync::Arc;
 use gglib_core::domain::Revision;
 use gglib_core::download::DownloadError;
 use gglib_core::events::AppEvent;
+use gglib_core::hub_limit::OnLimit;
 use gglib_core::ports::ModelRegistrarPort;
 use gglib_download::cli_exec::{
     CliDownloadResult, CliUpdateRequest, RowCallback, UpdateCheckResult, stored_variant_label,
@@ -28,13 +29,15 @@ struct Due {
     check: UpdateCheckResult,
 }
 
-/// Ask the Hub for `repo`'s latest commit, and compare it with `recorded`.
+/// Ask the Hub for `repo`'s latest commit, and compare it with `recorded`,
+/// meeting the Hub's rate limit as `on_limit` says.
 async fn hub_check(
     repo: String,
     recorded: Option<String>,
     token: Option<String>,
+    on_limit: OnLimit,
 ) -> anyhow::Result<UpdateCheckResult> {
-    gglib_download::cli_exec::check_update(&repo, recorded.as_deref(), token).await
+    gglib_download::cli_exec::check_update(&repo, recorded.as_deref(), token, on_limit).await
 }
 
 impl ModelOps {
@@ -62,7 +65,8 @@ impl ModelOps {
         if let Some(label) = &model.variant_label {
             return Ok((repo, label.clone()));
         }
-        let quant = stored_variant_label(&repo, model, self.deps.core.hf_token())
+        let core = &self.deps.core;
+        let quant = stored_variant_label(&repo, model, core.hf_token(), core.on_hub_limit())
             .await
             .map_err(|e| GuiError::Internal(e.to_string()))?
             .ok_or_else(|| GuiError::ValidationFailed(gglib_core::domain::NO_HUB_LABEL.into()))?;
@@ -80,7 +84,11 @@ impl ModelOps {
     /// is true, which a caller presents as "no baseline recorded", not as a
     /// new release.
     pub async fn check_update(&self, id: i64) -> Result<UpgradeCheck, GuiError> {
-        self.check_update_with(id, hub_check).await
+        let on_limit = self.deps.core.on_hub_limit();
+        self.check_update_with(id, |repo, recorded, token| {
+            hub_check(repo, recorded, token, on_limit)
+        })
+        .await
     }
 
     /// [`check_update`](Self::check_update) with what it asks of the Hub
@@ -179,7 +187,9 @@ impl ModelOps {
         let parser = Arc::clone(&self.deps.gguf_parser);
         let download =
             |request, rows| gglib_download::cli_exec::update_model(request, parser, rows);
-        self.apply_upgrade_with(id, rows, hub_check, download).await
+        let on_limit = self.deps.core.on_hub_limit();
+        let check = |repo, recorded, token| hub_check(repo, recorded, token, on_limit);
+        self.apply_upgrade_with(id, rows, check, download).await
     }
 
     /// [`apply_upgrade`](Self::apply_upgrade) with the two things it asks of
@@ -229,6 +239,7 @@ impl ModelOps {
             quantization: quant,
             models_dir,
             token: self.deps.core.hf_token(),
+            on_limit: self.deps.core.on_hub_limit(),
         };
 
         let download = download(request, rows);
@@ -277,7 +288,9 @@ impl ModelOps {
     /// replaced then, one file at a time: an upgrade cancelled part-way
     /// leaves files of two revisions under a row that names the old one.
     pub async fn queue_upgrade(&self, id: i64) -> Result<UpgradeQueued, GuiError> {
-        self.queue_upgrade_with(id, hub_check).await
+        let on_limit = self.deps.core.on_hub_limit();
+        let check = |repo, recorded, token| hub_check(repo, recorded, token, on_limit);
+        self.queue_upgrade_with(id, check).await
     }
 
     /// [`queue_upgrade`](Self::queue_upgrade) with the check passed in, as
