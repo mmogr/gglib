@@ -22,7 +22,10 @@ listing, which reads headers further and answers seconds later; the CLI's
 `--list-quants` marks the same). The list shows at once; ★ and the selection
 are added when the pick arrives. With none marked, as for a repo with no
 model, no row is selected until one is chosen. The selected row is scrolled into view; only the selected row
-carries `[■ Download]`, which queues that variant. Sizes are the library's
+carries `[■ Download]`, which queues that variant, or holds it while
+Hugging Face's rate limit refuses the queue (a row in the library's
+Downloading group, queued when the limit lifts), and says which in a
+toast (`hooks/useQueueDownload`). Sizes are the library's
 (`formatSize`, two decimals). A draft or helper (`role: Sidecar`, its header's word) is dimmed,
 "not a model on its own", and cannot be selected; a projector is no row.
 While the daemon says the queue is full, Download is disabled and one line
@@ -42,7 +45,8 @@ Words with no Rust twin: "Pick a size", "Quant", "Size", "Fit", "gglib's pick" (
 on its own", "Brings <file> (<size>) for images", "The download queue is
 full; Download waits for room.", "This repo has no GGUF files.", "Reading
 the repo's files…", "About this model", "Hugging Face's rate limit lifts
-in 2:14. gglib will read this again then.", and the companion
+in 2:14. gglib will read this again then.", "<repo> will be queued when
+Hugging Face's rate limit lifts", and the companion
 note's sentences.
 
 | File | Role |

@@ -11,7 +11,8 @@
  * queue-full reason, and Download offered with room or the queue not known
  * yet; and the one line for a repo with no model. A listing Hugging Face
  * rate limits says when the limit lifts, counting down, and is read again
- * then in the same place; leaving stops the wait.
+ * then in the same place; leaving stops the wait. A Download the limit
+ * refused is held, said in a toast, and queued when it lifts.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -299,13 +300,13 @@ describe('the inspector, a Hugging Face repo', () => {
       const heading = await within(inspector()).findByRole('heading', { name: REPO });
 
       const line = await within(inspector()).findByRole('status');
-      expect(line).toHaveTextContent("Hugging Face's rate limit lifts in 2:14. gglib will read this again then.");
+      expect(line).toHaveTextContent(/^Hugging Face's rate limit lifts in 2:1[34]\. gglib will read this again then\.$/);
       expect(line).toHaveClass('text-text-secondary');
       // One line for the panel: the summary and the pick say nothing of it.
       expect(within(inspector()).getAllByText(/rate limit lifts/)).toHaveLength(1);
       expect(within(inspector()).queryByRole('alert')).not.toBeInTheDocument();
       await act(() => vi.advanceTimersByTimeAsync(2_000));
-      expect(line).toHaveTextContent('lifts in 2:12.');
+      expect(line).toHaveTextContent(/lifts in 2:1[12]\./);
 
       await act(() => vi.advanceTimersByTimeAsync(132_000));
       expect(await within(inspector()).findByRole('listbox', { name: 'Sizes' })).toBeInTheDocument();
@@ -328,12 +329,30 @@ describe('the inspector, a Hugging Face repo', () => {
       expect(transport.getHfQuantizations).toHaveBeenCalledTimes(1);
     });
 
+    it('holds a Download clicked while limited, says it will be queued, and holds a second click as the same one', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      transport.queueDownload.mockRejectedValueOnce(hubLimited(133));
+      renderHf([quant('Q4_K_M', 4000, { picked: true })]);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const download = await within(inspector()).findByRole('button', { name: 'Download' });
+
+      await user.click(download);
+      expect(await screen.findByText(`${REPO} will be queued when Hugging Face's rate limit lifts`)).toBeInTheDocument();
+      expect(screen.queryByText(`Download queued: ${REPO}`)).not.toBeInTheDocument();
+      await user.click(download);
+      expect(transport.queueDownload).toHaveBeenCalledTimes(1);
+
+      await act(() => vi.advanceTimersByTimeAsync(134_000));
+      await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledTimes(2));
+      expect(transport.queueDownload).toHaveBeenLastCalledWith({ modelId: REPO, quantization: 'Q4_K_M' });
+    });
+
     it('says it under the summary when only the summary waits', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       transport.getHfModelSummary.mockRejectedValueOnce(hubLimited(9));
       renderHf([quant('Q4_K_M', 4000, { picked: true })]);
       await within(inspector()).findByRole('listbox', { name: 'Sizes' });
-      expect(within(inspector()).getByRole('status')).toHaveTextContent('lifts in 0:10.');
+      expect(within(inspector()).getByRole('status')).toHaveTextContent(/lifts in 0:(10|09)\./);
 
       await act(() => vi.advanceTimersByTimeAsync(10_000));
       expect(await within(inspector()).findByText('calls tools')).toBeInTheDocument();

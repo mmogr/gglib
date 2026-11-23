@@ -10,7 +10,9 @@
  * 52.0 MB/s · ETA 1m 0s`, TX-13), a note such as a reconnect leading them; Continue does not
  * wait for it. A download that ended without the model says so, in its ending's words, with
  * Retry, which queues it again: one that gave up on a quiet connection or was cut off carries
- * on from its part on disk, and one whose bytes failed their check starts over. Choose
+ * on from its part on disk, and one whose bytes failed their check starts over. One
+ * Hugging Face's rate limit held reads as a running download that waits does
+ * (`waiting for Hugging Face's rate limit, 2:14`) until it is queued. Choose
  * another goes on and leaves the choice to the Library's search once setup
  * is done; Skip goes on with no model. "Use another machine's models ›" opens a
  * pairing field, joined as the Devices place joins. A library that already
@@ -20,9 +22,11 @@
  */
 
 import { useState, type FC } from 'react';
+import { waitingSentence } from '../../components/status/hubWait';
 import { StatusMark } from '../../components/status/StatusMark';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { useSecondsLeft } from '../../hooks/useSecondsLeft';
 import { refreshRemoteStatus } from '../../services/remoteEvents';
 import { getTransport } from '../../services/transport';
 import { formatError } from '../../utils/errors';
@@ -94,9 +98,11 @@ const Join: FC<{ onJoined: () => void }> = ({ onJoined }) => {
   );
 };
 
-/** The download's line: its row's words while it runs, how it ended once it has. */
+/** The download's line: the wait while it is held, its row's words while it runs, how it ended once it has. */
 const Download: FC<{ first: FirstModel; onRetry: () => void }> = ({ first, onRetry }) => {
-  const { row, finished } = first;
+  const { held, row, finished } = first;
+  const left = useSecondsLeft(held?.liftsAt ?? null);
+  if (left !== null) return <StatusMark kind="changing" word={waitingSentence(left)} />;
   if (row) {
     const transferring = row.phase === 'downloading' && row.percent !== undefined;
     if (!transferring) return <StatusMark kind="changing" word={row.text.status} />;

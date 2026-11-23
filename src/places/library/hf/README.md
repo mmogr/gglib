@@ -24,7 +24,10 @@ read this again then." (the page's own words, counting down;
 edit or leaving the library stops the wait. A first page that waits or
 fails shows no rows; a "More results" that waits or fails keeps the rows
 already listed and says so under them, and one that failed keeps More
-results to try again.
+results to try again. A Download (the suggestion's, or a
+`user/repo:QUANT`'s) the limit refuses is held as a row in the
+Downloading group and queued when it lifts, and its toast says so
+(`hooks/useQueueDownload`).
 
 | File | Role |
 |------|------|

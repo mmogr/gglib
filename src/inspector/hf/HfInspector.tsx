@@ -26,9 +26,8 @@ import { paths } from '../../app/paths';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
 import { HubWaitLine } from '../../components/status/HubWaitLine';
-import { useToastContext } from '../../contexts/ToastContext';
 import { useHubRead } from '../../hooks/useHubRead';
-import { queueDownload } from '../../services/downloadsEvents';
+import { useQueueDownload } from '../../hooks/useQueueDownload';
 import { useDownloads } from '../../services/downloadsRegistry';
 import { openUrl } from '../../services/platform';
 import { getTransport } from '../../services/transport';
@@ -49,7 +48,7 @@ type Listing = { quants: HfQuantization[]; image: HfImagePreview | null } | { er
 export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { showToast } = useToastContext();
+  const queue = useQueueDownload();
   const { snapshot } = useDownloads();
   const handed = (location.state as Partial<HfPickState> | null)?.hf;
   const summaryRead = useHubRead<HfModelSummary | { error: string }>((signal) => getTransport().getHfModelSummary(repo, signal), {
@@ -79,15 +78,6 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
   // The row chosen, else gglib's pick.
   const selected = quants.find((q) => q.label === picked) ?? quants.find((q) => q.picked);
   const model = summary && 'id' in summary ? summary : null;
-
-  const download = async (quant: HfQuantization) => {
-    try {
-      await queueDownload(repo, quant.label);
-      showToast(`Download queued: ${repo}`, 'success');
-    } catch (err) {
-      showToast(formatError(err), 'error');
-    }
-  };
 
   return (
     <div className="flex flex-col gap-lg p-md">
@@ -121,7 +111,7 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
         <p className="m-0 text-xs text-text-secondary">This repo has no GGUF files.</p>
       ) : (
         <div className="flex flex-col gap-sm">
-          <PickASize quantizations={quants} selected={selected} onSelect={(q) => setPicked(q.label)} onDownload={(q) => void download(q)} queueFull={snapshot?.full ?? false} />
+          <PickASize quantizations={quants} selected={selected} onSelect={(q) => setPicked(q.label)} onDownload={(q) => void queue(repo, q.label)} queueFull={snapshot?.full ?? false} />
           {selected && <ProjectorNote quantization={selected} />}
           {listing.image && <CompanionNote image={listing.image} />}
         </div>

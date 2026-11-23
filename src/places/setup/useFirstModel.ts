@@ -12,7 +12,10 @@
  * mid-download, or a queue whose read after the call failed) has its row
  * followed instead: the queue is read again and the repo's row taken, so
  * the step shows the download that runs, not a Retry that can only fail.
- * Any other refusal is said as it came.
+ * Any other refusal is said as it came. One Hugging Face's rate limit
+ * refused is held until the limit lifts (`heldDownloads`): the step shows
+ * the wait, then follows the download it becomes, or offers Get it again
+ * if it is dropped or then fails (told as a failure is).
  *
  * @module places/setup/useFirstModel
  */
@@ -20,6 +23,7 @@
 import { useCallback, useState, useRef } from 'react';
 import { useDownloads } from '../../services/downloadsRegistry';
 import { queueDownload } from '../../services/downloadsEvents';
+import { heldId, useHeldDownloads, type HeldDownload } from '../../services/heldDownloads';
 import { useModelLibrary } from '../../services/modelRegistry';
 import type { DownloadRow, FinishedDownload, QueueSnapshot } from '../../services/transport/types/downloads';
 import type { GgufModel } from '../../types';
@@ -42,6 +46,8 @@ export interface FirstModel {
   queueing: boolean;
   /** Why the queue refused it, as the daemon said. */
   queueError: string | null;
+  /** The download while it is held until Hugging Face's rate limit lifts. */
+  held: HeldDownload | null;
   /** The download's row while it is queued or running. */
   row: DownloadRow | null;
   /** How it ended, once it has. */
@@ -67,6 +73,7 @@ export function useFirstModel(rec: RecommendationDto | null, prepare: () => Prom
   const [queueing, setQueueing] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
   const { snapshot } = useDownloads();
+  const heldDownloads = useHeldDownloads();
   const { models } = useModelLibrary();
 
   // Which Get it is current: a choice made while its set-up runs (Skip,
@@ -88,7 +95,13 @@ export function useFirstModel(rec: RecommendationDto | null, prepare: () => Prom
     try {
       // The queue attaches a download already under way and answers its id,
       // so a second Get it follows the first.
-      setDownloadId(await queueDownload(rec.repo, rec.quantization));
+      const queued = await queueDownload(rec.repo, rec.quantization);
+      if (!queued.held) setDownloadId(queued.id);
+      else
+        void queued.queued.then((id) => {
+          if (id !== null) setDownloadId(id);
+          else if (asked.current === mine) setChoice(null);
+        });
       if (asked.current === mine) setChoice('get');
     } catch (err) {
       if (asked.current === mine) setQueueError(formatError(err));
@@ -102,6 +115,7 @@ export function useFirstModel(rec: RecommendationDto | null, prepare: () => Prom
   // A download queued again keeps its last ending until it ends again: its row says it is back.
   const ended = downloadId === null || row !== null ? null : (snapshot?.finished.find((f) => f.id === downloadId) ?? null);
   const model = choice === 'get' && rec !== null ? modelFrom(models, rec.repo) : null;
+  const held = choice === 'get' && rec !== null ? (heldDownloads.find((h) => h.id === heldId(rec.repo, rec.quantization)) ?? null) : null;
 
-  return { choice, choose, get, queueing, queueError, row, finished: ended, model };
+  return { choice, choose, get, queueing, queueError, held, row, finished: ended, model };
 }

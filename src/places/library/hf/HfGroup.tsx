@@ -31,14 +31,12 @@ import { HubWaitLine } from '../../../components/status/HubWaitLine';
 import { IconButton } from '../../../components/ui/IconButton';
 import { Chip } from '../../../components/ui/Chip';
 import { Listbox, tabStop } from '../../../components/ui/Listbox';
-import { useToastContext } from '../../../contexts/ToastContext';
-import { queueDownload } from '../../../services/downloadsEvents';
+import { useQueueDownload } from '../../../hooks/useQueueDownload';
 import { useModelLibrary } from '../../../services/modelRegistry';
 import { useThisMachine } from '../../../services/hostRegistry';
 import { getRecommendedModel, getSetupStatus } from '../../../services/transport/api/setup';
 import type { HfModelKind, HfModelSummary } from '../../../types';
 import type { RecommendationDto } from '../../../types/setup';
-import { formatError } from '../../../utils/errors';
 import { formatNumber, formatParamCount, formatRecommendation } from '../../../utils/format';
 import { Group, Note } from '../Group';
 import { Menu } from '../../../components/ui/Menu';
@@ -60,21 +58,6 @@ interface HfGroupProps {
   onPick: (model: HfModelSummary, replace?: boolean) => void;
   /** The daemon would refuse another download. */
   queueFull: boolean;
-}
-
-/** Queue a download, and say it was queued or why not. */
-function useQueue() {
-  const { showToast } = useToastContext();
-  return async (repo: string, quant?: string): Promise<boolean> => {
-    try {
-      await queueDownload(repo, quant);
-      showToast(`Download queued: ${repo}`, 'success');
-      return true;
-    } catch (err) {
-      showToast(formatError(err), 'error');
-      return false;
-    }
-  };
 }
 
 /** A row with a name, a line under it, and one control always shown. */
@@ -148,7 +131,7 @@ const Suggestion: FC<{ answer: RecommendationDto | null; noneReason: string | nu
   onDismiss,
 }) => {
   const { models } = useModelLibrary();
-  const queue = useQueue();
+  const queue = useQueueDownload();
   const machine = useThisMachine();
   if (answer === null) return <Note>{noneReason ?? "Nothing gglib would suggest fits. Search for a smaller model below."}</Note>;
   return (
@@ -201,7 +184,7 @@ const KEY_PICK_MS = 150;
 
 export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull }) => {
   const { shown, hf, openError, openLiftsAt, setQuery } = search;
-  const queue = useQueue();
+  const queue = useQueueDownload();
   const suggestion = useSuggestion(shown?.kind === 'suggestion');
   // The key pick waiting, and whether the run it ends began on the picked repo.
   const pending = useRef<{ timer: ReturnType<typeof setTimeout>; replace: boolean } | null>(null);

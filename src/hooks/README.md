@@ -51,6 +51,7 @@ Custom React hooks for gglib GUI functionality.
 
 | Hook | Description |
 |------|-------------|
+| [`useQueueDownload.ts`](useQueueDownload.ts) | A Download button's queue request and its toast: "Download queued: <repo>", "<repo> will be queued when Hugging Face's rate limit lifts" for one held (`services/heldDownloads`), or the refusal in the daemon's words; the inspector's Hugging Face repo and the library's Hugging Face group |
 | [`useDownloadToasts.ts`](useDownloadToasts.ts) | How downloads ended, as toasts on any screen, mounted once by the app's layout: completions batched by `services/downloadsEvents` (one download in the daemon's words, several counted), each failure its own error toast. The queue itself is `services/downloadsRegistry` |
 
 ### System Hooks

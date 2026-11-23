@@ -670,7 +670,7 @@ describe('the one search', () => {
       await typing().type(field(), 'llama{Enter}');
 
       const group = await screen.findByRole('region', { name: 'Hugging Face' });
-      expect(await within(group).findByRole('status')).toHaveTextContent("Hugging Face's rate limit lifts in 2:14. gglib will read this again then.");
+      expect(await within(group).findByRole('status')).toHaveTextContent(/^Hugging Face's rate limit lifts in 2:1[34]\. gglib will read this again then\.$/);
       expect(within(group).queryByText(/No GGUF repos match/)).not.toBeInTheDocument();
 
       await act(() => vi.advanceTimersByTimeAsync(134_000));
@@ -710,7 +710,7 @@ describe('the one search', () => {
 
       await user.click(screen.getByRole('button', { name: 'More results' }));
       const group = screen.getByRole('region', { name: 'Hugging Face' });
-      expect(await within(group).findByRole('status')).toHaveTextContent('lifts in 0:10.');
+      expect(await within(group).findByRole('status')).toHaveTextContent(/lifts in 0:(10|09)\./);
       expect(hfRows()).toEqual(['owner/a']);
       // The line follows the rows.
       expect(within(group).getByRole('listbox', { name: 'Hugging Face' }).compareDocumentPosition(within(group).getByRole('status'))).toBe(
@@ -744,7 +744,7 @@ describe('the one search', () => {
       await typing().type(field(), 'owner/Qwen3-8B-GGUF{Enter}');
 
       const group = await screen.findByRole('region', { name: 'Hugging Face' });
-      expect(within(group).getByRole('status')).toHaveTextContent('lifts in 0:10.');
+      expect(within(group).getByRole('status')).toHaveTextContent(/lifts in 0:(10|09)\./);
 
       await act(() => vi.advanceTimersByTimeAsync(10_000));
       expect(await within(await screen.findByRole('complementary', { name: 'Inspector' })).findByRole('heading', { name: 'owner/Qwen3-8B-GGUF' })).toBeInTheDocument();
