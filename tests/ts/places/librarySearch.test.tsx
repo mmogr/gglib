@@ -697,6 +697,50 @@ describe('the one search', () => {
       expect(hfRows()).toEqual(['owner/second']);
     });
 
+    it('a cleared field ends the wait, and the same text entered again searches anew', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      transport.browseHfModels.mockRejectedValueOnce(hubLimited(30)).mockImplementation(async () => page(['owner/a']));
+      renderLibrary();
+      const user = typing();
+      await user.type(field(), 'llama{Enter}');
+      await screen.findByRole('status');
+
+      await user.clear(field());
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(asked()).toHaveLength(1);
+
+      await user.type(field(), 'llama');
+      expect(screen.queryByText(/No GGUF repos match/)).not.toBeInTheDocument();
+      await user.type(field(), '{Enter}');
+      await screen.findByRole('option', { name: /owner\/a/ });
+      expect(asked()).toHaveLength(2);
+    });
+
+    it('an edit of the field ends the wait', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      transport.browseHfModels.mockRejectedValueOnce(hubLimited(30));
+      renderLibrary();
+      const user = typing();
+      await user.type(field(), 'llama{Enter}');
+      await screen.findByRole('status');
+
+      await user.type(field(), 's');
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(asked()).toHaveLength(1);
+    });
+
+    it('leaving the library ends the wait', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      transport.browseHfModels.mockRejectedValueOnce(hubLimited(30));
+      const { router } = renderLibrary();
+      await typing().type(field(), 'llama{Enter}');
+      await screen.findByRole('status');
+
+      await act(() => router.navigate('/settings'));
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(asked()).toHaveLength(1);
+    });
+
     it('keeps the rows listed when More results waits, says so under them, and adds the page when it comes', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       transport.browseHfModels

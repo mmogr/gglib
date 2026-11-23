@@ -7,7 +7,8 @@
  * repo's answer counts only while nothing has happened since its Enter: an
  * edit, another Enter, or a pick of the library (`cancelOpen`). A repo
  * Hugging Face rate limits is read again when the limit lifts
- * (`whenHubAllows`), and any of those stops the wait.
+ * (`whenHubAllows`), and any of those stops the wait; an edit also stops a
+ * search's wait.
  *
  * The field's first focus puts the search in Hugging Face's scope: with it
  * empty, the Hugging Face group shows the model suggested for this machine.
@@ -87,9 +88,15 @@ export function useLibrarySearch(onOpen: (model: HfModelSummary) => void): Libra
   const edit = useCallback(
     (next: string) => {
       cancelOpen();
+      // A search waiting out the Hub's limit is for the text it was entered
+      // with: an edit ends it, and the same text entered again searches anew.
+      if (hf.liftsAt !== null) {
+        hf.clear();
+        setEntered(null);
+      }
       setQuery(next);
     },
-    [cancelOpen],
+    [cancelOpen, hf],
   );
 
   const text = query.trim();

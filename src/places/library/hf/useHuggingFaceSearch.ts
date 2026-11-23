@@ -76,9 +76,12 @@ export function useHuggingFaceSearch(): HuggingFaceSearch {
     waiting.current?.abort();
     waiting.current = null;
   }, []);
-  // Leaving the library stops a wait still out.
+  // Leaving the library stops a wait still out, and drops any answer to come.
   useEffect(() => {
-    return stopWaiting;
+    return () => {
+      latest.current += 1;
+      stopWaiting();
+    };
   }, [stopWaiting]);
 
   const fetchPage = useCallback(async (request: HfSearchRequest) => {

@@ -31,7 +31,7 @@ Downloading group and queued when it lifts, and its toast says so
 
 | File | Role |
 |------|------|
-| `useLibrarySearch.ts` | The field's text and what Enter made of it (`enterAction`, from `utils/modelSearchParser`), the scope its first focus sets, and opening a named repo, read again when the Hub's limit lifts, whose answer and wait are dropped after an edit, a later Enter or a library pick (`cancelOpen`) |
+| `useLibrarySearch.ts` | The field's text and what Enter made of it (`enterAction`, from `utils/modelSearchParser`), the scope its first focus sets, and opening a named repo, read again when the Hub's limit lifts, whose answer and wait are dropped after an edit, a later Enter or a library pick (`cancelOpen`); an edit also ends a search's wait and forgets what was entered, so the same text entered again searches anew |
 | `useHuggingFaceSearch.ts` | The Hub search: kind, sort, the pages so far and the cursor after them; a kind or sort change asks again, an overtaken answer is dropped, and a request the Hub's limit refused is asked again when it lifts unless a newer one, a clear or an unmount stopped the wait |
 | `HfGroup.tsx` | The Hugging Face group: `[Chat · Image]` and `Sort ▾` over a search, the suggestion (its budget in the daemon's words, and Dismiss), the direct download, the repos as rows with More results, and the empty, failed and waiting lines (a More results' under the rows) |
 
