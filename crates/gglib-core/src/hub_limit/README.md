@@ -29,6 +29,8 @@ to [`MAX_RESET`], a refusal with no time waits [`HEADERLESS_WAIT`], and a
 caller gives up after [`LIMITED_IN_A_ROW`] refusals in a row.
 
 It is **not** responsible for sending anything: no HTTP client is here.
-`gglib-hf` reads the headers off its responses and keeps the gate.
+`gglib-hf` reads the headers off its responses and keeps the gate, and a
+download's native transport reads them off its own; a process hands both
+one gate.
 
 <!-- module-docs:end -->

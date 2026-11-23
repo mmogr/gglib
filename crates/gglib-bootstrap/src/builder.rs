@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use gglib_core::hub_limit::OnLimit;
+use gglib_core::hub_limit::{HubGate, OnLimit};
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, GgufParserPort, HfClientPort,
     ModelRegistrarPort, Repos,
@@ -22,7 +22,9 @@ use crate::built::BuiltCore;
 use crate::config::BootstrapConfig;
 
 /// What `build` makes from the config's models directory and the Hub token,
-/// one for each thing that holds the token.
+/// one for each thing that holds the token. All three keep the Hub's rate
+/// limit in one gate, so a limit any of them meets closes the allowance for
+/// the others.
 struct Holders {
     /// The Hub client's config. Search, browse and the registrar's recipe
     /// lookup ask through that client.
@@ -42,6 +44,8 @@ struct CoreHub {
     token: Option<String>,
     /// What it does at the Hub's rate limit: what the Hub client does.
     on_limit: OnLimit,
+    /// Where it keeps the Hub's rate limit: the Hub client's gate.
+    gate: Arc<HubGate>,
 }
 
 /// Each holder, for `config`: the download manager's config names its models
@@ -56,17 +60,21 @@ fn holders(config: &BootstrapConfig, env_token: impl FnOnce() -> Option<String>)
         .as_deref()
         .and_then(hf_token::normalised)
         .or_else(env_token);
+    let gate = Arc::new(HubGate::new());
     Holders {
         client_config: HfClientConfig::default()
             .with_optional_token(token.clone())
-            .with_on_limit(config.on_hub_limit.clone()),
+            .with_on_limit(config.on_hub_limit.clone())
+            .with_gate(Arc::clone(&gate)),
         download_config: DownloadManagerConfig {
             models_directory: config.models_dir.clone(),
+            hub_gate: Arc::clone(&gate),
             ..DownloadManagerConfig::default().with_hf_token(token.clone())
         },
         core: CoreHub {
             token,
             on_limit: config.on_hub_limit.clone(),
+            gate,
         },
     }
 }
@@ -237,7 +245,8 @@ fn wire(
             gguf_parser.clone(),
         )
         .with_hf_token(core.token)
-        .with_on_hub_limit(core.on_limit),
+        .with_on_hub_limit(core.on_limit)
+        .with_hub_gate(core.gate),
     );
 
     BuiltCore {
@@ -357,6 +366,44 @@ mod tests {
 
         assert!(matches!(waiting.core.on_limit, OnLimit::Wait(_)));
         assert!(matches!(surfacing.core.on_limit, OnLimit::Surface));
+    }
+
+    /// A limit the download manager meets keeps the Hub client from asking
+    /// the allowance, and the core keeps it in the same gate.
+    #[tokio::test]
+    async fn the_hub_client_the_downloads_and_the_core_keep_one_gate() {
+        use gglib_core::hub_limit::{HubBucket, HubLimit};
+        use gglib_core::ports::huggingface::HfPortError;
+        use std::time::Duration;
+
+        let holders = holders(&config(None, None), || None);
+        assert!(Arc::ptr_eq(
+            &holders.download_config.hub_gate,
+            &holders.core.gate
+        ));
+
+        holders.download_config.hub_gate.note(
+            HubLimit {
+                bucket: HubBucket::Api,
+                remaining: 0,
+                resets_in: Duration::from_mins(2),
+            },
+            tokio::time::Instant::now(),
+        );
+        // Refused without a request: no Hub is reached from a test.
+        let client = DefaultHfClient::new(&holders.client_config);
+        let refused = client.get_commit_sha("owner/repo").await;
+
+        assert!(
+            matches!(
+                refused,
+                Err(HfPortError::RateLimited {
+                    bucket: HubBucket::Api,
+                    ..
+                })
+            ),
+            "got {refused:?}"
+        );
     }
 
     #[test]

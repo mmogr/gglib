@@ -5,8 +5,9 @@
 //! on `AppCore`, clap, or other adapter-specific types.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use gglib_core::hub_limit::OnLimit;
+use gglib_core::hub_limit::{HubGate, OnLimit};
 use gglib_core::ports::{CompletedDownload, ResolvedFile};
 
 /// Request to download a model from `HuggingFace`.
@@ -24,6 +25,9 @@ pub struct CliDownloadRequest {
     pub token: Option<String>,
     /// What the download's Hub reads do at the Hub's rate limit.
     pub on_limit: OnLimit,
+    /// Where the download's Hub reads and file transfers keep the Hub's
+    /// rate limit.
+    pub gate: Arc<HubGate>,
 }
 
 impl CliDownloadRequest {
@@ -36,6 +40,7 @@ impl CliDownloadRequest {
             force: false,
             token: None,
             on_limit: OnLimit::Surface,
+            gate: Arc::default(),
         }
     }
 
@@ -125,6 +130,9 @@ pub struct CliUpdateRequest {
     pub token: Option<String>,
     /// What the upgrade's Hub reads do at the Hub's rate limit.
     pub on_limit: OnLimit,
+    /// Where the upgrade's Hub reads and file transfers keep the Hub's rate
+    /// limit.
+    pub gate: Arc<HubGate>,
 }
 
 /// Information about available model updates.

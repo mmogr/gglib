@@ -239,7 +239,8 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
 /// The plan that fetches `file` of `job`: from the repository the file
 /// comes from, which is the download's own or an image model's companion's,
 /// on `main`, into the job's destination. An upgrade's file is fetched at
-/// its commit, and fetched again though it is on disk.
+/// its commit, and fetched again though it is on disk. The Hub's rate limit
+/// is kept in the manager's gate, the one its Hub client keeps.
 pub(super) fn plan_for<'a>(
     job: &'a DownloadJob,
     file: &'a str,
@@ -261,6 +262,7 @@ pub(super) fn plan_for<'a>(
         notice: Some(notice),
         expected_size: job.expected_size,
         cancel: Some(job.cancel.clone()),
+        gate: &deps.config.hub_gate,
     }
 }
 

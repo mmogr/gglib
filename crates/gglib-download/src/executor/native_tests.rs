@@ -63,6 +63,9 @@ pub(crate) enum Reply {
     /// is not read within `within`, as a server does with a connection
     /// nobody reads from.
     DropsIfUnread { body: Vec<u8>, within: Duration },
+    /// Refuse the request for the rate limit, as Hugging Face did on
+    /// 2026-11-23, its file allowance spent with `t` seconds to its reset.
+    Limited { t: u64 },
 }
 
 pub(crate) struct TestServer {
@@ -104,6 +107,18 @@ impl TestServer {
 
     pub(crate) fn url(&self) -> String {
         format!("{}/model.gguf", self.base_url)
+    }
+
+    /// The file's address as the Hub gives it, under `resolve/`: one that
+    /// counts against the file allowance.
+    pub(crate) fn resolve_url(&self) -> String {
+        format!("{}/owner/repo/resolve/main/model.gguf", self.base_url)
+    }
+
+    /// The count of requests the server has had, for a sink that reads it
+    /// as it is told something.
+    pub(crate) fn counter(&self) -> Arc<AtomicUsize> {
+        Arc::clone(&self.requests)
     }
 
     pub(crate) fn ranges(&self) -> Vec<Option<String>> {
@@ -247,6 +262,7 @@ async fn handle_one(
             std::future::pending::<()>().await;
         }
         Reply::StallsFrom { body, chunk } => stall_from(socket, &body, start, chunk).await?,
+        Reply::Limited { t } => socket.write_all(limited(t).as_bytes()).await?,
         reply @ (Reply::PartialFromStart { .. }
         | Reply::PartialWithoutRange { .. }
         | Reply::DropsIfUnread { .. }) => partial(socket, reply, start).await?,
@@ -254,6 +270,23 @@ async fn handle_one(
 
     socket.flush().await?;
     Ok(())
+}
+
+/// The refusal Hugging Face answered a spent allowance with, on 2026-11-23,
+/// for the file allowance with `t` seconds to its reset. The address in its
+/// sentence is a documentation one.
+fn limited(t: u64) -> String {
+    let said = "We had to rate limit your IP (203.0.113.7). To continue using our service, \
+                create a HF account or login to your existing account, and make sure you pass \
+                a HF_TOKEN if you're using the API.";
+    let body = format!("{{\"error\":\"{said}\",\"retryAfter\":{t}}}");
+    format!(
+        "HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json; charset=utf-8\r\n\
+         Content-Length: {}\r\nRateLimit: \"resolvers\";r=0;t={t}\r\n\
+         RateLimit-Policy: \"fixed window\";\"resolvers\";q=3000;w=300\r\n\
+         Retry-After: {t}\r\nX-Error-Message: {said}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
 }
 
 /// The 206 answers that cannot be placed, or are not read in time.

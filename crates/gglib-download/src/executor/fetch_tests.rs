@@ -14,6 +14,9 @@ type Outcome = Ready<Result<(), PythonBridgeError>>;
 /// What a call with no accelerator passes for one.
 const NO_ACCELERATOR: Option<fn(RawCallback) -> Outcome> = None;
 
+/// The gate the plans keep the Hub's rate limit in: never closed here.
+static GATE: std::sync::LazyLock<HubGate> = std::sync::LazyLock::new(HubGate::new);
+
 /// An address nothing is fetched from.
 const NO_URL: &str = "http://unused.invalid/model.gguf";
 
@@ -32,6 +35,7 @@ fn plan(dir: &Path, expected_size: Option<u64>) -> (DownloadPlan<'_>, Seen) {
         notice: None,
         expected_size,
         cancel: None,
+        gate: &GATE,
     };
     (plan, seen)
 }

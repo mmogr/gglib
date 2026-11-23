@@ -17,9 +17,11 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+use super::limited::{self, Limited};
 use super::progress::{RawCallback, RawProgress};
 use crate::cli_exec::NoticeCallback;
 use gglib_core::download::{ProgressThrottle, format_duration, format_size};
+use gglib_core::hub_limit::{HubGate, HubLimit, LIMITED_IN_A_ROW};
 
 /// Suffix for the in-progress file that sits beside the final destination.
 const PART_SUFFIX: &str = ".part";
@@ -145,15 +147,29 @@ pub(crate) enum NativeError {
     Cancelled,
 
     /// One connection sent nothing for the quiet time. The transfer drops it
-    /// and carries on over another; this never leaves [`download_file`].
+    /// and carries on over another; this never leaves [`download_gated`].
     #[error("the connection sent nothing for {0:?}")]
     Quiet(Duration),
 
     /// A connection described a different file from the one the part holds
     /// the start of. The transfer starts the file over; this never leaves
-    /// [`download_file`].
+    /// [`download_gated`].
     #[error("{0}")]
     Changed(String),
+
+    /// Hugging Face refused a request for its rate limit, as this limit
+    /// states. The transfer waits it out and asks again; this never leaves
+    /// [`download_gated`].
+    #[error("Hugging Face's rate limit refused the download")]
+    RateLimited(HubLimit),
+
+    /// Hugging Face refused [`LIMITED_IN_A_ROW`] requests in a row for its
+    /// rate limit, with nothing arriving between, so the download stopped.
+    /// The part is kept for the next try.
+    #[error(
+        "Hugging Face kept rate limiting the download: it refused it {LIMITED_IN_A_ROW} times in a row"
+    )]
+    KeptLimited,
 
     /// Nothing arrived over [`STALL_RECONNECTS`] reconnects in a row, so the
     /// download stopped. The part is kept for the next try.
@@ -202,7 +218,18 @@ pub(crate) struct NativeDownload<'a> {
     pub stall_after: Duration,
 }
 
-/// Download one file, resuming if a previous attempt left bytes behind.
+/// [`download_gated`] with a gate of its own, for a test that meets no
+/// rate limit.
+#[cfg(test)]
+pub(crate) async fn download_file(
+    client: &Client,
+    req: &NativeDownload<'_>,
+) -> Result<(), NativeError> {
+    download_gated(client, req, &HubGate::new()).await
+}
+
+/// Download one file, resuming if a previous attempt left bytes behind, and
+/// keeping the Hub's rate limit in `gate`.
 ///
 /// A connection that sends nothing for `req.stall_after` is dropped, and the
 /// transfer carries on from the bytes on disk over a new one, up to
@@ -211,12 +238,19 @@ pub(crate) struct NativeDownload<'a> {
 /// had bytes or a quiet connection, a connection that breaks or will not
 /// open is lost the same way (see [`Lost::after`]).
 ///
+/// No connection is opened while `gate` holds the allowance the file counts
+/// against closed, and a refusal for the rate limit is waited out, with the
+/// time left on the row, and asked again, spending no reconnect; after
+/// [`LIMITED_IN_A_ROW`] in a row it fails with [`NativeError::KeptLimited`]
+/// (see [`Limited`]).
+///
 /// On success the file exists at `req.dest` and no `.part` file remains. On a
 /// verification failure the `.part` file is removed, because resuming onto
 /// corrupt bytes would fail the same way forever.
-pub(crate) async fn download_file(
+pub(crate) async fn download_gated(
     client: &Client,
     req: &NativeDownload<'_>,
+    gate: &HubGate,
 ) -> Result<(), NativeError> {
     let part_path = part_path_for(req.dest, req.commit);
 
@@ -229,6 +263,7 @@ pub(crate) async fn download_file(
         ..Carry::default()
     };
     let mut lost = Lost::default();
+    let mut limited = Limited::default();
     let mut started_over = false;
     let outcome = loop {
         let resume_from = existing_len(&part_path);
@@ -246,9 +281,15 @@ pub(crate) async fn download_file(
             let hasher = hash_part(&part_path, resume_from, req.cancel.as_ref()).await?;
             carry.hashed = Some((hasher, resume_from));
         }
+        Limited::admit(req, gate).await?;
         let began = tokio::time::Instant::now();
-        let cause = match stream_to_part(client, req, &part_path, resume_from, &mut carry).await {
+        let streamed = stream_to_part(client, req, gate, &part_path, resume_from, &mut carry).await;
+        let cause = match streamed {
             Ok(outcome) => break outcome,
+            Err(NativeError::RateLimited(limit)) => {
+                limited.after(req, gate, limit, carry.received).await?;
+                continue;
+            }
             Err(NativeError::Quiet(_)) => Cause::Quiet,
             // A connection that did not open, or broke, once this download
             // has had bytes or a quiet connection: the network dropped for a
@@ -438,7 +479,7 @@ impl Lost {
     }
 }
 
-fn notify(req: &NativeDownload<'_>, message: &str) {
+pub(super) fn notify(req: &NativeDownload<'_>, message: &str) {
     if let Some(notice) = req.notice.as_ref() {
         notice(message);
     }
@@ -466,11 +507,12 @@ struct Digested {
 async fn stream_to_part(
     client: &Client,
     req: &NativeDownload<'_>,
+    gate: &HubGate,
     part_path: &Path,
     resume_from: u64,
     carry: &mut Carry,
 ) -> Result<TransferOutcome, NativeError> {
-    let (response, expected) = send_following_redirects(client, req, resume_from).await?;
+    let (response, expected) = send_following_redirects(client, req, gate, resume_from).await?;
 
     let status = response.status();
 
@@ -728,6 +770,10 @@ pub(super) fn build_client() -> Client {
 /// Send the request, following redirects by hand, and return the final response
 /// together with any `X-Linked-Etag` seen along the way.
 ///
+/// Each hop's `RateLimit` header is noted in `gate`. A hop the Hub refused
+/// for its rate limit (429) ends it in [`NativeError::RateLimited`], before
+/// anything is written to the part.
+///
 /// Redirects are followed manually rather than by `reqwest` because the digest
 /// lives on a hop that automatic following would consume and discard:
 /// `HuggingFace`'s `resolve/` endpoint answers with a 302 carrying
@@ -737,6 +783,7 @@ pub(super) fn build_client() -> Client {
 async fn send_following_redirects(
     client: &Client,
     req: &NativeDownload<'_>,
+    gate: &HubGate,
     resume_from: u64,
 ) -> Result<(Response, Option<String>), NativeError> {
     let mut url = Url::parse(req.url)
@@ -760,6 +807,9 @@ async fn send_following_redirects(
         }
 
         let response = send_unless_cancelled(request, req.cancel.as_ref(), req.stall_after).await?;
+        if let Some(refused) = limited::heard(gate, &response) {
+            return Err(NativeError::RateLimited(refused));
+        }
 
         // Capture the digest from the first hop that offers one — later hops
         // (the CDN) do not carry it.
