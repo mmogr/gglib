@@ -428,7 +428,8 @@ async fn testing_a_server_that_is_not_there_is_not_found() {
     ));
 }
 
-/// What a command with a space in it is refused with.
+/// What a command with a space in it is refused with when it is not a
+/// full path.
 const SPACED_COMMAND: &str = "Command must be an executable name/path only (e.g., 'npx'). \
                               Put flags and arguments in the 'args' field.";
 
