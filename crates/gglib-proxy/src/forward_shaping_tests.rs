@@ -199,6 +199,41 @@ fn a_request_with_an_audio_clip_is_forwarded_whole_and_says_so() {
     assert!(!shape(&text_only).expect("it fits").has_audio);
 }
 
+/// A request calibrates the token ratio only when it carries neither an image
+/// nor an audio clip: megabytes of a clip's base64 beside a few thousand
+/// prompt tokens would push the learned ratio to its ceiling.
+#[test]
+fn only_a_request_without_images_or_audio_calibrates() {
+    let none = RequestImages::default();
+    let one = RequestImages {
+        count: 1,
+        tokens: gglib_core::request_pipeline::MAX_IMAGE_TOKENS,
+    };
+
+    assert_eq!(Some(1_000), calibration_chars(&none, false, 1_000));
+    assert_eq!(None, calibration_chars(&none, true, 1_000));
+    assert_eq!(None, calibration_chars(&one, false, 1_000));
+    assert_eq!(None, calibration_chars(&one, true, 1_000));
+
+    let clip = format!("UklGRiQAAABXQVZF{}", "A".repeat(400_000));
+    let sent = serde_json::json!({"model": "m", "messages": [
+        {"role": "user", "content": [
+            {"type": "input_audio", "input_audio": {"data": clip, "format": "wav"}},
+        ]},
+    ]});
+    let shaped = shape_request_body(
+        Bytes::from(serde_json::to_vec(&sent).unwrap()),
+        &ModelContext::passthrough(),
+        &SamplingLayers::default(),
+        Some(chars(32_768)),
+    )
+    .expect("it fits by its stand-in");
+    assert_eq!(
+        None,
+        calibration_chars(&shaped.images, shaped.has_audio, shaped.body.len())
+    );
+}
+
 /// A plain chat request whose history holds a drawn picture and whose tools
 /// do not offer the image tool, as a device that keeps its own chats sends
 /// the message after one: the forwarded body tells the model once, at the

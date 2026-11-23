@@ -422,6 +422,19 @@ struct ShapedRequest {
     sampling: Option<SamplingDecision>,
 }
 
+/// The forwarded length a request calibrates its model's chars-per-token
+/// ratio with, or `None` when its characters say nothing about the tokenizer:
+/// with an image aboard, whose tokens come from its pixels, not its length,
+/// and with an audio clip aboard, whose tokens come from its length in time,
+/// not the length of its base64.
+fn calibration_chars(
+    images: &RequestImages,
+    has_audio: bool,
+    forwarded_len: usize,
+) -> Option<usize> {
+    (images.count == 0 && !has_audio).then_some(forwarded_len)
+}
+
 /// Run the shared request-shaping pipeline over a body held as `Bytes`.
 ///
 /// The pipeline operates on a `&mut serde_json::Value` — the seam that
@@ -811,11 +824,8 @@ pub(crate) async fn forward_chat_completion(
         let (body, client_wants_progress) = inject_streaming_body_overrides(body);
 
         // Bytes forwarded upstream, paired with the usage frame's prompt-token
-        // count to calibrate this model's chars-per-token ratio. `None` with
-        // an image aboard, whose tokens come from its pixels, not its length,
-        // and with an audio clip aboard, whose tokens come from its length in
-        // time, not the length of its base64.
-        let forwarded_chars = (images.count == 0 && !has_audio).then_some(body.len());
+        // count to calibrate this model's chars-per-token ratio.
+        let forwarded_chars = calibration_chars(&images, has_audio, body.len());
 
         // Phase 1 — TCP probe (1 s timeout).
         let probe_addr = host_port_from_url(upstream_url);
