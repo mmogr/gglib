@@ -16,10 +16,20 @@ downloads and reading of whether the repo calls tools (from the chat
 template the search answer carries, so no row asks the Hub anything of
 its own), and the suggestion's rationale and the bytes it was sized by.
 
+A search, a "More results" or a named repo Hugging Face rate limits is
+asked again by itself when the limit lifts; until then the place its
+answer would be says "Hugging Face's rate limit lifts in 2:14. gglib will
+read this again then." (the page's own words, counting down;
+`components/status/HubWaitLine`). A newer search, a cleared field, an
+edit or leaving the library stops the wait. A first page that waits or
+fails shows no rows; a "More results" that waits or fails keeps the rows
+already listed and says so under them, and one that failed keeps More
+results to try again.
+
 | File | Role |
 |------|------|
-| `useLibrarySearch.ts` | The field's text and what Enter made of it (`enterAction`, from `utils/modelSearchParser`), the scope its first focus sets, and opening a named repo, whose answer is dropped after an edit, a later Enter or a library pick (`cancelOpen`) |
-| `useHuggingFaceSearch.ts` | The Hub search: kind, sort, the pages so far and the cursor after them; a kind or sort change asks again, and an overtaken answer is dropped |
-| `HfGroup.tsx` | The Hugging Face group: `[Chat · Image]` and `Sort ▾` over a search, the suggestion (its budget in the daemon's words, and Dismiss), the direct download, the repos as rows with More results, and the empty and failed lines |
+| `useLibrarySearch.ts` | The field's text and what Enter made of it (`enterAction`, from `utils/modelSearchParser`), the scope its first focus sets, and opening a named repo, read again when the Hub's limit lifts, whose answer and wait are dropped after an edit, a later Enter or a library pick (`cancelOpen`) |
+| `useHuggingFaceSearch.ts` | The Hub search: kind, sort, the pages so far and the cursor after them; a kind or sort change asks again, an overtaken answer is dropped, and a request the Hub's limit refused is asked again when it lifts unless a newer one, a clear or an unmount stopped the wait |
+| `HfGroup.tsx` | The Hugging Face group: `[Chat · Image]` and `Sort ▾` over a search, the suggestion (its budget in the daemon's words, and Dismiss), the direct download, the repos as rows with More results, and the empty, failed and waiting lines (a More results' under the rows) |
 
 <!-- module-docs:end -->

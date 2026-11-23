@@ -5,7 +5,10 @@
  * again; an overtaken answer is dropped; `user/repo` opens the repo in the
  * inspector and `user/repo:QUANT` offers its download; the empty field
  * holds the suggestion for this machine; `+ ▾` and the menu's addresses
- * focus the search or add a GGUF file.
+ * focus the search or add a GGUF file. A search, a "More results" or a
+ * repo Hugging Face rate limits says when the limit lifts where its answer
+ * would be and asks again then; a newer search stops the wait, and a "More
+ * results" refused keeps the rows already listed.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -62,6 +65,7 @@ vi.mock('../../../src/services/platform', async () => {
   return { ...actual, isDesktop: () => platform.desktop, pickGgufFile: platform.pick };
 });
 
+import { TransportError } from '../../../src/services/transport/errors';
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { cleanupDownloadEvents, initDownloadEvents } from '../../../src/services/downloadsEvents';
 import { enterAction } from '../../../src/places/library/hf/useLibrarySearch';
@@ -91,6 +95,15 @@ function renderLibrary(path = '/library') {
 }
 
 const field = () => screen.getByRole('searchbox', { name: 'Search your models, or Hugging Face' });
+
+/** The daemon's refusal of a Hub read for Hugging Face's rate limit. */
+const hubLimited = (secs: number) =>
+  new TransportError('INTERNAL', "HF search failed: Hugging Face's rate limit lifts in 2:13", {
+    status: 429,
+    statusText: 'Too Many Requests',
+    type: 'hub_rate_limited',
+    metadata: { bucket: 'api', retry_after_secs: secs },
+  });
 
 describe('the one search', () => {
   beforeEach(() => {
@@ -644,5 +657,98 @@ describe('the one search', () => {
     expect(enterAction('owner/repo')).toEqual({ kind: 'open', repo: 'owner/repo' });
     expect(enterAction('owner/repo:Q8_0')).toEqual({ kind: 'download', repo: 'owner/repo', quant: 'Q8_0' });
     expect(enterAction('https://huggingface.co/owner/repo')).toEqual({ kind: 'open', repo: 'owner/repo' });
+  });
+
+  describe("Hugging Face's rate limit", () => {
+    afterEach(() => vi.useRealTimers());
+    const typing = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    it('says when the limit lifts where the results would be, then searches again by itself', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      transport.browseHfModels.mockRejectedValueOnce(hubLimited(133)).mockImplementationOnce(async () => page(['owner/a']));
+      renderLibrary();
+      await typing().type(field(), 'llama{Enter}');
+
+      const group = await screen.findByRole('region', { name: 'Hugging Face' });
+      expect(await within(group).findByRole('status')).toHaveTextContent("Hugging Face's rate limit lifts in 2:14. gglib will read this again then.");
+      expect(within(group).queryByText(/No GGUF repos match/)).not.toBeInTheDocument();
+
+      await act(() => vi.advanceTimersByTimeAsync(134_000));
+      await screen.findByRole('option', { name: /owner\/a/ });
+      expect(hfRows()).toEqual(['owner/a']);
+      expect(asked()).toHaveLength(2);
+      expect(asked()[1]).toEqual(asked()[0]);
+      expect(within(group).queryByRole('status')).not.toBeInTheDocument();
+    });
+
+    it('a newer search stops the wait, so the refused one is never asked again', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      transport.browseHfModels.mockRejectedValueOnce(hubLimited(30)).mockImplementation(async () => page(['owner/second']));
+      renderLibrary();
+      const user = typing();
+      await user.type(field(), 'first{Enter}');
+      await screen.findByRole('status');
+      await user.clear(field());
+      await user.type(field(), 'second{Enter}');
+      await screen.findByRole('option', { name: /owner\/second/ });
+
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(asked().map((r) => r.query)).toEqual(['first', 'second']);
+      expect(hfRows()).toEqual(['owner/second']);
+    });
+
+    it('keeps the rows listed when More results waits, says so under them, and adds the page when it comes', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      transport.browseHfModels
+        .mockImplementationOnce(async () => page(['owner/a'], 'c1'))
+        .mockRejectedValueOnce(hubLimited(9))
+        .mockImplementationOnce(async () => page(['owner/b']));
+      renderLibrary();
+      const user = typing();
+      await user.type(field(), 'llama{Enter}');
+      await screen.findByRole('option', { name: /owner\/a/ });
+
+      await user.click(screen.getByRole('button', { name: 'More results' }));
+      const group = screen.getByRole('region', { name: 'Hugging Face' });
+      expect(await within(group).findByRole('status')).toHaveTextContent('lifts in 0:10.');
+      expect(hfRows()).toEqual(['owner/a']);
+      // The line follows the rows.
+      expect(within(group).getByRole('listbox', { name: 'Hugging Face' }).compareDocumentPosition(within(group).getByRole('status'))).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      expect(within(group).queryByRole('button', { name: 'More results' })).not.toBeInTheDocument();
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      await screen.findByRole('option', { name: /owner\/b/ });
+      expect(hfRows()).toEqual(['owner/a', 'owner/b']);
+      expect(asked()[2]).toMatchObject({ query: 'llama', cursor: 'c1' });
+    });
+
+    it('keeps the rows listed when More results fails, with why under them and More results to try again', async () => {
+      transport.browseHfModels.mockImplementationOnce(async () => page(['owner/a'], 'c1')).mockRejectedValueOnce(new Error('The Hub did not answer'));
+      renderLibrary();
+      const user = userEvent.setup();
+      await user.type(field(), 'llama{Enter}');
+      await screen.findByRole('option', { name: /owner\/a/ });
+
+      await user.click(screen.getByRole('button', { name: 'More results' }));
+      expect(await screen.findByText('The Hub did not answer')).toBeInTheDocument();
+      expect(hfRows()).toEqual(['owner/a']);
+      expect(screen.getByRole('button', { name: 'More results' })).toBeInTheDocument();
+    });
+
+    it('a named repo waits too, then opens in the inspector', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      transport.getHfModelSummary.mockRejectedValueOnce(hubLimited(9));
+      renderLibrary();
+      await typing().type(field(), 'owner/Qwen3-8B-GGUF{Enter}');
+
+      const group = await screen.findByRole('region', { name: 'Hugging Face' });
+      expect(within(group).getByRole('status')).toHaveTextContent('lifts in 0:10.');
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(await within(await screen.findByRole('complementary', { name: 'Inspector' })).findByRole('heading', { name: 'owner/Qwen3-8B-GGUF' })).toBeInTheDocument();
+      expect(transport.getHfModelSummary).toHaveBeenCalledTimes(2);
+    });
   });
 });

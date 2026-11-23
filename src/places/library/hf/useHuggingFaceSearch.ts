@@ -8,13 +8,19 @@
  * that a newer request has overtaken is dropped, so a slow search never
  * lands over the one asked after it.
  *
+ * A request Hugging Face rate limits waits until the limit lifts and is
+ * made again (`whenHubAllows`); a newer request, a clear or leaving the
+ * library stops the wait. A first page that waits or fails has no rows; a
+ * "More results" that does keeps the rows already listed.
+ *
  * @module places/library/hf/useHuggingFaceSearch
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HfModelKind, HfModelSummary, HfSearchRequest, HfSortField } from '../../../types';
 import { getTransport } from '../../../services/transport';
-import { formatError } from '../../../utils/errors';
+import { whenHubAllows } from '../../../services/transport/hubLimit';
+import { formatError, isAbortError } from '../../../utils/errors';
 
 /** Each sort and the direction it starts in. */
 export const HF_SORTS: { value: HfSortField; label: string; ascending: boolean }[] = [
@@ -43,6 +49,8 @@ export interface HuggingFaceSearch {
   loadingMore: boolean;
   /** Why the last request failed, as the daemon said it. */
   error: string | null;
+  /** When the Hub's limit lifts (epoch ms) while the last request waits for it, else `null`. */
+  liftsAt: number | null;
   search: (query: string) => void;
   loadMore: () => void;
   /** Forget the search and drop any answer still to come. */
@@ -59,29 +67,62 @@ export function useHuggingFaceSearch(): HuggingFaceSearch {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [liftsAt, setLiftsAt] = useState<number | null>(null);
   // The latest request's number: an answer to any earlier one is dropped.
   const latest = useRef(0);
+  // Stops the latest request's wait for the Hub's limit.
+  const waiting = useRef<AbortController | null>(null);
+  const stopWaiting = useCallback(() => {
+    waiting.current?.abort();
+    waiting.current = null;
+  }, []);
+  // Leaving the library stops a wait still out.
+  useEffect(() => {
+    return stopWaiting;
+  }, [stopWaiting]);
 
   const fetchPage = useCallback(async (request: HfSearchRequest) => {
     const seq = ++latest.current;
+    stopWaiting();
+    const stop = new AbortController();
+    waiting.current = stop;
     const append = request.cursor !== null;
-    if (append) setLoadingMore(true);
-    else setLoading(true);
+    const setBusy = append ? setLoadingMore : setLoading;
+    setBusy(true);
     setError(null);
+    setLiftsAt(null);
+    // A first page refused has no rows, so none of an earlier search show above its line.
+    const dropRows = () => {
+      if (append) return;
+      setModels([]);
+      setNextCursor(null);
+    };
     try {
-      const response = await getTransport().browseHfModels(request);
+      const response = await whenHubAllows(() => getTransport().browseHfModels(request), {
+        signal: stop.signal,
+        onWaiting: (at) => {
+          if (seq !== latest.current) return;
+          if (at !== null) dropRows();
+          setLiftsAt(at);
+          setBusy(at === null);
+        },
+      });
       if (seq !== latest.current) return;
       setModels((prev) => (append ? [...prev, ...response.models] : response.models));
       setNextCursor(response.next_cursor);
     } catch (err) {
-      if (seq === latest.current) setError(formatError(err));
+      // A wait stopped is a newer request, a clear or the library left.
+      if (seq !== latest.current || isAbortError(err)) return;
+      dropRows();
+      setLiftsAt(null);
+      setError(formatError(err));
     } finally {
       if (seq === latest.current) {
         setLoading(false);
         setLoadingMore(false);
       }
     }
-  }, []);
+  }, [stopWaiting]);
 
   const request = useCallback(
     (query: string, cursor: string | null): HfSearchRequest => ({
@@ -116,13 +157,15 @@ export function useHuggingFaceSearch(): HuggingFaceSearch {
 
   const clear = useCallback(() => {
     latest.current += 1;
+    stopWaiting();
     setSearched(null);
     setModels([]);
     setNextCursor(null);
     setLoading(false);
     setLoadingMore(false);
     setError(null);
-  }, []);
+    setLiftsAt(null);
+  }, [stopWaiting]);
 
   return {
     searched,
@@ -135,6 +178,7 @@ export function useHuggingFaceSearch(): HuggingFaceSearch {
     loading,
     loadingMore,
     error,
+    liftsAt,
     search,
     loadMore,
     clear,

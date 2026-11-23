@@ -10,18 +10,24 @@
  *
  * The summary comes with the pick that opened the repo (the navigation's
  * state) or is read by the address; the listing and the pick are read here,
- * each dropped if the repo changed meanwhile.
+ * each dropped if the repo changed meanwhile. A read Hugging Face rate
+ * limits waits until the limit lifts and is made again (`useHubRead`); the
+ * panel says so in one line, in the listing's place, or under the summary
+ * while only the summary waits. A pick that waits says nothing: ★ comes
+ * when it arrives.
  *
  * @module inspector/hf/HfInspector
  */
 
-import { useEffect, useState, type FC } from 'react';
+import { useState, type FC } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { ChevronRight, ExternalLink, X } from 'lucide-react';
 import { paths } from '../../app/paths';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
+import { HubWaitLine } from '../../components/status/HubWaitLine';
 import { useToastContext } from '../../contexts/ToastContext';
+import { useHubRead } from '../../hooks/useHubRead';
 import { queueDownload } from '../../services/downloadsEvents';
 import { useDownloads } from '../../services/downloadsRegistry';
 import { openUrl } from '../../services/platform';
@@ -40,54 +46,30 @@ export interface HfPickState {
 
 type Listing = { quants: HfQuantization[]; image: HfImagePreview | null } | { error: string };
 
-/**
- * One read of `repo`, its answer held only while it is still the repo asked.
- * A read still out when the repo changes is stopped (`signal`): a Hub read
- * can take minutes, and each one out holds one of the page's six connections
- * to the daemon.
- */
-function useRead<T>(read: (signal: AbortSignal) => Promise<T>, onError: (err: unknown) => T | null, seed: T | null = null): T | null {
-  const [answer, setAnswer] = useState<T | null>(seed);
-  useEffect(() => {
-    if (seed !== null) return;
-    let live = true;
-    const gone = new AbortController();
-    read(gone.signal)
-      .then((value) => live && setAnswer(value))
-      .catch((err: unknown) => live && setAnswer(onError(err)));
-    return () => {
-      live = false;
-      gone.abort();
-    };
-    // The inspector is keyed by the repo, so these are read once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return answer;
-}
-
 export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { showToast } = useToastContext();
   const { snapshot } = useDownloads();
   const handed = (location.state as Partial<HfPickState> | null)?.hf;
-  const summary = useRead<HfModelSummary | { error: string }>(
-    (signal) => getTransport().getHfModelSummary(repo, signal),
-    (err) => ({ error: formatError(err) }),
-    handed?.id === repo ? handed : null,
-  );
-  const listing = useRead<Listing>(
+  const summaryRead = useHubRead<HfModelSummary | { error: string }>((signal) => getTransport().getHfModelSummary(repo, signal), {
+    onError: (err) => ({ error: formatError(err) }),
+    seed: handed?.id === repo ? handed : null,
+  });
+  const listingRead = useHubRead<Listing>(
     async (signal) => {
       const response = await getTransport().getHfQuantizations(repo, signal);
       // A projector is fetched with a model, never on its own, so it is not a row.
       const quants = response.quantizations.filter((q) => q.role !== 'Projector').sort((a, b) => a.size_bytes - b.size_bytes);
       return { quants, image: response.image ?? null };
     },
-    (err) => ({ error: formatError(err) }),
+    { onError: (err) => ({ error: formatError(err) }) },
   );
   // Asked beside the listing, which shows at once: the download's own pick,
   // which reads further than the listing's heads. A failure marks nothing.
-  const pick = useRead<HfPickResponse | null>((signal) => getTransport().getHfPick(repo, signal), () => null);
+  const pick = useHubRead<HfPickResponse | null>((signal) => getTransport().getHfPick(repo, signal), { onError: () => null }).answer;
+  const summary = summaryRead.answer;
+  const listing = listingRead.answer;
   const [picked, setPicked] = useState<string | null>(null);
 
   const listed = listing && 'quants' in listing ? listing.quants : [];
@@ -126,9 +108,12 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
           {model?.supports_tool_calls && <span>calls tools</span>}
         </p>
         {summary && 'error' in summary && <p className="m-0 text-xs text-text-secondary">{summary.error}</p>}
+        {summaryRead.liftsAt !== null && listingRead.liftsAt === null && <HubWaitLine liftsAt={summaryRead.liftsAt} />}
       </div>
 
-      {listing === null ? (
+      {listingRead.liftsAt !== null ? (
+        <HubWaitLine liftsAt={listingRead.liftsAt} />
+      ) : listing === null ? (
         <p className="m-0 text-xs text-text-secondary">Reading the repo's files…</p>
       ) : 'error' in listing ? (
         <p role="alert" className="m-0 text-xs text-text-secondary">{listing.error}</p>

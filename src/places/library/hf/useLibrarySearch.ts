@@ -5,7 +5,9 @@
  * `user/repo:QUANT` download as the Hugging Face group's first row.
  * What Enter did stands while the field still says what was entered. A
  * repo's answer counts only while nothing has happened since its Enter: an
- * edit, another Enter, or a pick of the library (`cancelOpen`).
+ * edit, another Enter, or a pick of the library (`cancelOpen`). A repo
+ * Hugging Face rate limits is read again when the limit lifts
+ * (`whenHubAllows`), and any of those stops the wait.
  *
  * The field's first focus puts the search in Hugging Face's scope: with it
  * empty, the Hugging Face group shows the model suggested for this machine.
@@ -16,6 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HfModelSummary } from '../../../types';
 import { getTransport } from '../../../services/transport';
+import { whenHubAllows } from '../../../services/transport/hubLimit';
 import { formatError } from '../../../utils/errors';
 import { parseModelSearchIntent } from '../../../utils/modelSearchParser';
 import { useHuggingFaceSearch, type HuggingFaceSearch } from './useHuggingFaceSearch';
@@ -54,6 +57,8 @@ export interface LibrarySearch {
   hf: HuggingFaceSearch;
   /** Why the repo Enter named could not be opened, as the daemon said it. */
   openError: string | null;
+  /** When the Hub's limit lifts (epoch ms) while the repo Enter named waits for it, else `null`. */
+  openLiftsAt: number | null;
   /** Drop the answer to a repo Enter named, if it is still to come. */
   cancelOpen: () => void;
 }
@@ -63,27 +68,37 @@ export function useLibrarySearch(onOpen: (model: HfModelSummary) => void): Libra
   const [scoped, setScoped] = useState(false);
   const [entered, setEntered] = useState<{ text: string; action: EnterAction } | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
+  const [openLiftsAt, setOpenLiftsAt] = useState<number | null>(null);
   const hf = useHuggingFaceSearch();
   // The latest open's number: an answer to any earlier one is dropped.
   const opening = useRef(0);
+  // Stops the latest open's wait for the Hub's limit.
+  const openWait = useRef<AbortController | null>(null);
   const cancelOpen = useCallback(() => {
     opening.current += 1;
+    openWait.current?.abort();
+    openWait.current = null;
+    setOpenLiftsAt(null);
   }, []);
   // Leaving the library drops an answer still to come: it would navigate.
   useEffect(() => {
     return cancelOpen;
   }, [cancelOpen]);
-  const edit = useCallback((next: string) => {
-    opening.current += 1;
-    setQuery(next);
-  }, []);
+  const edit = useCallback(
+    (next: string) => {
+      cancelOpen();
+      setQuery(next);
+    },
+    [cancelOpen],
+  );
 
   const text = query.trim();
 
   const enter = useCallback(() => {
     const action = enterAction(text);
     if (action === null) return;
-    const seq = ++opening.current;
+    cancelOpen();
+    const seq = opening.current;
     setEntered({ text, action });
     setOpenError(null);
     if (action.kind === 'search') {
@@ -92,21 +107,27 @@ export function useLibrarySearch(onOpen: (model: HfModelSummary) => void): Libra
     }
     hf.clear();
     if (action.kind === 'open') {
-      getTransport()
-        .getHfModelSummary(action.repo)
+      const stop = new AbortController();
+      openWait.current = stop;
+      whenHubAllows(() => getTransport().getHfModelSummary(action.repo), {
+        signal: stop.signal,
+        onWaiting: (at) => seq === opening.current && setOpenLiftsAt(at),
+      })
         .then((model) => {
           if (seq !== opening.current) return;
           onOpen(model);
           setQuery('');
         })
         .catch((err: unknown) => {
-          if (seq === opening.current) setOpenError(formatError(err));
+          if (seq !== opening.current) return;
+          setOpenLiftsAt(null);
+          setOpenError(formatError(err));
         });
     }
-  }, [text, hf, onOpen]);
+  }, [text, hf, onOpen, cancelOpen]);
 
   const shown =
     text === '' ? (scoped ? ({ kind: 'suggestion' } as const) : null) : entered?.text === text ? entered.action : null;
 
-  return { query, setQuery: edit, onFocus: () => setScoped(true), enter, shown, hf, openError, cancelOpen };
+  return { query, setQuery: edit, onFocus: () => setScoped(true), enter, shown, hf, openError, openLiftsAt, cancelOpen };
 }

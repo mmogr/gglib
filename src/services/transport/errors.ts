@@ -93,6 +93,32 @@ export class TransportError extends Error {
   }
 }
 
+/** The daemon's type for a request Hugging Face rate limited. */
+const HUB_RATE_LIMITED = 'hub_rate_limited';
+
+/** Hugging Face's rate limit, as the daemon tells it with a refusal. */
+export interface HubLimit {
+  /** The Hub's allowance that is spent: `api`, `resolvers` or `pages`. */
+  bucket: string;
+  /** Whole seconds until it lifts. */
+  retryAfterSecs: number;
+}
+
+/**
+ * The Hub's limit `err` was refused for, or `null` for any other error. Only
+ * the daemon's `hub_rate_limited` type says so: it answers 429 for other
+ * things too.
+ */
+export function hubLimitOf(err: unknown): HubLimit | null {
+  if (!TransportError.isTransportError(err)) return null;
+  const details = err.details as { type?: unknown; metadata?: { bucket?: unknown; retry_after_secs?: unknown } } | undefined;
+  if (details?.type !== HUB_RATE_LIMITED) return null;
+  const secs = details.metadata?.retry_after_secs;
+  if (typeof secs !== 'number' || !Number.isFinite(secs) || secs <= 0) return null;
+  const bucket = details.metadata?.bucket;
+  return { bucket: typeof bucket === 'string' ? bucket : '', retryAfterSecs: secs };
+}
+
 /**
  * Map HTTP status codes to TransportErrorCode.
  */
@@ -157,8 +183,10 @@ export async function readData<T>(response: Response, { sensitive = false }: Rea
         errorMessage = body.error;
       }
       // The daemon's code (`attachment_not_found`, `agent_busy`, …), for a
-      // caller that answers one refusal differently from another.
+      // caller that answers one refusal differently from another. The Hub's
+      // limit keeps its metadata too: when it lifts (`hubLimitOf`).
       if (body.type) details = { ...statusLine, type: body.type };
+      if (body.type === HUB_RATE_LIMITED) details = { ...statusLine, type: body.type, metadata: body.metadata ?? {} };
       
       // Check for llama-server not installed error
       if (body.type === 'LLAMA_SERVER_NOT_INSTALLED') {

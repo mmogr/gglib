@@ -29,18 +29,25 @@ While the daemon says the queue is full, Download is disabled and one line
 says why. A repo with no model variant says "This repo has no GGUF files."
 
 The summary comes with the pick that opened the repo (the navigation's
-state), or is read by the address on a reload; the listing and the tool
-reading are read once per repo.
+state), or is read by the address on a reload; the listing and the pick
+are read once per repo (`hooks/useHubRead`). A read Hugging Face rate
+limits waits until the limit lifts and is read again then, with no action
+from the user; while the listing waits, its place says so in one line,
+counting down (`components/status/HubWaitLine`), and the listing takes
+its place when it comes. While only the summary waits, the line is under
+the summary; a pick that waits says nothing, and ★ comes when it arrives.
+Leaving the repo stops every read and wait.
 
 Words with no Rust twin: "Pick a size", "Quant", "Size", "Fit", "gglib's pick" (the CLI prints the same), "not a model
 on its own", "Brings <file> (<size>) for images", "The download queue is
 full; Download waits for room.", "This repo has no GGUF files.", "Reading
-the repo's files…", "About this model", and the companion
+the repo's files…", "About this model", "Hugging Face's rate limit lifts
+in 2:14. gglib will read this again then.", and the companion
 note's sentences.
 
 | File | Role |
 |------|------|
-| `HfInspector.tsx` | The subject: header, summary, the listing's reads, Download (queue and toast), ▸ About this model |
+| `HfInspector.tsx` | The subject: header, summary, the listing's reads and the one line while the Hub's limit holds one, Download (queue and toast), ▸ About this model |
 | `PickASize.tsx` | The table: one row per variant, the daemon's fit as a shape and its words, drafts dimmed, the first pick, Download on the selected row, the queue-full line |
 | `ProjectorNote.tsx` | One line under the table: the projector the selected variant brings and its size, its cost on hover |
 | `CompanionNote.tsx` | For a repo the daemon reads as an image model: the family, each companion's role, file, repository and size, "already here" for one in the models directory, and the bytes the companions add |
