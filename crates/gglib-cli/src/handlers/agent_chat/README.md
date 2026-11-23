@@ -30,8 +30,8 @@ independently readable:
 - `pictures` — a chat's pictures in the terminal: each image's marker a
   link that opens a copy of it, on a terminal that opens links, and an
   image a tool made drawn under its line on one that draws pictures
-- `inline_picture` — which terminals draw a picture (iTerm2, kitty,
-  Ghostty), what is written to draw one, and how wide
+- `inline_picture` — which terminals draw a picture (iTerm2, `WezTerm`,
+  kitty, Ghostty), what is written to draw one, and how wide
 - `progress_line` — a long tool's progress ("drawing: sampling 2/4") and a
   wait before a reply ("Loading Qwen3-4B… 12 s", core's words), as one
   stderr line each report rewrites; a preview frame is not shown
