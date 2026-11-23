@@ -24,6 +24,32 @@ fn each_instruction_is_read_from_its_line() {
     );
 }
 
+/// `when` holds the instruction after its argument, itself a `when` too.
+#[test]
+fn a_when_is_read_with_the_instruction_it_guards() {
+    let parsed =
+        parse("when clone eprint Cloning into 'a stand-in'...\nwhen clone when --depth exit 1\n");
+
+    assert_eq!(
+        parsed,
+        Ok(vec![
+            Instruction::When(
+                "clone".to_owned(),
+                Box::new(Instruction::Eprint(
+                    "Cloning into 'a stand-in'...".to_owned()
+                ))
+            ),
+            Instruction::When(
+                "clone".to_owned(),
+                Box::new(Instruction::When(
+                    "--depth".to_owned(),
+                    Box::new(Instruction::Exit(1))
+                ))
+            ),
+        ])
+    );
+}
+
 #[test]
 fn a_line_that_is_no_instruction_is_named() {
     for (text, line) in [
@@ -35,6 +61,13 @@ fn a_line_that_is_no_instruction_is_named() {
         ("pid", "line 1: \"pid\""),
         ("touch", "line 1: \"touch\""),
         ("read all", "line 1: \"read all\""),
+        ("when", "line 1: \"when\""),
+        ("when clone", "line 1: \"when clone\""),
+        ("when  exit 1", "line 1: \"when  exit 1\""),
+        (
+            "when clone sing a song",
+            "line 1: \"when clone sing a song\"",
+        ),
     ] {
         assert_eq!(parse(text), Err(line.to_owned()), "{text:?}");
     }

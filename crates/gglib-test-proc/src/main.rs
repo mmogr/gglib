@@ -43,33 +43,44 @@ fn instructions() -> Result<Vec<Instruction>, String> {
 fn run(list: &[Instruction], args: &[String]) -> ExitCode {
     let joined = args.join(" ");
     for instruction in list {
-        let done = match instruction {
-            Instruction::Argv(path) => write_argv(path, args),
-            Instruction::Calls(path) => add_call(path, &joined),
-            Instruction::Pid(path) => write_whole(path, &format!("{}\n", std::process::id())),
-            Instruction::Touch(path) => write_whole(path, ""),
-            Instruction::Read => {
-                std::io::copy(&mut std::io::stdin(), &mut std::io::sink()).map(drop)
+        match follow(instruction, args, &joined) {
+            Ok(None) => {}
+            Ok(Some(code)) => return code,
+            Err(e) => {
+                eprintln!("gglib-test-proc: {instruction:?}: {e}");
+                return ExitCode::from(2);
             }
-            Instruction::Print(text) => {
-                writeln!(std::io::stdout(), "{}", text.replace(ARGS, &joined))
-                    .and_then(|()| std::io::stdout().flush())
-            }
-            Instruction::Eprint(text) => {
-                writeln!(std::io::stderr(), "{}", text.replace(ARGS, &joined))
-            }
-            Instruction::Sleep(seconds) => {
-                std::thread::sleep(Duration::from_secs(*seconds));
-                Ok(())
-            }
-            Instruction::Exit(code) => return ExitCode::from(*code),
-        };
-        if let Err(e) = done {
-            eprintln!("gglib-test-proc: {instruction:?}: {e}");
-            return ExitCode::from(2);
         }
     }
     ExitCode::SUCCESS
+}
+
+/// Follows one instruction; `Some` code when it ends the program.
+fn follow(
+    instruction: &Instruction,
+    args: &[String],
+    joined: &str,
+) -> std::io::Result<Option<ExitCode>> {
+    match instruction {
+        Instruction::Argv(path) => write_argv(path, args)?,
+        Instruction::Calls(path) => add_call(path, joined)?,
+        Instruction::Pid(path) => write_whole(path, &format!("{}\n", std::process::id()))?,
+        Instruction::Touch(path) => write_whole(path, "")?,
+        Instruction::Read => {
+            std::io::copy(&mut std::io::stdin(), &mut std::io::sink())?;
+        }
+        Instruction::Print(text) => writeln!(std::io::stdout(), "{}", text.replace(ARGS, joined))
+            .and_then(|()| std::io::stdout().flush())?,
+        Instruction::Eprint(text) => writeln!(std::io::stderr(), "{}", text.replace(ARGS, joined))?,
+        Instruction::Sleep(seconds) => std::thread::sleep(Duration::from_secs(*seconds)),
+        Instruction::Exit(code) => return Ok(Some(ExitCode::from(*code))),
+        Instruction::When(argument, then) => {
+            if args.contains(argument) {
+                return follow(then, args, joined);
+            }
+        }
+    }
+    Ok(None)
 }
 
 /// Writes each argument and a newline to `path`, whole.
