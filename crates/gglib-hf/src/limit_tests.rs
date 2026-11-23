@@ -1,6 +1,8 @@
 //! The Hub's rate limit on the wire: a stand-in Hub on the loopback answers
-//! with the refusal huggingface.co sent on 2026-11-23, its reset shortened
-//! to a second, and then as it answers when the limit has lifted.
+//! with the refusal huggingface.co sent on 2026-11-23, and then as it
+//! answers when the limit has lifted. A test where nothing waits the limit
+//! out keeps the recorded reset, ten seconds, so a slow run cannot reach it;
+//! one that waits shortens it to a second or two.
 
 use std::io::Write as _;
 use std::net::TcpListener;
@@ -22,16 +24,19 @@ const REPO: &str = "owner/repo";
 /// The recorded refusal's message, for the documentation address it names.
 const REFUSED: &str = "We had to rate limit your IP (203.0.113.7). To continue using our service, create a HF account or login to your existing account, and make sure you pass a HF_TOKEN if you're using the API.";
 
-/// The recorded refusal of the API, its reset one second away.
-fn refusal() -> String {
-    let body = format!("{{\"error\":\"{REFUSED}\",\"retryAfter\":1}}");
+/// The recorded reset, in seconds.
+const RECORDED_RESET: u64 = 10;
+
+/// The recorded refusal of the API, its reset `seconds` away.
+fn refusal(seconds: u64) -> String {
+    let body = format!("{{\"error\":\"{REFUSED}\",\"retryAfter\":{seconds}}}");
     format!(
         "HTTP/1.1 429 Too Many Requests\r\n\
          content-type: application/json; charset=utf-8\r\n\
          content-length: {}\r\n\
-         ratelimit: \"api\";r=0;t=1\r\n\
+         ratelimit: \"api\";r=0;t={seconds}\r\n\
          ratelimit-policy: \"fixed window\";\"api\";q=500;w=300\r\n\
-         retry-after: 1\r\n\
+         retry-after: {seconds}\r\n\
          x-error-message: {REFUSED}\r\n\
          connection: close\r\n\r\n{body}",
         body.len()
@@ -129,11 +134,11 @@ impl Told {
 }
 
 /// A client that surfaces a limit fails with the allowance and the time it
-/// lifts, and the request after it is refused without reaching the Hub,
-/// until the reset.
+/// lifts, and the request after it is refused without reaching the Hub.
+/// (That the allowance opens at its reset is the gate's tests'.)
 #[tokio::test]
 async fn a_surfaced_refusal_carries_its_reset_and_closes_the_allowance() {
-    let hub = Hub::answering(vec![refusal(), served()]);
+    let hub = Hub::answering(vec![refusal(RECORDED_RESET)]);
     let client = hub.client(OnLimit::Surface);
 
     let refused = HfClientPort::get_model_info(&client, REPO).await;
@@ -141,20 +146,18 @@ async fn a_surfaced_refusal_carries_its_reset_and_closes_the_allowance() {
         panic!("not a rate limit: {refused:?}");
     };
     assert_eq!(bucket, HubBucket::Api);
-    assert!(resets_in <= Duration::from_secs(1), "{resets_in:?}");
+    assert!(
+        resets_in <= Duration::from_secs(RECORDED_RESET),
+        "{resets_in:?}"
+    );
     assert!(!resets_in.is_zero());
 
     let again = HfClientPort::get_model_info(&client, REPO).await;
-    let Err(HfPortError::RateLimited { bucket, resets_in }) = again else {
+    let Err(HfPortError::RateLimited { bucket, .. }) = again else {
         panic!("not a rate limit: {again:?}");
     };
     assert_eq!(bucket, HubBucket::Api);
     assert_eq!(hub.asked(), 1, "a closed allowance was asked");
-
-    tokio::time::sleep(resets_in).await;
-    let info = HfClientPort::get_model_info(&client, REPO).await;
-    assert_eq!(info.expect("the model info").model_id, REPO);
-    assert_eq!(hub.asked(), 2);
     hub.answering.join().unwrap();
 }
 
@@ -162,7 +165,7 @@ async fn a_surfaced_refusal_carries_its_reset_and_closes_the_allowance() {
 /// does: the next request would be refused.
 #[tokio::test]
 async fn an_answer_that_leaves_none_closes_the_allowance() {
-    let hub = Hub::answering(vec![answer("\"api\";r=0;t=1")]);
+    let hub = Hub::answering(vec![answer("\"api\";r=0;t=142")]);
     let client = hub.client(OnLimit::Surface);
 
     let info = HfClientPort::get_model_info(&client, REPO).await;
@@ -188,7 +191,7 @@ async fn an_answer_that_leaves_none_closes_the_allowance() {
 /// The refusal spends none of the client's retries: it has none.
 #[tokio::test]
 async fn a_waiting_client_waits_out_the_reset_and_asks_again() {
-    let hub = Hub::answering(vec![refusal(), served()]);
+    let hub = Hub::answering(vec![refusal(2), served()]);
     let told = Told::default();
     let client = hub.client(told.on_limit());
 
@@ -197,11 +200,11 @@ async fn a_waiting_client_waits_out_the_reset_and_asks_again() {
     assert_eq!(info.expect("the model info").model_id, REPO);
     assert_eq!(hub.asked(), 2);
     let lines = told.lines();
-    assert_eq!(
-        lines.first(),
-        Some(&Some(
-            "waiting for Hugging Face's rate limit, 0:01".to_owned()
-        )),
+    assert!(
+        lines
+            .iter()
+            .flatten()
+            .any(|line| line.starts_with("waiting for Hugging Face's rate limit, 0:0")),
         "{lines:?}"
     );
     assert_eq!(lines.last(), Some(&None), "{lines:?}");
@@ -214,7 +217,7 @@ async fn a_waiting_client_waits_out_the_reset_and_asks_again() {
 #[tokio::test]
 async fn a_waiting_client_gives_up_after_refusals_in_a_row() {
     let refusals = usize::try_from(LIMITED_IN_A_ROW).unwrap();
-    let hub = Hub::answering(vec![refusal(); refusals]);
+    let hub = Hub::answering(vec![refusal(1); refusals]);
     let told = Told::default();
     let client = hub.client(told.on_limit());
 
@@ -237,7 +240,7 @@ async fn a_waiting_client_gives_up_after_refusals_in_a_row() {
 /// Two clients that share a gate share a refusal: the second does not ask.
 #[tokio::test]
 async fn clients_that_share_a_gate_share_a_refusal() {
-    let hub = Hub::answering(vec![refusal()]);
+    let hub = Hub::answering(vec![refusal(RECORDED_RESET)]);
     let gate = Arc::new(HubGate::new());
     let first = hub.client_of(HfClientConfig::new().with_gate(Arc::clone(&gate)));
     let second = hub.client_of(HfClientConfig::new().with_gate(gate));
