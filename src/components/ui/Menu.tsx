@@ -6,10 +6,13 @@
  * the menu open, or a submenu (`▸`) that opens beside it; a danger item is
  * drawn as one. A heading names the items after it, as a group, and a note
  * is a line of text that does nothing. A disabled item with a reason says it
- * under itself, in a line it is described by, not only on hover. The menu
- * closes on a pick, a click outside, or Escape, and a pick or Escape gives
- * the focus back to its button; Escape in an open submenu closes that
- * submenu alone, the focus back on its item.
+ * under itself, in a line it is described by, not only on hover. A menu is
+ * as wide as its widest row, between 200px and 24rem (90% of a narrow
+ * window): a row's label is one line where it fits and wraps under itself,
+ * the row growing with it, where it does not; a note or a reason wraps at
+ * the width the rows set. The menu closes on a pick, a click outside, or
+ * Escape, and a pick or Escape gives the focus back to its button; Escape in
+ * an open submenu closes that submenu alone, the focus back on its item.
  *
  * @module components/ui/Menu
  */
@@ -67,6 +70,13 @@ interface MenuProps {
   onOpen?: () => void;
 }
 
+/**
+ * A line of text in a menu, a note or a disabled item's reason: it wraps at
+ * the width the rows give the menu and adds nothing to it, so a sentence
+ * does not make a menu of short rows a wide one.
+ */
+const PROSE = 'm-0 w-0 min-w-full px-2.5 text-xs text-text-secondary';
+
 interface Group {
   heading?: string;
   items: MenuItem[];
@@ -108,7 +118,7 @@ const MenuList: FC<ListProps> = ({ label, items, className, toward, side, close 
     const key = `${index}:${item.label}`;
     if (item.note) {
       return (
-        <p key={key} className={cn('m-0 px-2.5 py-xs text-xs text-text-secondary', item.gapBefore && 'mt-sm')}>
+        <p key={key} className={cn(PROSE, 'py-xs', item.gapBefore && 'mt-sm')}>
           {item.label}
         </p>
       );
@@ -136,7 +146,10 @@ const MenuList: FC<ListProps> = ({ label, items, className, toward, side, close 
         title={item.title}
         disabled={item.disabled}
         className={cn(
-          'w-full justify-start text-sm font-normal text-text',
+          // As tall as its label: one line is the button's own 28px (a 20px
+          // line, 3px above and below it, and the 1px border), and a label too
+          // long for the menu wraps under itself, not over the next row.
+          'h-auto min-h-7 w-full justify-start py-[3px] text-left text-sm font-normal text-text',
           item.danger && 'text-danger hover:text-danger',
           item.gapBefore && 'mt-sm',
         )}
@@ -159,7 +172,7 @@ const MenuList: FC<ListProps> = ({ label, items, className, toward, side, close 
       </Button>
     );
     const reason = reasonId && (
-      <p id={reasonId} className="m-0 px-2.5 pb-xs text-xs text-text-secondary">
+      <p id={reasonId} className={cn(PROSE, 'pb-xs')}>
         {item.title}
       </p>
     );
@@ -195,7 +208,10 @@ const MenuList: FC<ListProps> = ({ label, items, className, toward, side, close 
         setOpenSub(null);
       }}
       className={cn(
-        'absolute z-popover flex min-w-[200px] flex-col rounded-base bg-surface-elevated p-xs shadow-lg',
+        // As wide as its widest row, up to a width a row's label wraps at:
+        // left to itself, a box hung beside its button is as narrow as its
+        // words allow, and every label of two words is two lines.
+        'absolute z-popover flex w-max min-w-[200px] max-w-[min(24rem,90vw)] flex-col rounded-base bg-surface-elevated p-xs wrap-anywhere shadow-lg',
         // A long list scrolls; one with a submenu cannot, since a scrolling
         // box would clip the submenu that opens beside it.
         !items.some((item) => item.submenu) && 'max-h-[70vh] overflow-y-auto',
