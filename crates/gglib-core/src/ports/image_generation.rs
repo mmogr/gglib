@@ -6,7 +6,7 @@
 //!
 //! One driver implements it in the daemon (`gglib-runtime`'s `sd-server`
 //! job driver), and the CLI implements it again over the daemon's
-//! `/api/images/generations`, so the route, `gglib image` and the drawing
+//! `/api/images/generations`, so the route, `gglib draw` and the drawing
 //! tool all ask the same question and read the same answer.
 //!
 //! A render takes minutes, so progress matters as much as the result: the

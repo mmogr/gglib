@@ -44,7 +44,7 @@ async-trait = { workspace = true }
 rustyline = "14"
 serde = { workspace = true }
 tracing = { workspace = true }
-# `gglib image` reads the daemon's drawn images as base64
+# `gglib draw` reads the daemon's drawn images as base64
 base64 = { workspace = true }
 # Streams the SSE body for `gglib proxy dashboard` (crossterm-based redraw,
 # no ratatui — see handlers/proxy_dashboard.rs module docs).

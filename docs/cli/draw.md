@@ -1,4 +1,4 @@
-# gglib image
+# gglib draw
 
 Draw a picture with this machine's image model, through the daemon (it
 starts one if none runs), or with `--remote` with the paired machine's. The
@@ -6,10 +6,10 @@ render is shown on one line as it goes, each PNG is saved here, and its line
 is printed: `[image WxH] <path>`.
 
 ```bash
-gglib image "a lighthouse at dusk, oil painting"
-gglib image "a red fox in snow" --size 1024x768 --count 2 -o fox.png
-gglib image "a red fox in snow" --from fox.png --strength 0.4 -o fox-again.png
-gglib image "a fox's paw in snow" --from fox.png --mask paw.png -o fox-fixed.png
+gglib draw "a lighthouse at dusk, oil painting"
+gglib draw "a red fox in snow" --size 1024x768 --count 2 -o fox.png
+gglib draw "a red fox in snow" --from fox.png --strength 0.4 -o fox-again.png
+gglib draw "a fox's paw in snow" --from fox.png --mask paw.png -o fox-fixed.png
 ```
 
 An image model is a library entry like any other, with companion files
@@ -70,4 +70,4 @@ In a chat, `/draw` asks the model to draw for the next message
 
 ## Flags
 
-`gglib image --help` lists them all.
+`gglib draw --help` lists them all.

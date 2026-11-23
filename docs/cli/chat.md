@@ -216,7 +216,7 @@ sampling flags are `serve`'s and `proxy`'s.
 
 In the session, `/draw` lets the model draw a picture for the next message
 typed, and only that one, with the daemon's image model
-([gglib image](image.md)).
+([gglib draw](draw.md)).
 
 - `/draw list` prints the daemon's image models, one to a line: a `*` on
   the one the next `/draw` message would draw with, its id, name and

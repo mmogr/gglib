@@ -1,4 +1,4 @@
-//! `gglib image`'s arguments, its live line, where it saves, and what a
+//! `gglib draw`'s arguments, its live line, where it saves, and what a
 //! failure says.
 
 use std::path::{Path, PathBuf};
@@ -11,22 +11,22 @@ use gglib_core::ports::{
 
 use super::{INTERRUPTED, PlainLines, failure, line, output_paths, say, source_of};
 use crate::commands::Commands;
-use crate::image_commands::ImageCommandArgs;
+use crate::draw_commands::DrawCommandArgs;
 use crate::parser::Cli;
 use crate::target::{Reach, reach};
 
-fn parsed(argv: &[&str]) -> ImageCommandArgs {
+fn parsed(argv: &[&str]) -> DrawCommandArgs {
     match Cli::parse_from(argv).command {
-        Some(Commands::Image(image)) => image,
-        _ => panic!("expected gglib image"),
+        Some(Commands::Draw(draw)) => draw,
+        _ => panic!("expected gglib draw"),
     }
 }
 
 #[test]
-fn image_takes_a_prompt_size_count_seed_model_and_output() {
+fn draw_takes_a_prompt_size_count_seed_model_and_output() {
     let args = parsed(&[
         "gglib",
-        "image",
+        "draw",
         "a red fox",
         "--size",
         "512x768",
@@ -51,30 +51,40 @@ fn image_takes_a_prompt_size_count_seed_model_and_output() {
     assert_eq!(args.model.as_deref(), Some("flux"));
     assert_eq!(args.output, Some(PathBuf::from("fox.png")));
 
-    let plain = parsed(&["gglib", "image", "a red fox"]);
+    let plain = parsed(&["gglib", "draw", "a red fox"]);
     assert_eq!((plain.n, plain.size, plain.model), (1, None, None));
 }
 
 #[test]
-fn image_refuses_a_count_or_size_it_cannot_ask_for() {
+fn draw_refuses_a_count_or_size_it_cannot_ask_for() {
     for argv in [
-        &["gglib", "image", "a fox", "--count", "5"][..],
-        &["gglib", "image", "a fox", "--count", "0"],
-        &["gglib", "image", "a fox", "--size", "big"],
-        &["gglib", "image"],
+        &["gglib", "draw", "a fox", "--count", "5"][..],
+        &["gglib", "draw", "a fox", "--count", "0"],
+        &["gglib", "draw", "a fox", "--size", "big"],
+        &["gglib", "draw"],
     ] {
         assert!(Cli::try_parse_from(argv).is_err(), "{argv:?}");
     }
 }
 
+/// Drawing is `gglib draw`, the verb the app's Draw button and a chat's
+/// `/draw` use. There is no `gglib image` beside it.
+#[test]
+fn the_command_is_draw_and_image_is_none() {
+    assert!(Cli::try_parse_from(["gglib", "draw", "a fox"]).is_ok());
+    let refused = Cli::try_parse_from(["gglib", "image", "a fox"]).map(drop);
+    assert_eq!(
+        refused.map_err(|e| e.kind()),
+        Err(clap::error::ErrorKind::InvalidSubcommand)
+    );
+}
+
 /// Drawing uses a machine: this one's daemon, or with `--remote` the paired
 /// machine's, which draws with its own image model.
 #[test]
-fn image_uses_a_machine() {
-    let command = Cli::parse_from(["gglib", "image", "a fox"])
-        .command
-        .unwrap();
-    assert!(matches!(reach(&command), ("image", Reach::Use)));
+fn draw_uses_a_machine() {
+    let command = Cli::parse_from(["gglib", "draw", "a fox"]).command.unwrap();
+    assert!(matches!(reach(&command), ("draw", Reach::Use)));
 }
 
 fn report(stage: ImageStage) -> ImageProgress {
@@ -242,10 +252,10 @@ fn a_failure_says_the_daemons_words() {
 /// picture, and a picture's size is its own, so `--size` is refused beside
 /// it.
 #[test]
-fn image_takes_a_picture_to_draw_from_with_a_mask_and_a_strength() {
+fn draw_takes_a_picture_to_draw_from_with_a_mask_and_a_strength() {
     let args = parsed(&[
         "gglib",
-        "image",
+        "draw",
         "a red fox",
         "--from",
         "fox.png",
@@ -258,14 +268,14 @@ fn image_takes_a_picture_to_draw_from_with_a_mask_and_a_strength() {
     assert_eq!(args.mask, Some(PathBuf::from("paw.png")));
     assert_eq!(args.strength, Some(0.4));
 
-    let plain = parsed(&["gglib", "image", "a red fox"]);
+    let plain = parsed(&["gglib", "draw", "a red fox"]);
     assert_eq!((plain.from, plain.mask, plain.strength), (None, None, None));
 
     for argv in [
-        &["gglib", "image", "a fox", "--mask", "paw.png"][..],
-        &["gglib", "image", "a fox", "--strength", "0.4"],
+        &["gglib", "draw", "a fox", "--mask", "paw.png"][..],
+        &["gglib", "draw", "a fox", "--strength", "0.4"],
         &[
-            "gglib", "image", "a fox", "--from", "fox.png", "--size", "512x512",
+            "gglib", "draw", "a fox", "--from", "fox.png", "--size", "512x512",
         ],
     ] {
         assert!(Cli::try_parse_from(argv).is_err(), "{argv:?}");
@@ -275,11 +285,11 @@ fn image_takes_a_picture_to_draw_from_with_a_mask_and_a_strength() {
 /// A strength is a number from 0.05 to 1: `nan` and `inf`, which the body
 /// would carry as no strength at all, are refused with the rest.
 #[test]
-fn image_refuses_a_strength_that_is_not_from_a_twentieth_to_one() {
+fn draw_refuses_a_strength_that_is_not_from_a_twentieth_to_one() {
     let with = |strength: &'static str| {
         [
             "gglib",
-            "image",
+            "draw",
             "a fox",
             "--from",
             "f.png",

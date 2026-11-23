@@ -123,7 +123,7 @@ picture's own more than 16 pixels from it, a blend between.
 
 sd-server cannot interrupt a generating job (cancel answers 409), so a
 render nobody waits for is stopped by stopping sd-server. A render dropped
-part way (a run cancelled, Ctrl-C in `gglib image`, a client that left)
+part way (a run cancelled, Ctrl-C in `gglib draw`, a client that left)
 asks sd-server to cancel its job. A job still queued there, finished or
 forgotten is over: the turn and the lease go and the model stays loaded. A
 job that is generating is retired at once through

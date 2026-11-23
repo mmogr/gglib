@@ -203,8 +203,7 @@ gglib daemon status
 gglib daemon stop
   --remote
   --yes -y
-gglib gui
-gglib image
+gglib draw
   --count
   --from
   --mask
@@ -214,6 +213,7 @@ gglib image
   --seed
   --size
   --strength
+gglib gui
 gglib mcp
 gglib mcp add
   --args

@@ -349,7 +349,7 @@ pub async fn dispatch(
         // ── Runs: replies the daemon owns ───────────────────────────────────
         Commands::Run(args) => handlers::run::dispatch(args).await?,
         // ── Drawing, through this machine's daemon or the paired one's ──────
-        Commands::Image(args) => handlers::image::execute(ctx, target, args).await?,
+        Commands::Draw(args) => handlers::draw::execute(ctx, target, args).await?,
         // ── Stored images ───────────────────────────────────────────────────
         Commands::Attachment { command } => match command {
             crate::commands::AttachmentCommand::Save { id, path, force } => {

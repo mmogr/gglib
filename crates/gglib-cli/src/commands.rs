@@ -262,7 +262,7 @@ pub enum Commands {
     /// Ctrl-C leaves, and that daemon stops a render already generating,
     /// loading the image model again next time.
     #[command(display_order = 15)]
-    Image(crate::image_commands::ImageCommandArgs),
+    Draw(crate::draw_commands::DrawCommandArgs),
 
     /// Save an image a chat stored, such as one a tool made, to a file
     #[command(display_order = 15)]

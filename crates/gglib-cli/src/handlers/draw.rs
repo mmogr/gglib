@@ -1,4 +1,4 @@
-//! `gglib image`: draw through the daemon, or with `--remote` through the
+//! `gglib draw`: draw through the daemon, or with `--remote` through the
 //! paired machine's, show the render on one live line, save each image, and
 //! print where it went.
 //!
@@ -27,7 +27,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use tokio::sync::mpsc;
 
 use crate::bootstrap::CliContext;
-use crate::image_commands::ImageCommandArgs;
+use crate::draw_commands::DrawCommandArgs;
 use crate::target::Target;
 
 /// What Ctrl-C prints before the command exits 130.
@@ -54,12 +54,8 @@ fn source_of(
     }))
 }
 
-/// Run `gglib image`.
-pub(crate) async fn execute(
-    ctx: &CliContext,
-    target: Target,
-    args: ImageCommandArgs,
-) -> Result<()> {
+/// Run `gglib draw`.
+pub(crate) async fn execute(ctx: &CliContext, target: Target, args: DrawCommandArgs) -> Result<()> {
     let paths = output_paths(args.output.as_deref(), usize::from(args.n), unix_now());
     if let Some(taken) = paths.iter().find(|p| p.exists()) {
         bail!(
@@ -236,5 +232,5 @@ fn unix_now() -> u64 {
 }
 
 #[cfg(test)]
-#[path = "image_tests.rs"]
+#[path = "draw_tests.rs"]
 mod tests;
