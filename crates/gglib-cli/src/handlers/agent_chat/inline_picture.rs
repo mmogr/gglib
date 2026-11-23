@@ -10,11 +10,19 @@
 //! - **iTerm2**, from 3.5: its inline image sequence in several parts
 //!   (`OSC 1337 ; MultipartFile`), as its own `imgcat` sends one. A PNG or
 //!   a JPEG.
+//! - **iTerm2 from 3.0 to before 3.5, and `WezTerm`**: the same image in
+//!   its older form, one sequence (`OSC 1337 ; File`), which is all
+//!   `WezTerm` reads of iTerm2's. A PNG or a JPEG. An iTerm2 whose version is not
+//!   said is not sent either form.
 //! - **kitty and Ghostty**: the kitty graphics protocol, which takes a PNG
 //!   as it is (`f=100`). A JPEG is not sent; its marker stands.
 //!
-//! Inside tmux or screen neither is sent: both need wrapping there, and a
-//! multiplexer that does not pass it on prints it.
+//! Inside tmux or screen neither is sent. tmux passes a picture on only
+//! wrapped, and only where its `allow-passthrough` is on; it does not know
+//! the rows a picture it passed on takes, so the lines after it are written
+//! over it; and what a pane's environment says of the terminal outside is
+//! that of the one tmux was started from, which need not be the one
+//! attached now. None of that can be told without asking tmux.
 
 use std::fmt::Write as _;
 
@@ -41,6 +49,9 @@ const COLUMN_PX: u32 = 8;
 pub(crate) enum Inline {
     /// iTerm2's inline images, multipart.
     ITerm,
+    /// iTerm2's inline images in one sequence: iTerm2 before 3.5, and
+    /// `WezTerm`.
+    ITermSingle,
     /// The kitty graphics protocol: kitty and Ghostty.
     Kitty,
 }
@@ -56,8 +67,12 @@ impl Inline {
             return None;
         }
         let iterm = |version: &str| {
-            let multipart = env(version).is_some_and(|version| at_least(&version, (3, 5)));
-            multipart.then_some(Self::ITerm)
+            let version = env(version)?;
+            if at_least(&version, (3, 5)) {
+                Some(Self::ITerm)
+            } else {
+                at_least(&version, (3, 0)).then_some(Self::ITermSingle)
+            }
         };
         // A terminal is believed by what it sets itself. One started from
         // another (an editor's, from a shell in iTerm2 or kitty) inherits
@@ -65,6 +80,7 @@ impl Inline {
         match env("TERM_PROGRAM").unwrap_or_default().as_str() {
             "iTerm.app" => iterm("TERM_PROGRAM_VERSION"),
             "ghostty" => Some(Self::Kitty),
+            "WezTerm" => Some(Self::ITermSingle),
             // No program named: kitty names none, and none travels to a
             // shell on another machine. `TERM` does, and so does what
             // iTerm2 sets for that case, `LC_TERMINAL`.
@@ -88,16 +104,16 @@ impl Inline {
         let mut out = String::with_capacity(encoded.len() + encoded.len() / 64 + 256);
         match self {
             Self::ITerm => {
-                let (size, name) = (picture.bytes.len(), STANDARD.encode(picture.name));
-                let _ = write!(
-                    out,
-                    "\x1b]1337;MultipartFile=inline=1;size={size};name={name};\
-                     width={columns};preserveAspectRatio=1\x07"
-                );
+                let arguments = iterm_arguments(picture, columns);
+                let _ = write!(out, "\x1b]1337;MultipartFile={arguments}\x07");
                 for part in parts {
                     let _ = write!(out, "\x1b]1337;FilePart={}\x07", text(part));
                 }
                 out.push_str("\x1b]1337;FileEnd\x07");
+            }
+            Self::ITermSingle => {
+                let arguments = iterm_arguments(picture, columns);
+                let _ = write!(out, "\x1b]1337;File={arguments}:{encoded}\x07");
             }
             Self::Kitty => {
                 if picture.mime != PNG_MIME {
@@ -129,6 +145,13 @@ pub(crate) struct Picture<'a> {
     pub bytes: &'a [u8],
 }
 
+/// What iTerm2's image sequence says of `picture`, in either form: shown
+/// inline, its size and name, `columns` wide and as tall as that makes it.
+fn iterm_arguments(picture: &Picture<'_>, columns: u32) -> String {
+    let (size, name) = (picture.bytes.len(), STANDARD.encode(picture.name));
+    format!("inline=1;size={size};name={name};width={columns};preserveAspectRatio=1")
+}
+
 /// Base64 is ASCII, so any run of its bytes is text.
 fn text(part: &[u8]) -> &str {
     std::str::from_utf8(part).unwrap_or_default()
@@ -136,7 +159,7 @@ fn text(part: &[u8]) -> &str {
 
 /// Whether `version` ("3.7.7", "3.5.0beta10") is `least` (major, minor) or
 /// later. One that does not start with two numbers is not.
-fn at_least(version: &str, least: (u32, u32)) -> bool {
+pub(super) fn at_least(version: &str, least: (u32, u32)) -> bool {
     let mut numbers = version.split('.').map(|part| {
         let digits = part.bytes().take_while(u8::is_ascii_digit).count();
         part[..digits].parse::<u32>().ok()

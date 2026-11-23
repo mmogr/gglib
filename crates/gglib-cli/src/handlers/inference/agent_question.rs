@@ -17,7 +17,7 @@ use crate::conversation_settings::{ConversationSettingsBuilder, step_limit};
 use crate::daemon_client;
 use crate::dispatch::AlreadySaid;
 use crate::handlers::agent_chat::files::{self, Chat};
-use crate::handlers::agent_chat::images::TurnImages;
+use crate::handlers::agent_chat::images::{TurnImages, drawing_on_stderr};
 use crate::handlers::agent_chat::persistence::Conversation;
 use crate::handlers::agent_chat::repl::{Session, run_repl};
 use crate::handlers::agent_chat::resume_settings::require_a_model;
@@ -163,7 +163,9 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     let max_iterations = step_limit(max_iterations, &mut receipts)?;
     // A file that cannot be attached ends the command before any model lookup.
     let attachments = ctx.app.attachments();
-    let mut images = TurnImages::attach(attachments, &images, quiet, &mut receipts).await?;
+    let drawing = drawing_on_stderr(quiet);
+    let mut images =
+        TurnImages::attach(attachments, &images, quiet, &mut receipts, drawing).await?;
 
     // If no model was specified, look up the default from settings
     let settings = ctx

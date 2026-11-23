@@ -65,6 +65,10 @@ fn a_local_terminal_gets_links_and_one_that_would_not_open_them_does_not() {
         (vec![("TERM", "screen")], false),
         (vec![xterm, ("STY", "1234.pts-0.host")], false),
         (
+            vec![("TERM", "screen-256color"), ("STY", "1234.pts-0.host")],
+            false,
+        ),
+        (
             vec![("TERM", "eterm-color"), ("INSIDE_EMACS", "29.1,term:0.96")],
             false,
         ),
@@ -76,6 +80,89 @@ fn a_local_terminal_gets_links_and_one_that_would_not_open_them_does_not() {
         (vec![("WT_SESSION", "a-guid")], true),
         // Set and empty is not set.
         (vec![xterm, ("SSH_TTY", "")], true),
+    ] {
+        assert_eq!(opens_links(env(&set)), opens, "{set:?}");
+    }
+}
+
+#[test]
+fn tmux_from_3_4_gets_links_by_what_it_sets_and_no_other_multiplexer_does() {
+    let tmux = ("TMUX", "/tmp/tmux-501/default,1,0");
+    let named = ("TERM_PROGRAM", "tmux");
+    let version = |version| ("TERM_PROGRAM_VERSION", version);
+    for (set, opens) in [
+        (
+            vec![("TERM", "tmux-256color"), tmux, named, version("3.4")],
+            true,
+        ),
+        (
+            vec![("TERM", "screen-256color"), tmux, named, version("3.5a")],
+            true,
+        ),
+        (
+            vec![("TERM", "tmux-256color"), tmux, named, version("3.10")],
+            true,
+        ),
+        // Before tmux kept links, it dropped them.
+        (
+            vec![("TERM", "tmux-256color"), tmux, named, version("3.3a")],
+            false,
+        ),
+        // A version that does not start with two numbers is not believed.
+        (
+            vec![("TERM", "tmux-256color"), tmux, named, version("next-3.6")],
+            false,
+        ),
+        (vec![("TERM", "tmux-256color"), tmux, named], false),
+        // tmux before 3.2 names no program: the one named is from outside.
+        (
+            vec![
+                ("TERM", "screen"),
+                tmux,
+                ("TERM_PROGRAM", "iTerm.app"),
+                version("3.7.7"),
+            ],
+            false,
+        ),
+        // The tmux variables without TMUX: a shell that left it, as over
+        // SSH from a pane. Its TERM still says a multiplexer.
+        (
+            vec![("TERM", "tmux-256color"), named, version("3.4")],
+            false,
+        ),
+        // Over SSH, inside screen, in Emacs, or on a terminal that prints
+        // a link, whatever tmux says.
+        (vec![("TERM", "dumb"), tmux, named, version("3.4")], false),
+        (
+            vec![
+                ("TERM", "tmux-256color"),
+                tmux,
+                named,
+                version("3.4"),
+                ("SSH_CONNECTION", "10.0.0.2 50000 10.0.0.1 22"),
+            ],
+            false,
+        ),
+        (
+            vec![
+                ("TERM", "screen"),
+                tmux,
+                named,
+                version("3.4"),
+                ("STY", "1234.pts-0.host"),
+            ],
+            false,
+        ),
+        (
+            vec![
+                ("TERM", "tmux-256color"),
+                tmux,
+                named,
+                version("3.4"),
+                ("INSIDE_EMACS", "29.1,term:0.96"),
+            ],
+            false,
+        ),
     ] {
         assert_eq!(opens_links(env(&set)), opens, "{set:?}");
     }

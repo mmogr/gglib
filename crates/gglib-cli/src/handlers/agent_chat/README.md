@@ -28,10 +28,11 @@ independently readable:
   and a reply's figure line ("41 s · 13 t/s · 2,100 tokens reused", core's
   `TurnUsage::figure_line`, the GUI thread's words)
 - `pictures` — a chat's pictures in the terminal: each image's marker a
-  link that opens a copy of it, on a terminal that opens links, and an
+  link that opens a copy of it, on a terminal that opens links (tmux from
+  3.4 among them), and an
   image a tool made drawn under its line on one that draws pictures
-- `inline_picture` — which terminals draw a picture (iTerm2, kitty,
-  Ghostty), what is written to draw one, and how wide
+- `inline_picture` — which terminals draw a picture (iTerm2, `WezTerm`,
+  kitty, Ghostty), what is written to draw one, and how wide
 - `progress_line` — a long tool's progress ("drawing: sampling 2/4") and a
   wait before a reply ("Loading Qwen3-4B… 12 s", core's words), as one
   stderr line each report rewrites; a preview frame is not shown
@@ -49,8 +50,8 @@ independently readable:
   while a reply is still being written; the turn after a change that leaves
   a question says `answer_saved`, and adds no message
 - [`images`]   — the images a turn carries: `--image` and the REPL's `/image`,
-  each file through core's one ingest, with a receipt line on stderr;
-  whether the chat's model can read them is the daemon's to say
+  each file through core's one ingest, with a receipt line on stderr and
+  the image drawn under it on a terminal that draws pictures; whether the chat's model can read them is the daemon's to say
 - [`draw`]     — `/draw`, the session's Draw switch: it asks the daemon
   whether it can draw and arms the next message, whose turn says `draw`,
   and is off again once that message is sent; `/draw <description>` arms

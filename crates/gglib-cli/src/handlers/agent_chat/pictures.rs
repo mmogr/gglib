@@ -26,7 +26,7 @@ use gglib_core::paths::{create_private_dir, create_private_file, database_path};
 use gglib_core::services::AttachmentService;
 
 use super::images::short_id;
-use super::inline_picture::{Inline, Picture, columns};
+use super::inline_picture::{Inline, Picture, at_least, columns};
 use crate::handlers::attachment::extension;
 
 /// How long a picture's copy is kept after its marker was last printed: a
@@ -223,25 +223,34 @@ fn address(path: &Path) -> Option<String> {
 /// environment (`env`): there is no way to ask a terminal.
 ///
 /// Not over SSH, where the file is on this machine and the click on another.
-/// Not inside tmux or screen, which pass a link on only when set up to, nor
-/// in Emacs, whose terminal prints the sequence. Not on a `dumb` terminal or
-/// the Linux console, which prints it too. With no `TERM` at all, as on
-/// Windows, only in Windows Terminal.
+/// Not inside screen, nor in Emacs, whose terminal prints the sequence. Not
+/// on a `dumb` terminal or the Linux console, which prints it too. With no
+/// `TERM` at all, as on Windows, only in Windows Terminal.
+///
+/// Inside tmux from 3.4, told by the `TERM_PROGRAM` and
+/// `TERM_PROGRAM_VERSION` tmux sets in its panes: it keeps a link itself and
+/// passes it on to a terminal it knows opens them (its `hyperlinks`
+/// feature), and shows the text alone to one it does not. An older tmux
+/// drops the link, so it is not written there.
 fn opens_links(env: impl Fn(&str) -> Option<String>) -> bool {
     let set = |name: &str| env(name).is_some_and(|value| !value.is_empty());
-    if ["SSH_CONNECTION", "SSH_TTY", "TMUX", "STY", "INSIDE_EMACS"]
+    if ["SSH_CONNECTION", "SSH_TTY", "STY", "INSIDE_EMACS"]
         .iter()
         .any(|name| set(name))
     {
         return false;
     }
-    match env("TERM").as_deref() {
-        None | Some("") => set("WT_SESSION"),
-        Some(term) => {
-            !["dumb", "linux"].contains(&term)
-                && !term.starts_with("screen")
-                && !term.starts_with("tmux")
-        }
+    let term = env("TERM").unwrap_or_default();
+    if ["dumb", "linux"].contains(&term.as_str()) {
+        return false;
+    }
+    if set("TMUX") {
+        return env("TERM_PROGRAM").as_deref() == Some("tmux")
+            && env("TERM_PROGRAM_VERSION").is_some_and(|version| at_least(&version, (3, 4)));
+    }
+    match term.as_str() {
+        "" => set("WT_SESSION"),
+        term => !term.starts_with("screen") && !term.starts_with("tmux"),
     }
 }
 

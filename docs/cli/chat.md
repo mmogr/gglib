@@ -292,13 +292,17 @@ save <id> [path]` writes one to a file, as stored.
 On a terminal that opens links, a marker is one: Cmd-click or Ctrl-click it
 to open the image. The link points at a copy of the image in gglib's data
 folder, readable only by you. A copy not shown for a week is removed the
-next time a chat starts in a terminal that gets links. There is no link over SSH, inside tmux or screen, or
-when the output is not a terminal; the marker is then plain text.
+next time a chat starts in a terminal that gets links. There is no link over SSH, inside screen or a tmux
+before 3.4, or when the output is not a terminal; the marker is then plain
+text. tmux 3.4 or later passes a link on only to a terminal it knows opens
+them, one it gives the `hyperlinks` feature (`terminal-features` in tmux's
+manual), and shows the marker alone in another.
 
-In iTerm2 (3.5 or later), kitty and Ghostty, an image a tool makes is also
-shown in the terminal, under the tool's line, up to 40 columns wide. kitty
-and Ghostty show PNGs only. Other terminals, and tmux or screen, show the
-marker alone.
+In iTerm2 (3.0 or later), WezTerm, kitty and Ghostty, an image a tool
+makes is also shown in the terminal, under the tool's line, up to 40
+columns wide, and so is one you attach (`--image`, `/image`), under the
+line that says what it costs. kitty and Ghostty show PNGs only. Other
+terminals, and tmux or screen, show the marker alone.
 
 ```bash
 gglib attachment save 3f9a2c1e
