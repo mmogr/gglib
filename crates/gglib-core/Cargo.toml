@@ -61,8 +61,10 @@ ts-bindings = ["dep:ts-rs"]
 # `resource_root()` answer before anything else (#955), and their refusal of
 # the user's own folder to a test that set none (#2088), and `link_folder`
 # and `unwritable_folder`, the folder link and the folder no file can be
-# made in, which a test makes the same way on every OS. Other crates enable
-# it from `[dev-dependencies]` only, so no ordinary build has any of them.
+# made in, which a test makes the same way on every OS, and
+# `utils::process::test_stop`, the orderly stop a test asks of a child on
+# every OS. Other crates enable it from `[dev-dependencies]` only, so no
+# ordinary build has any of them.
 test-utils = ["dep:tempfile"]
 
 # Run only with `test-utils`, which `cargo test` at the workspace root turns

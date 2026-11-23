@@ -34,6 +34,10 @@ The Windows-specific flag is applied here and nowhere else.
   junction or link in their place is refused.
 - [`stop`]: hearing that this process is asked to stop, and whether it has
   time for an orderly teardown or seconds before the OS ends it.
+- `test_stop`, in this crate's tests and with its `test-utils` feature:
+  asking a child for an orderly stop the way each OS's service manager or
+  terminal does, SIGTERM on macOS and Linux and Ctrl-Break on Windows, so
+  a test of how a program stops needs no gate.
 - [`tied`]: tying a child to this process, so it ends when this process
   ends, however it ends.
 - [`tree`]: starting a child as the root of a tree, so stopping it stops

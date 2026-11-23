@@ -5,6 +5,10 @@ pub mod detached;
 pub mod held;
 pub mod host;
 pub mod stop;
+// An orderly stop a test asks of a child, compiled in this crate's tests and
+// with the `test-utils` feature
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_stop;
 pub mod tied;
 pub mod tree;
 
