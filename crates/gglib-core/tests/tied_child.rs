@@ -12,7 +12,10 @@
 //! The service starts [`ENGINES`] stand-in engines that print [`READY`] and
 //! sleep, with the service's own output, a pipe the test reads. The pipe
 //! ends only when every process holding it has ended, so once the service is
-//! killed, the end of the output is the last engine ending.
+//! killed, the end of the output is the last engine ending. The test kills
+//! nothing until it has heard every stand-in's pid as well as its
+//! [`READY`]: a stand-in can say it is ready before the service says its pid
+//! (#2210), and one left running would hold the pipe open.
 //!
 //! The service also starts one more stand-in as a tree
 //! ([`tree::spawn`]), as an MCP server is started (#2012). The tree's own
@@ -84,14 +87,17 @@ fn test() {
     let mut tied = Vec::new();
     let mut ready = 0;
     let deadline = Instant::now() + START;
-    while tied.len() < ENGINES || ready < ENGINES + TREES {
+    while tied.len() < ENGINES || ready < ENGINES + TREES || engines.0.len() < ENGINES + TREES {
         let line = heard
             .recv_timeout(deadline.saturating_duration_since(Instant::now()))
             .unwrap_or_else(|_| {
                 panic!(
-                    "the service had not got {} engines running {}s after it started",
+                    "{}s after the service started, {} of {} stand-ins said they were ready \
+                     and it had said {} of their pids",
+                    START.as_secs(),
+                    ready,
                     ENGINES + TREES,
-                    START.as_secs()
+                    engines.0.len()
                 )
             })
             .expect("the service's output ended before its engines were running");
