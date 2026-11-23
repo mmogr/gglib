@@ -122,6 +122,10 @@ fn position_near(panel: &WebviewWindow, anchor: Rect) -> tauri::Result<()> {
 /// the icon when below would cross the monitor's bottom edge, as it would on a
 /// bottom-of-screen tray. Without one it is placed under the icon unclamped.
 ///
+/// The edges are the whole monitor's, as `Monitor::position` and
+/// `Monitor::size` report it, not its work area: nothing here knows where a
+/// menu bar, Dock or taskbar sits on it.
+///
 /// Pure. Compiled wherever `position_near`, its one caller, is, and on every
 /// system under test, so its tests run on all three.
 #[cfg(any(not(target_os = "linux"), test))]
