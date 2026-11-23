@@ -9,8 +9,8 @@
  * variant says so in one line.
  *
  * The summary comes with the pick that opened the repo (the navigation's
- * state) or is read by the address; the listing and the tool reading are
- * read here, each dropped if the repo changed meanwhile.
+ * state) or is read by the address; the listing and the pick are read here,
+ * each dropped if the repo changed meanwhile.
  *
  * @module inspector/hf/HfInspector
  */
@@ -26,7 +26,7 @@ import { queueDownload } from '../../services/downloadsEvents';
 import { useDownloads } from '../../services/downloadsRegistry';
 import { openUrl } from '../../services/platform';
 import { getTransport } from '../../services/transport';
-import type { HfImagePreview, HfModelSummary, HfPickResponse, HfQuantization, ToolSupportResponse } from '../../types';
+import type { HfImagePreview, HfModelSummary, HfPickResponse, HfQuantization } from '../../types';
 import { formatError } from '../../utils/errors';
 import { formatNumber, formatParamCount, getHuggingFaceModelUrl } from '../../utils/format';
 import { CompanionNote } from './CompanionNote';
@@ -88,8 +88,6 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
   // Asked beside the listing, which shows at once: the download's own pick,
   // which reads further than the listing's heads. A failure marks nothing.
   const pick = useRead<HfPickResponse | null>((signal) => getTransport().getHfPick(repo, signal), () => null);
-  // Optional: a failed reading says nothing about tools.
-  const tools = useRead<ToolSupportResponse>((signal) => getTransport().getHfToolSupport(repo, signal), () => null);
   const [picked, setPicked] = useState<string | null>(null);
 
   const listed = listing && 'quants' in listing ? listing.quants : [];
@@ -124,8 +122,8 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
         </div>
         <p className="m-0 text-xs text-text-secondary tabular-nums">
           {model?.parameters_b != null && formatParamCount(model.parameters_b)}
-          {model?.parameters_b != null && tools?.supports_tool_calls && ' · '}
-          {tools?.supports_tool_calls && <span>calls tools</span>}
+          {model?.parameters_b != null && model.supports_tool_calls && ' · '}
+          {model?.supports_tool_calls && <span>calls tools</span>}
         </p>
         {summary && 'error' in summary && <p className="m-0 text-xs text-text-secondary">{summary.error}</p>}
       </div>

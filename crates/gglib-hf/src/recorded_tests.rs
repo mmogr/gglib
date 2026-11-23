@@ -65,6 +65,14 @@ async fn a_search_page_gives_each_hit_the_fields_the_browser_showed() {
         .expect("a page");
 
     assert_eq!(found.next_cursor.as_deref(), Some("next"));
+    // Each hit's `gguf.chat_template`, which tool support is detected from
+    // without a model-info request per hit.
+    let templates: Vec<_> = found
+        .items
+        .iter()
+        .map(|item| item.chat_template.as_deref().map(str::len))
+        .collect();
+    assert_eq!(templates, [Some(423), Some(398), Some(423)]);
     for item in &found.items {
         assert_eq!(
             (item.architecture.as_deref(), item.context_length),

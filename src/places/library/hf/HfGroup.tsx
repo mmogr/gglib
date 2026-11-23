@@ -14,7 +14,7 @@
  *
  * Every figure is the daemon's: a repo's parameter count is the summary's
  * (#1740: the Hub's, which can be a draft's), whether it calls tools is the
- * daemon's reading of its chat template, the suggestion's budget is named
+ * summary's reading of its chat template, the suggestion's budget is named
  * in the words `gglib up` prints it in, and a refusal is said as it came.
  *
  * @module places/library/hf/HfGroup
@@ -28,7 +28,6 @@ import { IconButton } from '../../../components/ui/IconButton';
 import { Chip } from '../../../components/ui/Chip';
 import { Listbox, tabStop } from '../../../components/ui/Listbox';
 import { useToastContext } from '../../../contexts/ToastContext';
-import { useToolSupportCache } from '../../../hooks/useToolSupportCache';
 import { queueDownload } from '../../../services/downloadsEvents';
 import { useModelLibrary } from '../../../services/modelRegistry';
 import { useThisMachine } from '../../../services/hostRegistry';
@@ -175,22 +174,19 @@ const Suggestion: FC<{ answer: RecommendationDto | null; noneReason: string | nu
 };
 
 /** One repo: its id, then params, tool calling and downloads. */
-const HfRow: FC<{ model: HfModelSummary; picked: boolean; tabIndex: 0 | -1; onPick: () => void }> = ({ model, picked, tabIndex, onPick }) => {
-  const { supports } = useToolSupportCache(model.id);
-  return (
-    <ModelRow
-      name={model.id}
-      facts={[
-        model.parameters_b !== null && formatParamCount(model.parameters_b),
-        supports === true && 'calls tools',
-        `${formatNumber(model.downloads)} downloads`,
-      ]}
-      selected={picked}
-      tabIndex={tabIndex}
-      onSelect={onPick}
-    />
-  );
-};
+const HfRow: FC<{ model: HfModelSummary; picked: boolean; tabIndex: 0 | -1; onPick: () => void }> = ({ model, picked, tabIndex, onPick }) => (
+  <ModelRow
+    name={model.id}
+    facts={[
+      model.parameters_b !== null && formatParamCount(model.parameters_b),
+      model.supports_tool_calls && 'calls tools',
+      `${formatNumber(model.downloads)} downloads`,
+    ]}
+    selected={picked}
+    tabIndex={tabIndex}
+    onSelect={onPick}
+  />
+);
 
 /**
  * How long a pick made with the arrow keys waits before the address follows

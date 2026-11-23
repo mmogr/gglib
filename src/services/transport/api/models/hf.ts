@@ -12,7 +12,6 @@ import type {
   HfQuantizationsResponse,
   HfSearchRequest,
   HfSearchResponse,
-  ToolSupportResponse,
 } from '../../../../types';
 
 /**
@@ -60,14 +59,4 @@ export async function getHfQuantizations(modelId: HfModelId, signal?: AbortSigna
  */
 export async function getHfPick(modelId: HfModelId, signal?: AbortSignal): Promise<HfPickResponse> {
   return get<HfPickResponse>(`/api/models/hf/pick/${encodeURIComponent(modelId)}`, { timeoutMs: HUB_READ_LIMIT_MS, signal });
-}
-
-/**
- * Get tool support information for a HuggingFace model.
- */
-export async function getHfToolSupport(modelId: HfModelId, signal?: AbortSignal): Promise<ToolSupportResponse> {
-  return get<ToolSupportResponse>(
-    `/api/models/hf/tool-support/${encodeURIComponent(modelId)}`,
-    { timeoutMs: HUB_READ_LIMIT_MS, signal },
-  );
 }

@@ -3,7 +3,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use gglib_core::domain::{ModelCapabilities, infer_from_chat_template};
 use gglib_core::download::{DownloadId, QueueSnapshot};
 use gglib_core::paths::resolve_models_dir;
 use gglib_core::ports::huggingface::read_heads;
@@ -20,7 +19,7 @@ use crate::hf_image_preview::image_look;
 use crate::hf_quantizations::{beside_bytes, listed_pick, name_no_context, quantizations_response};
 use crate::types::{
     HfModelSummary, HfPickResponse, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
-    QueueDownloadResponse, ToolSupportResponse,
+    QueueDownloadResponse,
 };
 
 /// Dependencies for download and `HuggingFace` operations.
@@ -273,29 +272,6 @@ impl DownloadOps {
         Ok(HfPickResponse {
             model_id: model_id.to_owned(),
             label,
-        })
-    }
-
-    /// Whether a `HuggingFace` model calls tools: core's guess
-    /// ([`infer_from_chat_template`]) from the Hub's chat template and the
-    /// repo id. Import asks the same guess of the file's own template and
-    /// declared name, so the two can differ for a repo named unlike its model.
-    pub async fn get_hf_tool_support(
-        &self,
-        model_id: &str,
-    ) -> Result<ToolSupportResponse, GuiError> {
-        let model_info = self
-            .hf_client
-            .get_model_info(model_id)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to get model info: {e}")))?;
-
-        let guess = infer_from_chat_template(
-            model_info.chat_template.as_deref(),
-            Some(&model_info.model_id),
-        );
-        Ok(ToolSupportResponse {
-            supports_tool_calls: guess.contains(ModelCapabilities::SUPPORTS_TOOL_CALLS),
         })
     }
 
