@@ -4,6 +4,7 @@ mod extract;
 mod fetch;
 mod install;
 mod pin;
+mod place;
 mod record;
 mod release;
 
@@ -20,6 +21,7 @@ pub(crate) use install::install_prebuilt_from;
 pub(crate) use install::{PrebuiltTarget, completed, install_prebuilt, started};
 pub use pin::PinStanding;
 pub(crate) use pin::{Recorded, installed_release, standing};
+pub(crate) use place::place;
 pub use record::BuildRecord;
 pub(crate) use record::{
     InstallRecord, PrebuiltRecord, recorded_acceleration, recorded_install, recorded_release,
@@ -34,3 +36,7 @@ pub(crate) use release::{GITHUB_API, selector_from_override};
 #[cfg(test)]
 #[path = "install_tests.rs"]
 mod install_tests;
+
+#[cfg(test)]
+#[path = "place_tests.rs"]
+mod place_tests;

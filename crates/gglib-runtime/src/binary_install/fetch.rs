@@ -12,6 +12,7 @@ use tokio::sync::mpsc;
 
 use gglib_core::download::{ProgressThrottle, RateEstimator};
 
+use super::place::place;
 use super::release::{GITHUB_API, ReleaseSelector, ReleaseSpec};
 use crate::llama::LlamaProgressEvent;
 
@@ -273,8 +274,7 @@ pub(crate) async fn download_cuda_runtime(
         if is_dll {
             let file_name = entry_name.rsplit('/').next().unwrap_or(&entry_name);
             let dest_path = bin_dir.join(file_name);
-            let mut dest_file = File::create(&dest_path)?;
-            io::copy(&mut entry, &mut dest_file)?;
+            place(&dest_path, |file| io::copy(&mut entry, file).map(drop))?;
         }
     }
 

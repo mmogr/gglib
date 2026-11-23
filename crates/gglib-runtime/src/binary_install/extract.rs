@@ -5,6 +5,7 @@ use std::fs::{self, File};
 use std::io;
 use std::path::Path;
 
+use super::place::place;
 use super::release::{ArchiveLayout, ReleaseSpec};
 
 /// Extract `spec`'s wanted files from the archive (zip or tar.gz) into
@@ -170,10 +171,7 @@ fn extract_binaries_zip(
         }
 
         let dest_path = bin_dir.join(file_name);
-        let mut dest_file = File::create(&dest_path)
-            .with_context(|| format!("Failed to create file: {}", dest_path.display()))?;
-
-        io::copy(&mut entry, &mut dest_file)
+        place(&dest_path, |file| io::copy(&mut entry, file).map(drop))
             .with_context(|| format!("Failed to extract: {file_name}"))?;
 
         #[cfg(unix)]

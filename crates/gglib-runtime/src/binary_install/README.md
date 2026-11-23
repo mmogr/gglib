@@ -20,6 +20,10 @@ A product built from source starts from its checkout instead:
 reusing a checkout already at it and cloning any other beside the old one,
 which `Checkout::settle` replaces once the build is installed.
 
+No file an install puts down is written into the one that is there: `place`
+writes it beside the old one and renames it over. On macOS and Linux a
+server still running from the old file keeps it, and the new one starts.
+
 Whether an install has anything to do is `pin::standing`'s to say: the
 release installed against the one the pin (or its override) selects,
 compared by the build number both products put in their tags, and by name
@@ -32,6 +36,7 @@ alone for a target that has none.
 | `pin.rs`      | `PinStanding`, where an installed release stands against the pin          |
 | `fetch.rs`    | the release listing, the archive stream, the CUDA runtime package         |
 | `extract.rs`  | unpacking a zip or tar.gz into the bin directory                          |
+| `place.rs`    | `place`: a file goes in as a new file, renamed over the one there         |
 | `record.rs`   | `InstallRecord`: a source build's five keys or a download's four          |
 | `install.rs`  | `install_prebuilt`, the pipeline and its phase events                     |
 

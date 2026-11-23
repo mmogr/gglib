@@ -72,7 +72,7 @@ fn zip_of(names: &[&str]) -> Vec<u8> {
 }
 
 /// A zip holding each member with its bytes.
-fn zip_with(members: &[(&str, Vec<u8>)]) -> Vec<u8> {
+pub(super) fn zip_with(members: &[(&str, Vec<u8>)]) -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let options =
         zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
