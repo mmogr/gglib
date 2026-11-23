@@ -403,6 +403,12 @@ async fn a_network_that_never_comes_back_ends_in_the_stall_sentence() {
 
 /// The connection breaks mid-body (an error, not silence): the download
 /// reconnects at once, from what arrived, and says so while it does.
+///
+/// A broken connection that brought nothing is reconnected only once a
+/// quiet time has passed; this one brought bytes, so it is not waited for.
+/// The quiet time here is four times [`HUNG`], so a download that waited
+/// could not end inside it: ending at all is the proof, however busy the
+/// machine is.
 #[tokio::test]
 async fn a_connection_that_breaks_mid_body_is_reconnected_at_once() {
     let body = body_of(8192);
@@ -420,13 +426,16 @@ async fn a_connection_that_breaks_mid_body_is_reconnected_at_once() {
     let fx = Fixture::new();
     let seen = Arc::new(Seen::default());
     let url = server.url();
+    let request = NativeDownload {
+        stall_after: HUNG * 4,
+        ..quiet_request(&url, &fx, body.len(), &seen)
+    };
 
-    let started = Instant::now();
-    run(&quiet_request(&url, &fx, body.len(), &seen))
+    tokio::time::timeout(HUNG, download_file(&build_client(), &request))
         .await
+        .expect("no wait: it brought bytes")
         .expect("the download carries on over a new connection");
 
-    assert!(started.elapsed() < QUIET, "no wait: it brought bytes");
     assert_eq!(std::fs::read(&fx.dest).unwrap(), body);
     assert_eq!(server.ranges()[1], Some("bytes=3000-".to_string()));
     assert_eq!(
