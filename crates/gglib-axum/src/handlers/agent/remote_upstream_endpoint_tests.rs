@@ -1,7 +1,7 @@
 //! A turn on one of this machine's models goes through this machine's
 //! endpoint: to the door's root, with its key, naming the model by its
-//! catalogue id. Its turns say the context its model was launched with. The endpoint is turned on when it is off; one whose
-//! port another process holds refuses the turn in its own words.
+//! catalogue id. Its turns say the context its model was launched with. The endpoint is turned on when it is off; one that
+//! cannot bind its address refuses the turn with its status's own sentence.
 
 use std::sync::Arc;
 
@@ -294,7 +294,8 @@ async fn an_endpoint_that_is_off_is_turned_on_and_dialled() {
 }
 
 /// An endpoint whose port another process holds cannot be turned on: the
-/// turn is refused with the endpoint's own reason, coded `conflict`.
+/// turn is refused, coded `conflict`, in the sentence the endpoint's status
+/// says, word for word.
 #[tokio::test]
 async fn an_endpoint_whose_port_another_process_holds_refuses_the_turn() {
     let (_dir, state) = state().await;
@@ -303,17 +304,57 @@ async fn an_endpoint_whose_port_another_process_holds_refuses_the_turn() {
     store_port(&state, port).await;
 
     let refused = this_machines_door(&state).await.map_err(with_code);
+    let status = state.proxy.refused();
+    drop(held);
+
+    let Err(HttpError::Coded { code, message, .. }) = refused else {
+        panic!("refused, coded");
+    };
+    assert_eq!(code, "conflict");
+    assert_eq!(
+        message,
+        format!(
+            "The endpoint is off: port {port} is in use by another program. Stop it, or choose \
+             another port (Settings \u{203a} Endpoint, or `gglib config set proxy-port`), then \
+             turn the endpoint on."
+        )
+    );
+    assert_eq!(status.as_deref(), Some(message.as_str()));
+    assert!(matches!(state.proxy.status().await, ProxyStatus::Stopped));
+}
+
+/// An endpoint whose address this machine does not have (TEST-NET-1)
+/// cannot be turned on either: the turn is refused, coded `conflict`, with
+/// the system's reason as the status says it, and no other program blamed.
+#[tokio::test]
+async fn an_endpoint_whose_address_this_machine_cannot_open_refuses_the_turn() {
+    let (_dir, state) = state().await;
+    let held = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = held.local_addr().unwrap().port();
+    store_port(&state, port).await;
+    let update = gglib_core::SettingsUpdate {
+        proxy_host: Some(Some("192.0.2.1".to_owned())),
+        ..gglib_core::SettingsUpdate::default()
+    };
+    state.core.settings().update(update).await.unwrap();
+
+    let refused = this_machines_door(&state).await.map_err(with_code);
+    let status = state.proxy.refused();
+    drop(held);
 
     let Err(HttpError::Coded { code, message, .. }) = refused else {
         panic!("refused, coded");
     };
     assert_eq!(code, "conflict");
     assert!(
-        message.contains(&format!("{port} is already in use")),
+        message.starts_with(&format!(
+            "The endpoint is off: 192.0.2.1:{port} cannot be opened ("
+        )),
         "{message}"
     );
+    assert!(!message.contains("another program"), "{message}");
+    assert_eq!(status.as_deref(), Some(message.as_str()));
     assert!(matches!(state.proxy.status().await, ProxyStatus::Stopped));
-    drop(held);
 }
 
 /// Store `port` as the endpoint's.

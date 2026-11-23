@@ -79,8 +79,9 @@ pub(super) fn stop_service(app: &AppHandle, snap: &DaemonSnapshot) -> bool {
 /// The tray has no toast host and, with close-to-tray on, often no window
 /// either — so without this a failed menu item is an `error!` in a log nobody
 /// is reading and a menu that appears to do nothing at all. The daemon's own
-/// messages are worth showing verbatim: "Port 8080 is already in use … Stop
-/// it, or change the proxy port in Settings" is the whole answer.
+/// messages are worth showing verbatim: "The endpoint is off: port 8080 is
+/// in use by another program. Stop it, or choose another port …" is the
+/// whole answer.
 ///
 /// Spawns rather than blocking, so it is safe to call from the setup hook —
 /// which runs before the event loop is pumping and would otherwise deadlock on

@@ -83,7 +83,7 @@ pub(crate) struct ProxyStatusDto {
     #[serde(default)]
     pub pinned_model_id: Option<i64>,
     /// Why the endpoint is off, in the daemon's words, while a start could
-    /// not bind its port.
+    /// not bind it.
     #[serde(default)]
     pub refused: Option<String>,
     /// What a start did; only a start's answer says it.

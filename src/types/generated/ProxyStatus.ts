@@ -44,7 +44,8 @@ pinned_to: string | null,
 pinned_model_id: number | null, 
 /**
  * Why the endpoint is off, while it is off because a start could not
- * bind its port: the port, and what holds it when that can be told.
+ * bind it: a port that is taken, and what holds it when that can be
+ * told, or the system's reason its address could not be opened.
  */
 refused?: string, 
 /**

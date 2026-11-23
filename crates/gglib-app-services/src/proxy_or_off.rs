@@ -15,14 +15,15 @@ use crate::error::GuiError;
 pub(crate) enum Endpoint {
     /// On, at this address.
     On(SocketAddr),
-    /// Off, because another program holds its port: the status's own
-    /// sentence for it ([`ProxyOps::refused`]).
+    /// Off, because its address could not be bound (its port taken, or an
+    /// address this machine cannot open): the status's own sentence for it
+    /// ([`ProxyOps::refused`]).
     Off(String),
 }
 
 impl ProxyOps {
-    /// [`Self::ensure_running`], but a port another program holds is an
-    /// answer, not a failure: [`Endpoint::Off`] with the sentence the status
+    /// [`Self::ensure_running`], but a refused bind is an answer, not a
+    /// failure: [`Endpoint::Off`] with the sentence the status
     /// carries, read under the same lock the start took, so a start racing
     /// in after it cannot have cleared it.
     ///
@@ -36,8 +37,8 @@ impl ProxyOps {
             Err(e @ SupervisorError::BindFailed { .. }) => self
                 .refused()
                 .map(Endpoint::Off)
-                .ok_or_else(|| Self::map_start_error(e)),
-            Err(e) => Err(Self::map_start_error(e)),
+                .ok_or_else(|| self.start_error(e)),
+            Err(e) => Err(self.start_error(e)),
         }
     }
 }
