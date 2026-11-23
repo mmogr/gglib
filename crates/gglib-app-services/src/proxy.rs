@@ -374,7 +374,9 @@ impl ProxyOps {
             SupervisorError::AlreadyRunning(addr) => {
                 GuiError::Conflict(format!("Proxy already running at {addr}"))
             }
-            SupervisorError::BindFailed { address, reason } => GuiError::Conflict(format!(
+            SupervisorError::BindFailed {
+                address, reason, ..
+            } => GuiError::Conflict(format!(
                 "Port {address} is already in use ({reason}) — likely another `gglib serve` \
                  or `gglib proxy` process. Stop it, or change the proxy port in Settings."
             )),
@@ -493,9 +495,9 @@ impl ProxyOps {
             SupervisorError::AlreadyRunning(addr) => {
                 GuiError::Internal(format!("Proxy unexpectedly running at {addr}"))
             }
-            SupervisorError::BindFailed { address, reason } => {
-                GuiError::Internal(format!("Unexpected bind error at {address}: {reason}"))
-            }
+            SupervisorError::BindFailed {
+                address, reason, ..
+            } => GuiError::Internal(format!("Unexpected bind error at {address}: {reason}")),
             SupervisorError::Internal(msg) => GuiError::Internal(msg),
         })
     }
