@@ -214,6 +214,11 @@ async fn stalls_that_each_bring_bytes_do_not_use_up_the_reconnects() {
 
 /// A cancel while the connection is quiet ends the transfer at once, with
 /// what arrived in the part.
+///
+/// The quiet time is the one a real download runs with, and "at once" is
+/// held as within half of it: a cancel that waited the quiet time out
+/// would end fifteen seconds past that bound, further than a busy machine
+/// delays anything.
 #[tokio::test]
 async fn a_cancel_on_a_quiet_connection_ends_the_transfer_at_once() {
     let body = body_of(8192);
@@ -260,7 +265,7 @@ async fn a_cancel_on_a_quiet_connection_ends_the_transfer_at_once() {
         "got {result:?}"
     );
     assert!(
-        cancelled_at.elapsed() < Duration::from_secs(2),
+        cancelled_at.elapsed() < STALL_AFTER / 2,
         "the cancel is answered at once, took {:?}",
         cancelled_at.elapsed()
     );
