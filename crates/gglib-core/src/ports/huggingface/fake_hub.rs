@@ -40,6 +40,9 @@ pub struct FakeHub {
     pub heads_asked: Mutex<Vec<(String, String, u64)>>,
     /// Files looked up by repository and path.
     pub files_at: Vec<(String, HfFileInfo)>,
+    /// Every head read is refused for the Hub's rate limit, its file
+    /// allowance spent for two minutes.
+    pub heads_limited: bool,
 }
 
 /// The head [`FakeHub`] gives a projector, which [`RoleParser`] reads as
@@ -135,11 +138,18 @@ impl HfClientPort for FakeHub {
         unimplemented!("a listing is all this hub answers")
     }
     /// The head held for `path`, cut at `max_bytes`; a projector's, when
-    /// none is held for it, is [`PROJECTOR_HEAD`].
+    /// none is held for it, is [`PROJECTOR_HEAD`]. With
+    /// [`Self::heads_limited`] every read is refused for the rate limit.
     async fn read_head(&self, model_id: &str, path: &str, max_bytes: u64) -> HfPortResult<Vec<u8>> {
         let mut asked = self.heads_asked.lock().unwrap();
         asked.push((model_id.to_owned(), path.to_owned(), max_bytes));
         drop(asked);
+        if self.heads_limited {
+            return Err(HfPortError::RateLimited {
+                bucket: crate::hub_limit::HubBucket::Resolvers,
+                resets_in: std::time::Duration::from_mins(2),
+            });
+        }
         let stored = self.heads.iter().find(|(held, _)| held == path);
         let head: &[u8] = match stored {
             Some((_, head)) => head,

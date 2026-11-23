@@ -4,10 +4,14 @@
 //! error types like `std::io::Error`. For I/O errors, we capture the kind
 //! and message as strings.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::format::{format_duration, format_size};
+use crate::hub_limit::{HubBucket, clock};
+use crate::ports::huggingface::HfPortError;
 
 /// What a download that gave up on a quiet connection says: what happened,
 /// and that trying again carries on from the part already there.
@@ -102,6 +106,17 @@ pub enum DownloadError {
         quiet_secs: u32,
     },
 
+    /// Hugging Face's rate limit refused a request the download needed, or
+    /// would have: the allowance it counts against was spent.
+    #[error("Hugging Face's rate limit lifts in {}", clock(*resets_in))]
+    HubLimited {
+        /// The allowance that is spent, as the Hub names it
+        /// ([`HubBucket::name`]).
+        bucket: String,
+        /// The time until it opens again.
+        resets_in: Duration,
+    },
+
     /// Integrity check failed (checksum mismatch).
     #[error("Integrity check failed: expected {expected}, got {actual}")]
     IntegrityFailed {
@@ -192,6 +207,29 @@ impl DownloadError {
         }
     }
 
+    /// A Hub error met on the way to a download: a rate limit is
+    /// [`Self::HubLimited`], and any other is what `otherwise` makes of it.
+    pub fn from_hub(error: HfPortError, otherwise: impl FnOnce(HfPortError) -> Self) -> Self {
+        match error {
+            HfPortError::RateLimited { bucket, resets_in } => Self::HubLimited {
+                bucket: bucket.name().to_owned(),
+                resets_in,
+            },
+            other => otherwise(other),
+        }
+    }
+
+    /// The allowance a [`Self::HubLimited`] names and the time until it
+    /// opens; `None` for any other error, and for an allowance gglib does
+    /// not know.
+    #[must_use]
+    pub fn hub_limit(&self) -> Option<(HubBucket, Duration)> {
+        match self {
+            Self::HubLimited { bucket, resets_in } => Some((HubBucket::named(bucket)?, *resets_in)),
+            _ => None,
+        }
+    }
+
     /// Create a generic error.
     pub fn other(message: impl Into<String>) -> Self {
         Self::Other {
@@ -231,7 +269,7 @@ impl DownloadError {
                 format!("Download '{id}' is not in the queue.")
             }
             Self::Cancelled => "Download was cancelled.".to_string(),
-            Self::Interrupted { .. } => self.to_string(),
+            Self::Interrupted { .. } | Self::HubLimited { .. } => self.to_string(),
             Self::IntegrityFailed { .. } => {
                 "File integrity check failed. The download may be corrupted.".to_string()
             }
@@ -274,6 +312,37 @@ mod tests {
             DownloadError::interrupted(0, 120).to_string(),
             "no data arrived for 2m 00s, so the download stopped before any of the file arrived"
         );
+    }
+
+    /// A rate limit met on the way to a download keeps its allowance and
+    /// reset, and says when it lifts; any other Hub error is the caller's.
+    #[test]
+    fn a_hub_rate_limit_is_its_own_error() {
+        let limited = DownloadError::from_hub(
+            HfPortError::RateLimited {
+                bucket: HubBucket::Api,
+                resets_in: Duration::from_millis(133_200),
+            },
+            |_| unreachable!("a rate limit is not the caller's"),
+        );
+        assert_eq!(
+            limited.hub_limit(),
+            Some((HubBucket::Api, Duration::from_millis(133_200)))
+        );
+        assert_eq!(
+            limited.to_string(),
+            "Hugging Face's rate limit lifts in 2:14"
+        );
+        assert_eq!(limited.user_message(), limited.to_string());
+
+        let other = DownloadError::from_hub(
+            HfPortError::Network {
+                message: "down".to_owned(),
+            },
+            |e| DownloadError::resolution_failed(format!("Failed to list variants: {e}")),
+        );
+        assert!(matches!(other, DownloadError::ResolutionFailed { .. }));
+        assert_eq!(other.hub_limit(), None);
     }
 
     #[test]

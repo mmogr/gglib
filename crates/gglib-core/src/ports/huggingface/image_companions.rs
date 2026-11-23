@@ -33,14 +33,14 @@ pub struct Companion {
 ///
 /// # Errors
 ///
-/// What [`companions_of`] answers.
+/// What [`image_family_of`] and [`companions_of`] answer.
 pub async fn image_companions(
     client: &dyn HfClientPort,
     parser: &dyn GgufParserPort,
     model_id: &str,
     first_weights: &HfFileInfo,
 ) -> HfPortResult<Option<(ImageFamily, Vec<Companion>)>> {
-    let Some(family) = image_family_of(client, parser, model_id, first_weights).await else {
+    let Some(family) = image_family_of(client, parser, model_id, first_weights).await? else {
         return Ok(None);
     };
     let companions = companions_of(client, family).await?;
@@ -54,17 +54,23 @@ pub async fn image_companions(
 /// model's metadata runs past the head, and a head that cannot be read at
 /// all is logged: either is `None`, so a download of anything that is not an
 /// image model goes on as it always has.
+///
+/// # Errors
+///
+/// [`HfPortError::RateLimited`], when the Hub's rate limit refused the read:
+/// an image model's download would otherwise go on without its companions.
 pub async fn image_family_of(
     client: &dyn HfClientPort,
     parser: &dyn GgufParserPort,
     model_id: &str,
     first_weights: &HfFileInfo,
-) -> Option<ImageFamily> {
+) -> HfPortResult<Option<ImageFamily>> {
     let head = match client
         .read_head(model_id, &first_weights.path, SNIFF_HEAD_BYTES)
         .await
     {
         Ok(head) => head,
+        Err(limited @ HfPortError::RateLimited { .. }) => return Err(limited),
         Err(unread) => {
             tracing::warn!(
                 model_id,
@@ -72,13 +78,13 @@ pub async fn image_family_of(
                 error = %unread,
                 "the weights' head could not be read; downloading them as a chat model's"
             );
-            return None;
+            return Ok(None);
         }
     };
-    parser
+    Ok(parser
         .tensor_table_of_head(&head)
         .ok()
-        .and_then(|table| ImageFamily::sniff(&table))
+        .and_then(|table| ImageFamily::sniff(&table)))
 }
 
 /// The companions `family`'s recipe draws with, each looked up on the Hub

@@ -94,6 +94,19 @@ fn a_downloads_http_status_says_which_case_it_is() {
     );
 }
 
+/// A rate limit met while a download was resolved is the app's rate limit.
+#[test]
+fn a_download_refused_for_the_hubs_rate_limit_is_rate_limited() {
+    let limited = DownloadError::from_hub(
+        HfPortError::RateLimited {
+            bucket: HubBucket::Api,
+            resets_in: Duration::from_secs(10),
+        },
+        |_| unreachable!("a rate limit"),
+    );
+    assert_eq!(GglibError::from(limited), GglibError::RateLimited);
+}
+
 #[test]
 fn a_download_with_nothing_to_fetch_is_not_found() {
     assert_eq!(

@@ -13,14 +13,19 @@
 //! `general.file_type` last, past a tokenizer of ten megabytes or more. A
 //! download reads through a [`CachedHub`](crate::cached_hub::CachedHub), so
 //! each step goes on from where the last ended.
+//!
+//! A read the Hub's rate limit refused reads as nothing to the pick, as any
+//! other failed read does, and the reader keeps the first such limit
+//! ([`HubReader::limited`]), so the caller does not take a pick made
+//! without it.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use gglib_core::domain::ImageFamily;
-use gglib_core::download::{HeadFacts, VariantReader};
-use gglib_core::ports::huggingface::{HfClientPort, HfQuantInfo, SNIFF_HEAD_BYTES};
+use gglib_core::download::{DownloadError, HeadFacts, VariantReader};
+use gglib_core::ports::huggingface::{HfClientPort, HfPortError, HfQuantInfo, SNIFF_HEAD_BYTES};
 use gglib_core::ports::{GgufMetadata, GgufParserPort, HeadMetadata};
 
 /// How much of a variant's first file its head is: 64 KiB.
@@ -33,11 +38,16 @@ pub(crate) const HEADER_READS: [u64; 4] = [1 << 20, 8 << 20, 32 << 20, 128 << 20
 /// Where the pick's reader for a repository's variants comes from.
 pub(crate) trait VariantSource: Send + Sync {
     /// A reader over `variants` of `repo_id`, by their index.
-    fn reader<'a>(
-        &'a self,
-        repo_id: &'a str,
-        variants: &[HfQuantInfo],
-    ) -> Box<dyn VariantReader + 'a>;
+    fn reader<'a>(&'a self, repo_id: &'a str, variants: &[HfQuantInfo]) -> Box<dyn HubReader + 'a>;
+}
+
+/// A pick's reader that says, once the pick is made, whether a read it
+/// asked for met the Hub's rate limit.
+pub(crate) trait HubReader: VariantReader {
+    /// The first rate limit a read met, as
+    /// [`DownloadError::HubLimited`], when one did: what was read then falls
+    /// short of what the variants are.
+    fn limited(&self) -> Option<DownloadError>;
 }
 
 /// The Hub, read with a client and a parser.
@@ -47,11 +57,7 @@ pub(crate) struct HubSource {
 }
 
 impl VariantSource for HubSource {
-    fn reader<'a>(
-        &'a self,
-        repo_id: &'a str,
-        variants: &[HfQuantInfo],
-    ) -> Box<dyn VariantReader + 'a> {
+    fn reader<'a>(&'a self, repo_id: &'a str, variants: &[HfQuantInfo]) -> Box<dyn HubReader + 'a> {
         let first_files = variants
             .iter()
             .map(|variant| variant.file_paths.first().cloned().unwrap_or_default())
@@ -74,6 +80,8 @@ pub(crate) struct HubVariants<'a> {
     first_files: Vec<String>,
     /// Each head read so far, kept so a second ask reads nothing.
     heads: Mutex<HashMap<usize, Option<HeadFacts>>>,
+    /// The first rate limit a read met.
+    limited: Mutex<Option<DownloadError>>,
 }
 
 impl<'a> HubVariants<'a> {
@@ -91,19 +99,33 @@ impl<'a> HubVariants<'a> {
             repo,
             first_files,
             heads: Mutex::new(HashMap::new()),
+            limited: Mutex::new(None),
+        }
+    }
+
+    /// The first `max_bytes` of `path`, or `None` when they cannot be read.
+    /// A rate limit that refused the read is kept.
+    async fn read(&self, path: &str, max_bytes: u64) -> Option<Vec<u8>> {
+        match self.client.read_head(self.repo, path, max_bytes).await {
+            Ok(bytes) => Some(bytes),
+            Err(unread) => {
+                tracing::debug!(repo = self.repo, path, error = %unread, "a variant's file could not be read");
+                if matches!(unread, HfPortError::RateLimited { .. })
+                    && let Ok(mut limited) = self.limited.lock()
+                {
+                    limited.get_or_insert_with(|| {
+                        DownloadError::from_hub(unread, |e| DownloadError::other(e.to_string()))
+                    });
+                }
+                None
+            }
         }
     }
 
     /// The first `max_bytes` of `path`, parsed as a head; `None` when they
     /// cannot be read or are not a GGUF header.
     async fn parsed(&self, path: &str, max_bytes: u64) -> Option<(Vec<u8>, HeadMetadata)> {
-        let bytes = match self.client.read_head(self.repo, path, max_bytes).await {
-            Ok(bytes) => bytes,
-            Err(unread) => {
-                tracing::debug!(repo = self.repo, path, error = %unread, "a variant's file could not be read");
-                return None;
-            }
-        };
+        let bytes = self.read(path, max_bytes).await?;
         let file_name = path.rsplit('/').next().unwrap_or(path);
         let head = self.parser.parse_head(&bytes, file_name).ok()?;
         Some((bytes, head))
@@ -126,10 +148,15 @@ impl<'a> HubVariants<'a> {
             // The whole file was read: there is no more of the table.
             return false;
         }
-        self.client
-            .read_head(self.repo, path, SNIFF_HEAD_BYTES)
+        self.read(path, SNIFF_HEAD_BYTES)
             .await
-            .is_ok_and(|longer| sniff(&longer).unwrap_or(false))
+            .is_some_and(|longer| sniff(&longer).unwrap_or(false))
+    }
+}
+
+impl HubReader for HubVariants<'_> {
+    fn limited(&self) -> Option<DownloadError> {
+        self.limited.lock().ok()?.clone()
     }
 }
 

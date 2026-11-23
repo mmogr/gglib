@@ -10,7 +10,7 @@ use gglib_core::ports::{
 };
 
 use super::QuantizationSelector;
-use crate::variant_reader::VariantSource;
+use crate::variant_reader::{HubReader, VariantSource};
 
 const GB: u64 = 1_000_000_000;
 
@@ -51,12 +51,17 @@ impl QuantizationResolver for Repo {
             .collect())
     }
 
-    async fn role_of(&self, _repo_id: &str, variant: &HfQuantInfo) -> GgufFileRole {
-        self.0
+    async fn role_of(
+        &self,
+        _repo_id: &str,
+        variant: &HfQuantInfo,
+    ) -> Result<GgufFileRole, DownloadError> {
+        Ok(self
+            .0
             .iter()
             .find(|(label, ..)| *label == variant.label)
             .map(|(_, _, role, _)| *role)
-            .unwrap_or_default()
+            .unwrap_or_default())
     }
 }
 
@@ -67,8 +72,15 @@ impl VariantSource for Repo {
         &'a self,
         _repo_id: &'a str,
         _variants: &[HfQuantInfo],
-    ) -> Box<dyn VariantReader + 'a> {
+    ) -> Box<dyn HubReader + 'a> {
         Box::new(self.clone())
+    }
+}
+
+/// Nothing it holds is read from the Hub.
+impl HubReader for Repo {
+    fn limited(&self) -> Option<DownloadError> {
+        None
     }
 }
 

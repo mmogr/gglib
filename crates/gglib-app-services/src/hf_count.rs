@@ -3,7 +3,7 @@
 
 use gglib_core::download::GgufFileRole;
 use gglib_core::ports::huggingface::{
-    largest_weights, plausible_total, sized_parameters_b, variant_head,
+    HfPortResult, largest_weights, plausible_total, sized_parameters_b, variant_head,
 };
 use gglib_core::ports::{GgufParserPort, HfClientPort, HfQuantInfo};
 
@@ -17,25 +17,32 @@ use gglib_core::ports::{GgufParserPort, HfClientPort, HfQuantInfo};
 /// downloaded model's header is read, on the same terms; one ranged read,
 /// made only then. `None` when nothing tells, and the Hub's when there are
 /// no weights to judge by.
+///
+/// # Errors
+///
+/// A rate limit that refused the head read ([`variant_head`]).
 pub(crate) async fn checked_parameters(
     client: &dyn HfClientPort,
     parser: &dyn GgufParserPort,
     model_id: &str,
     hub_parameters_b: Option<f64>,
     variants: &[HfQuantInfo],
-) -> Option<f64> {
+) -> HfPortResult<Option<f64>> {
     let Some(weights) = largest_weights(variants) else {
-        return hub_parameters_b;
+        return Ok(hub_parameters_b);
     };
     if let Some(count) = sized_parameters_b(hub_parameters_b, variants) {
-        return Some(count);
+        return Ok(Some(count));
     }
-    let head = variant_head(client, parser, model_id, weights).await?;
-    head.role
+    let Some(head) = variant_head(client, parser, model_id, weights).await? else {
+        return Ok(None);
+    };
+    Ok(head
+        .role
         .is_none_or(GgufFileRole::is_weights)
         .then_some(head.metadata.param_count_b)
         .flatten()
-        .filter(|count| plausible_total(*count, weights.total_size))
+        .filter(|count| plausible_total(*count, weights.total_size)))
 }
 
 #[cfg(test)]

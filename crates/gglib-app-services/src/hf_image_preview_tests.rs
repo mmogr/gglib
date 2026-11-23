@@ -239,7 +239,9 @@ async fn a_chat_head_and_an_unlisted_companion_answer_no_preview() {
 
     let mut unlisted = hub("flux1-schnell-q8_0.gguf");
     unlisted.files_at.pop();
-    let look = image_look(&unlisted, &HeadParser, REPO, &[quant("q8_0", 1)], None).await;
+    let look = image_look(&unlisted, &HeadParser, REPO, &[quant("q8_0", 1)], None)
+        .await
+        .expect("no read is rate limited");
     assert!(look.preview.is_none());
     assert_eq!(
         look.family,
@@ -251,6 +253,27 @@ async fn a_chat_head_and_an_unlisted_companion_answer_no_preview() {
             .await
             .is_none(),
         "a repository with no quantization has no head to read"
+    );
+}
+
+/// A head or a companion the Hub's rate limit refused is the limit, not a
+/// chat model's head or a preview left out: the listing is not to show an
+/// image model as a chat model.
+#[tokio::test]
+async fn a_rate_limited_read_is_a_rate_limit_and_not_no_preview() {
+    let limited = FakeHub {
+        heads_limited: true,
+        ..hub("flux1-schnell-q8_0.gguf")
+    };
+
+    let look = image_look(&limited, &HeadParser, REPO, &[quant("q8_0", 1)], None).await;
+
+    assert!(
+        matches!(
+            look,
+            Err(gglib_core::ports::HfPortError::RateLimited { .. })
+        ),
+        "got the look of a repository read without its head"
     );
 }
 

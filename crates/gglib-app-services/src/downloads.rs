@@ -216,7 +216,8 @@ impl DownloadOps {
             model_id,
             quants,
         )
-        .await;
+        .await
+        .map_err(failed)?;
         let infos: Vec<gglib_core::ports::HfQuantInfo> =
             quants.iter().map(|(q, _)| q.clone()).collect();
 
@@ -231,7 +232,8 @@ impl DownloadOps {
             &infos,
             models_dir.as_deref(),
         )
-        .await;
+        .await
+        .map_err(failed)?;
         // The budget the picker chooses a variant by, so the Fit column and
         // the download it leads to agree.
         let budget_bytes = download_budget().await;
@@ -312,7 +314,8 @@ impl DownloadOps {
             info.parameters_b,
             &quants,
         )
-        .await;
+        .await
+        .map_err(|e| GuiError::Internal(format!("Failed to check quantizations: {e}")))?;
         Ok(HfModelSummary {
             parameters_b,
             ..info.into()

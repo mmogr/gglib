@@ -103,7 +103,8 @@ impl From<DownloadError> for GglibError {
             DownloadError::Network {
                 status_code: Some(429),
                 ..
-            } => Self::RateLimited,
+            }
+            | DownloadError::HubLimited { .. } => Self::RateLimited,
             DownloadError::Network { message, .. }
             | DownloadError::ResolutionFailed { message } => Self::Network {
                 message: message.clone(),

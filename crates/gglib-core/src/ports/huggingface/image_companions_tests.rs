@@ -375,6 +375,33 @@ async fn a_head_that_cannot_be_read_is_no_image_model() {
     assert!(found.is_none());
 }
 
+/// A head the Hub's rate limit refused is passed up, not read as a chat
+/// model's: an image model would download without its companions.
+#[tokio::test]
+async fn a_rate_limited_head_is_a_rate_limit_and_not_a_chat_model() {
+    let hub = FakeHub {
+        heads_limited: true,
+        ..hub(
+            FLUX_WEIGHTS,
+            FLUX_WEIGHTS.as_bytes(),
+            listed(ImageFamily::Flux1),
+        )
+    };
+
+    let refused = image_companions(
+        &hub,
+        &HeadParser,
+        FLUX_REPO,
+        &hub_file(FLUX_WEIGHTS, 1, "w"),
+    )
+    .await;
+
+    assert!(
+        matches!(refused, Err(HfPortError::RateLimited { .. })),
+        "got {refused:?}"
+    );
+}
+
 /// A component's file not on the Hub fails the lookup, and the error names
 /// the repository and the path it was looked for at.
 #[tokio::test]
