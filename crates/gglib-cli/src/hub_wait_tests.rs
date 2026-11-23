@@ -52,6 +52,8 @@ fn a_command_that_answers_requests_or_asks_no_hub_surfaces() {
         &["gglib", "mcp", "list"],
         &["gglib", "model", "list"],
         &["gglib", "model", "verify", "1"],
+        &["gglib", "q", "hello"],
+        &["gglib", "draw", "a cat"],
     ] {
         assert!(!waits_on_the_hub(&command(argv)), "{argv:?}");
         assert!(
