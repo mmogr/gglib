@@ -5,6 +5,12 @@
 // engine is the desktop app's webview on Windows, undefined in WebKit, and
 // jsdom has none (tests/ts/browser/PickASize.test.tsx).
 //
+// Layout is an engine's answer too: whether a menu's rows overlap is read
+// from the boxes it lays out (tests/ts/browser/MenuLayout.test.tsx). The
+// Tailwind plugin is here for that: a test that imports the app's stylesheet
+// gets the classes the app does, and without the plugin they would style
+// nothing and every box would be the engine's default.
+//
 // A config of its own rather than a project in vite.config.ts, so a bare
 // `vitest run` stays the jsdom suite and needs no browser installed.
 //
@@ -13,6 +19,7 @@
 // in .github/workflows/browser-edge.yml.
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { playwright } from '@vitest/browser-playwright';
 
 const instances =
@@ -21,7 +28,7 @@ const instances =
     : [{ browser: 'chromium' as const }, { browser: 'webkit' as const }];
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   test: {
     include: ['tests/ts/browser/**/*.test.{ts,tsx}'],
     browser: {
