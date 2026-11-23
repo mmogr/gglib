@@ -24,7 +24,6 @@ const transport = vi.hoisted(() => ({
   listPairedModels: vi.fn(async () => null),
   browseHfModels: vi.fn(async (_r: HfSearchRequest): Promise<HfSearchResponse> => ({ models: [], next_cursor: null, total_count: null })),
   getHfModelSummary: vi.fn(async (_id: string): Promise<HfModelSummary> => hfRepo('owner/x')),
-  getHfToolSupport: vi.fn(async (_id: string) => ({ supports_tool_calls: false })),
   getHfQuantizations: vi.fn(async () => new Promise(() => {})),
   getHfPick: vi.fn(async () => new Promise(() => {})),
   queueDownload: vi.fn(async (_p: { modelId: string; quantization?: string }) => ({ id: 'q-1' })),
@@ -70,7 +69,7 @@ import { renderApp } from './harness';
 import { guiModel } from '../fixtures/model';
 
 function hfRepo(id: string, extra: Partial<HfModelSummary> = {}): HfModelSummary {
-  return { id, name: id.split('/')[1], author: id.split('/')[0], downloads: 0, likes: 0, last_modified: null, parameters_b: null, description: null, tags: [], ...extra };
+  return { id, name: id.split('/')[1], author: id.split('/')[0], downloads: 0, likes: 0, last_modified: null, parameters_b: null, description: null, tags: [], supports_tool_calls: false, ...extra };
 }
 
 /** A page of `ids`, with `next` as the cursor after it. */
@@ -124,8 +123,10 @@ describe('the one search', () => {
   });
 
   it('searches the Hub on Enter, and draws each repo with its params, tool calling and downloads', async () => {
-    transport.browseHfModels.mockResolvedValue({ ...page([]), models: [hfRepo('owner/Qwen3-8B-GGUF', { parameters_b: 8, downloads: 1_200_000 })] });
-    transport.getHfToolSupport.mockResolvedValue({ supports_tool_calls: true });
+    transport.browseHfModels.mockResolvedValue({
+      ...page([]),
+      models: [hfRepo('owner/Qwen3-8B-GGUF', { parameters_b: 8, downloads: 1_200_000, supports_tool_calls: true }), hfRepo('owner/plain-GGUF', { parameters_b: 8 })],
+    });
     renderLibrary();
     await userEvent.setup().type(field(), 'qwen{Enter}');
 
@@ -133,7 +134,8 @@ describe('the one search', () => {
       { query: 'qwen', min_params_b: null, max_params_b: null, cursor: null, limit: 100, sort_by: 'downloads', sort_ascending: false, kind: 'chat' },
     ]);
     const row = await screen.findByRole('option', { name: /owner\/Qwen3-8B-GGUF/ });
-    await waitFor(() => expect(row).toHaveTextContent('8.0B · calls tools · 1.2M downloads'));
+    expect(row).toHaveTextContent('8.0B · calls tools · 1.2M downloads');
+    expect(screen.getByRole('option', { name: /owner\/plain-GGUF/ })).toHaveTextContent('8.0B · 0 downloads');
   });
 
   it('searches from the hint row as Enter does', async () => {

@@ -28,7 +28,6 @@ const transport = vi.hoisted(() => ({
   getHfModelSummary: vi.fn(),
   getHfQuantizations: vi.fn(async (id: string) => ({ model_id: id, quantizations: hub.quants, image: hub.image })),
   getHfPick: vi.fn(async (id: string) => ({ model_id: id, label: hub.pick })),
-  getHfToolSupport: vi.fn(async () => ({ supports_tool_calls: true })),
   queueDownload: vi.fn(async () => ({ id: 'q-1' })),
 }));
 
@@ -62,7 +61,7 @@ import { queueSnapshot } from '../fixtures/downloads';
 const MIB = 1024 * 1024;
 const REPO = 'owner/X-GGUF';
 const SUMMARY: HfModelSummary = {
-  id: REPO, name: 'X-GGUF', author: 'owner', downloads: 1200, likes: 30, last_modified: null, parameters_b: 8, description: 'A small model.', tags: ['gguf'],
+  id: REPO, name: 'X-GGUF', author: 'owner', downloads: 1200, likes: 30, last_modified: null, parameters_b: 8, description: 'A small model.', tags: ['gguf'], supports_tool_calls: true,
 };
 
 function quant(label: string, sizeMib: number, extra: Partial<HfQuantization> = {}): HfQuantization {
@@ -109,8 +108,15 @@ describe('the inspector, a Hugging Face repo', () => {
     expect(within(inspector()).getByText(/^8\.0B/)).toBeInTheDocument();
   });
 
+  it('says nothing of tools when the summary does not call them', async () => {
+    transport.getHfModelSummary.mockImplementation(async () => ({ ...SUMMARY, supports_tool_calls: false }));
+    renderHf([quant('Q4_K_M', 4000)]);
+    expect(await within(inspector()).findByText(/^8\.0B/)).toBeInTheDocument();
+    expect(within(inspector()).queryByText('calls tools')).not.toBeInTheDocument();
+  });
+
   it('stops every read still out when the repo is left, so none holds a connection to the daemon', async () => {
-    // The Hub is slow: no read of the four is answered.
+    // The Hub is slow: no read of the three is answered.
     const out: AbortSignal[] = [];
     const never = (_id: string, signal: AbortSignal) => {
       out.push(signal);
@@ -119,9 +125,8 @@ describe('the inspector, a Hugging Face repo', () => {
     transport.getHfModelSummary.mockImplementation(never);
     transport.getHfQuantizations.mockImplementationOnce(never as never);
     transport.getHfPick.mockImplementationOnce(never as never);
-    transport.getHfToolSupport.mockImplementationOnce(never as never);
     const { router } = renderHf([]);
-    await waitFor(() => expect(out).toHaveLength(4));
+    await waitFor(() => expect(out).toHaveLength(3));
     expect(out.every((signal) => !signal.aborted)).toBe(true);
 
     await act(() => router.navigate('/'));

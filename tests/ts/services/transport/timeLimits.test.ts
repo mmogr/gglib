@@ -28,7 +28,7 @@ import { probeDaemon } from '../../../../src/services/transport/api/health';
 import { fetchAttachmentBlob } from '../../../../src/services/transport/api/attachments';
 import { readFarRunEvents } from '../../../../src/services/transport/api/farChats';
 import { checkModelUpgrade } from '../../../../src/services/transport/api/models/local';
-import { getHfModelSummary, getHfPick, getHfQuantizations, getHfToolSupport } from '../../../../src/services/transport/api/models/hf';
+import { getHfModelSummary, getHfPick, getHfQuantizations } from '../../../../src/services/transport/api/models/hf';
 import { checkModelUpdates } from '../../../../src/services/transport/api/verification';
 import { readRunEvents } from '../../../../src/services/transport/api/runs';
 import { streamEngineInstall } from '../../../../src/services/transport/api/setup';
@@ -175,7 +175,6 @@ describe('time limits on requests to the daemon', () => {
     ['a model\'s summary from the Hub', () => getHfModelSummary(HUB_MODEL), 5 * MINUTE, '5 minutes'],
     ['a model\'s quantizations from the Hub', () => getHfQuantizations(HUB_MODEL), 5 * MINUTE, '5 minutes'],
     ['the pick from the Hub', () => getHfPick(HUB_MODEL), 5 * MINUTE, '5 minutes'],
-    ['tool support from the Hub', () => getHfToolSupport(HUB_MODEL), 5 * MINUTE, '5 minutes'],
     ['a model\'s update check against the Hub', () => checkModelUpdates(1 as never), 5 * MINUTE, '5 minutes'],
     ['a model\'s upgrade check against the Hub', () => checkModelUpgrade(1), 5 * MINUTE, '5 minutes'],
     ['an image from the paired machine', () => fetchAttachmentBlob('far', 'abc'), 90_000, '90 seconds'],

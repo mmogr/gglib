@@ -61,7 +61,6 @@ Custom React hooks for gglib GUI functionality.
 | [`useLlamaStatus.ts`](useLlamaStatus.ts) | Whether llama.cpp is installed and can be downloaded, and the update to offer (a model running on it or not; the daemon refuses an install under one), from the daemon's setup-status route |
 | [`useModelsDirectory.ts`](useModelsDirectory.ts) | Models directory configuration |
 | [`useServerLogs.ts`](useServerLogs.ts) | Server log streaming |
-| [`useToolSupportCache.ts`](useToolSupportCache.ts) | Whether a HuggingFace model supports tool calling, cached in memory and shared across components |
 | [`useAddressLookup.ts`](useAddressLookup.ts) | Where the desktop app's lookup of the daemon's address stands (`services/transport/api/addressLookup`): out while the app's launch of the daemon is in flight, when the window and the tray popover say "gglib is starting…", or failed in the launch's own words, which the service-down screen says |
 | [`useDaemonReachable.ts`](useDaemonReachable.ts) | Whether the daemon answers at all, by its `/health` (`probeDaemon`: no token, no key, no prompt) — the state the tray popover used to confuse with a stopped proxy |
 | [`useDaemonRecovery.ts`](useDaemonRecovery.ts) | `useDaemonReachable` with the registries kept to it: the proxy, remote and server state let go while the daemon is gone, and on its return the event stream woken, whose opening reads every store again (`services/bridgeEvents`' `keptCurrent`; nothing is read here), unless it has opened since the daemon went; the tray popover and the window's `ServiceGate` |

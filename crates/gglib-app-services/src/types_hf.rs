@@ -1,11 +1,11 @@
-//! The `HuggingFace` browser's DTOs: search, quantization listing and
-//! whether a repo calls tools.
+//! The `HuggingFace` browser's DTOs: search and quantization listing.
 //!
 //! A `#[path]` child of `types.rs`, and everything here is re-exported from
 //! `types`.
 
 use gglib_core::domain::VariantFit;
 use gglib_core::domain::{ComponentRole, ImageFamily};
+use gglib_core::domain::{ModelCapabilities, infer_from_chat_template};
 use gglib_core::download::GgufFileRole;
 use gglib_core::ports::HfRepoInfo;
 use serde::{Deserialize, Serialize};
@@ -39,12 +39,18 @@ pub struct HfModelSummary {
     /// Model tags
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Whether the model calls tools: core's guess
+    /// ([`infer_from_chat_template`]) from the Hub's chat template and the
+    /// repo id. Import asks the same guess of the file's own template and
+    /// declared name, so the two can differ for a repo named unlike its model.
+    pub supports_tool_calls: bool,
 }
 
 /// What the browser shows of a repository, whether a search found it or it
 /// was looked up by its ID.
 impl From<HfRepoInfo> for HfModelSummary {
     fn from(info: HfRepoInfo) -> Self {
+        let guess = infer_from_chat_template(info.chat_template.as_deref(), Some(&info.model_id));
         Self {
             id: info.model_id,
             name: info.name,
@@ -55,6 +61,7 @@ impl From<HfRepoInfo> for HfModelSummary {
             parameters_b: info.parameters_b,
             description: info.description,
             tags: info.tags,
+            supports_tool_calls: guess.contains(ModelCapabilities::SUPPORTS_TOOL_CALLS),
         }
     }
 }
@@ -202,11 +209,4 @@ pub struct HfCompanion {
     /// repository's folder of the models directory; a download does not
     /// fetch it again.
     pub present: bool,
-}
-
-/// Whether a `HuggingFace` model calls tools, by its chat template and repo id.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct ToolSupportResponse {
-    pub supports_tool_calls: bool,
 }

@@ -532,13 +532,6 @@ export type { HfImagePreview } from './generated/HfImagePreview';
  */
 export type { HfCompanion } from './generated/HfCompanion';
 
-/**
- * Response for tool/function calling support detection.
- *
- * Used for both HuggingFace model metadata and local running server queries.
- */
-export type { ToolSupportResponse } from './generated/ToolSupportResponse';
-
 // ============================================================================
 // Model List Query Types
 // ============================================================================

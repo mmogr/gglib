@@ -11,9 +11,10 @@ row. With the field empty after it took focus, the group holds the model
 dismissal is remembered by repo (`localStorage`, in try/catch), so a later
 suggestion of another repo is shown again.
 
-Every figure on a row is the daemon's: the summary's parameter count and
-downloads, its reading of whether the repo calls tools, and the
-suggestion's rationale and the bytes it was sized by.
+Every figure on a row is the daemon's: the summary's parameter count,
+downloads and reading of whether the repo calls tools (from the chat
+template the search answer carries, so no row asks the Hub anything of
+its own), and the suggestion's rationale and the bytes it was sized by.
 
 | File | Role |
 |------|------|

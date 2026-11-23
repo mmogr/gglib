@@ -13,12 +13,14 @@ use crate::error::GuiError;
 use crate::test_support::{MockDownloadManager, MockHfClient};
 
 /// A Hub that answers every search with one page of `hits`, and keeps what
-/// each search asked for. A `limited` one refuses every search.
+/// each search asked for and which repos' model info was asked. A `limited`
+/// one refuses every search.
 #[derive(Default)]
 struct SearchedHub {
     hits: Vec<HfRepoInfo>,
     limited: bool,
     asked: Mutex<Vec<HfSearchOptions>>,
+    looked_up: Mutex<Vec<String>>,
 }
 
 impl SearchedHub {
@@ -44,6 +46,7 @@ impl HfClientPort for SearchedHub {
         })
     }
     async fn get_model_info(&self, model_id: &str) -> Result<HfRepoInfo, HfPortError> {
+        self.looked_up.lock().unwrap().push(model_id.to_owned());
         let hit = self.hits.iter().find(|hit| hit.model_id == model_id);
         hit.cloned().ok_or_else(|| HfPortError::ModelNotFound {
             model_id: model_id.to_string(),
@@ -177,7 +180,7 @@ async fn a_request_that_names_no_kind_asks_for_chat_models() {
 }
 
 /// The summary the browser is sent: the hit's fields under the wire's names,
-/// and no chat template.
+/// whether it calls tools in place of its chat template.
 const RECORDED_HIT_ON_THE_WIRE: &str = r#"{
     "id": "unsloth/Phi-4-mini-instruct-GGUF",
     "name": "Phi-4-mini-instruct-GGUF",
@@ -187,7 +190,8 @@ const RECORDED_HIT_ON_THE_WIRE: &str = r#"{
     "last_modified": null,
     "parameters_b": 3.836021856,
     "description": null,
-    "tags": ["gguf", "phi3"]
+    "tags": ["gguf", "phi3"],
+    "supports_tool_calls": false
 }"#;
 
 /// The browser's search is the one function the CLI calls, over the
@@ -269,21 +273,25 @@ async fn a_search_the_hub_refuses_says_why() {
     );
 }
 
-/// A Hub repo's tool answer reads the Hub's chat template: one that names
-/// `tools` says yes under a repo id that says nothing, and the recorded
-/// hit's plain template says no.
+/// Each hit says whether it calls tools by the chat template its search
+/// answer carries (one that names `tools` says yes under a repo id that says
+/// nothing; the recorded plain one says no), and no model info is asked for.
 #[tokio::test]
-async fn a_hub_repo_calls_tools_by_its_chat_template() {
+async fn a_search_says_which_hits_call_tools_without_asking_for_their_model_info() {
     let mut tooled = recorded_hit();
     tooled.model_id = "owner/tooled-GGUF".to_string();
     tooled.chat_template = Some("{% if tools %}{{ tools | tojson }}{% endif %}".to_string());
-    let ops = ops_over(Arc::new(SearchedHub {
+    let hub = Arc::new(SearchedHub {
         hits: vec![recorded_hit(), tooled],
         ..SearchedHub::default()
-    }));
+    });
 
-    let plain = ops.get_hf_tool_support("unsloth/Phi-4-mini-instruct-GGUF");
-    assert!(!plain.await.expect("a lookup").supports_tool_calls);
-    let tooled = ops.get_hf_tool_support("owner/tooled-GGUF");
-    assert!(tooled.await.expect("a lookup").supports_tool_calls);
+    let ops = ops_over(Arc::clone(&hub));
+
+    let found = ops.search_hf_models(HfSearchRequest::default()).await;
+
+    let models = found.expect("a page").models;
+    let calls: Vec<_> = models.iter().map(|m| m.supports_tool_calls).collect();
+    assert_eq!(calls, [false, true]);
+    assert_eq!(*hub.looked_up.lock().unwrap(), Vec::<String>::new());
 }
