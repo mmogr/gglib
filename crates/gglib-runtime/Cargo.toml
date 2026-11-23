@@ -61,6 +61,8 @@ flate2 = "1"
 tar = "0.4"
 # The folder a Visual C++ runtime install downloads into: a random name,
 # created so that a folder already there is never reused, removed after.
+# And the name an engine's file is written under before it is renamed into
+# place.
 tempfile = { workspace = true }
 # The digest of that installer as it was downloaded, checked again once the
 # file is held, before it is run.

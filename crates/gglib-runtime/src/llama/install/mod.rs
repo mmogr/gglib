@@ -4,7 +4,7 @@ use super::build_events::{BuildEvent, BuildPhase};
 use super::detect::Acceleration;
 use super::download::LLAMA_RELEASE;
 use crate::binary_install::{
-    BuildRecord, InstallRecord, SourceRepo, prepare_checkout, resolve_selector, settle,
+    BuildRecord, InstallRecord, SourceRepo, place, prepare_checkout, resolve_selector, settle,
 };
 use anyhow::{Context, Result, bail};
 use gglib_core::paths::{llama_bench_path, llama_config_path};
@@ -116,7 +116,7 @@ fn build_record(version: String, commit_sha: String, acceleration: Acceleration)
 }
 
 /// Install the binary `binary_name` from the checkout's `build/` directory
-/// to `destination`.
+/// to `destination`, as a new file ([`place`]).
 pub(crate) fn install_binary(
     llama_dir: &std::path::Path,
     binary_name: &str,
@@ -140,7 +140,11 @@ pub(crate) fn install_binary(
         fs::create_dir_all(parent).context("Failed to create bin directory")?;
     }
 
-    fs::copy(&binary_src, destination).context("Failed to copy binary")?;
+    let mut built = fs::File::open(&binary_src).context("Failed to open the built binary")?;
+    place(destination, |file| {
+        std::io::copy(&mut built, file).map(drop)
+    })
+    .context("Failed to copy binary")?;
 
     #[cfg(unix)]
     {
