@@ -151,6 +151,12 @@ const failedEnding = (repo: string, quant: string, extra: Record<string, unknown
   ...extra,
 });
 
+/** A countdown's two copies: the one shown, ticking, and the one a screen reader is told once per wait. */
+const copies = (line: HTMLElement) => ({
+  shown: line.querySelector('[aria-hidden="true"]')?.textContent ?? '',
+  told: line.querySelector('.sr-only')?.textContent ?? '',
+});
+
 /** The names of the library's groups, in the order drawn. */
 const groupNames = () => screen.getAllByRole('region').map((r) => r.getAttribute('aria-label')).filter((n) => n !== 'Library');
 
@@ -465,12 +471,15 @@ describe('the library place', () => {
 
       const held = await screen.findByRole('group', { name: 'owner/zeta-GGUF' });
       expect(held).toHaveTextContent('Q8_0');
-      expect(within(held).getByRole('status')).toHaveTextContent(/^waiting for Hugging Face's rate limit, 2:1[34]$/);
+      const told = copies(within(held).getByRole('status')).told;
+      expect(told).toMatch(/^waiting for Hugging Face's rate limit, 2:1[34]$/);
+      expect(copies(within(held).getByRole('status')).shown).toMatch(/^waiting for Hugging Face's rate limit, 2:1[34]$/);
       expect(screen.getByRole('group', { name: 'owner/b' })).toHaveTextContent('Q4_K_M');
       // A Retry held shows only the held row, not its failure as well.
       expect(screen.queryByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).not.toBeInTheDocument();
       await act(() => vi.advanceTimersByTimeAsync(2_000));
-      expect(within(held).getByRole('status')).toHaveTextContent(/, 2:1[12]$/);
+      expect(copies(within(held).getByRole('status')).shown).toMatch(/, 2:1[12]$/);
+      expect(copies(within(held).getByRole('status')).told).toBe(told);
 
       downloads.queue = queueSnapshot({ revision: 4, active: runningRow({ id: 'owner/zeta-GGUF:Q8_0' }), waiting: [] });
       await act(() => vi.advanceTimersByTimeAsync(132_000));
@@ -617,7 +626,7 @@ describe('the library place', () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
       await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('button', { name: 'Retry' }));
-      expect(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF' })).getByRole('status')).toHaveTextContent(/, 0:(10|09)$/);
+      expect(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF' })).getByRole('status')).toHaveTextContent(/, 0:(10|09)/);
 
       await act(() => vi.advanceTimersByTimeAsync(10_000));
       await waitFor(() => expect(transport.upgradeModel).toHaveBeenCalledTimes(2));

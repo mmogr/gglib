@@ -91,6 +91,12 @@ function renderHf(quants: HfQuantization[], image: HfImagePreview | null = null)
 
 const inspector = () => screen.getByRole('complementary', { name: 'Inspector' });
 
+/** A countdown's two copies: the one shown, ticking, and the one a screen reader is told once per wait. */
+const copies = (line: HTMLElement) => ({
+  shown: line.querySelector('[aria-hidden="true"]')?.textContent ?? '',
+  told: line.querySelector('.sr-only')?.textContent ?? '',
+});
+
 /** The daemon's refusal of a Hub read for Hugging Face's rate limit. */
 const hubLimited = (secs: number) =>
   new TransportError('INTERNAL', "Failed to get quantizations: Hugging Face's rate limit lifts in 2:13", {
@@ -300,13 +306,17 @@ describe('the inspector, a Hugging Face repo', () => {
       const heading = await within(inspector()).findByRole('heading', { name: REPO });
 
       const line = await within(inspector()).findByRole('status');
-      expect(line).toHaveTextContent(/^Hugging Face's rate limit lifts in 2:1[34]\. gglib will read this again then\.$/);
+      expect(copies(line).shown).toMatch(/^Hugging Face's rate limit lifts in 2:1[34]\. gglib will read this again then\.$/);
+      const told = copies(line).told;
+      expect(told).toMatch(/^Hugging Face's rate limit lifts in 2:1[34]\. gglib will read this again then\.$/);
       expect(line).toHaveClass('text-text-secondary');
       // One line for the panel: the summary and the pick say nothing of it.
-      expect(within(inspector()).getAllByText(/rate limit lifts/)).toHaveLength(1);
+      expect(within(inspector()).getAllByRole('status')).toHaveLength(1);
       expect(within(inspector()).queryByRole('alert')).not.toBeInTheDocument();
       await act(() => vi.advanceTimersByTimeAsync(2_000));
-      expect(line).toHaveTextContent(/lifts in 2:1[12]\./);
+      expect(copies(line).shown).toMatch(/lifts in 2:1[12]\./);
+      // Told once: the live region's words do not tick.
+      expect(copies(line).told).toBe(told);
 
       await act(() => vi.advanceTimersByTimeAsync(132_000));
       expect(await within(inspector()).findByRole('listbox', { name: 'Sizes' })).toBeInTheDocument();

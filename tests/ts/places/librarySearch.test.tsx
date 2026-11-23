@@ -96,6 +96,12 @@ function renderLibrary(path = '/library') {
 
 const field = () => screen.getByRole('searchbox', { name: 'Search your models, or Hugging Face' });
 
+/** A countdown's two copies: the one shown, ticking, and the one a screen reader is told once per wait. */
+const copies = (line: HTMLElement) => ({
+  shown: line.querySelector('[aria-hidden="true"]')?.textContent ?? '',
+  told: line.querySelector('.sr-only')?.textContent ?? '',
+});
+
 /** The daemon's refusal of a Hub read for Hugging Face's rate limit. */
 const hubLimited = (secs: number) =>
   new TransportError('INTERNAL', "HF search failed: Hugging Face's rate limit lifts in 2:13", {
@@ -670,7 +676,7 @@ describe('the one search', () => {
       await typing().type(field(), 'llama{Enter}');
 
       const group = await screen.findByRole('region', { name: 'Hugging Face' });
-      expect(await within(group).findByRole('status')).toHaveTextContent(/^Hugging Face's rate limit lifts in 2:1[34]\. gglib will read this again then\.$/);
+      expect(copies(await within(group).findByRole('status')).shown).toMatch(/^Hugging Face's rate limit lifts in 2:1[34]\. gglib will read this again then\.$/);
       expect(within(group).queryByText(/No GGUF repos match/)).not.toBeInTheDocument();
 
       await act(() => vi.advanceTimersByTimeAsync(134_000));

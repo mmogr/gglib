@@ -4,21 +4,21 @@
  * waits (`waiting for Hugging Face's rate limit, 2:14`, counting down), and
  * × to drop it, which sends nothing. When the limit lifts its request is
  * sent again and the row says "queueing…", with no ×, until the queue's
- * own row takes its place.
+ * own row takes its place. The wait is announced once (`Countdown`).
  *
  * @module places/library/HeldRow
  */
 
 import type { FC } from 'react';
 import { X } from 'lucide-react';
+import { Countdown } from '../../components/status/Countdown';
 import { waitingSentence } from '../../components/status/hubWait';
 import { Icon } from '../../components/ui/Icon';
 import { IconButton } from '../../components/ui/IconButton';
-import { useSecondsLeft } from '../../hooks/useSecondsLeft';
 import { dropHeld, type HeldDownload } from '../../services/heldDownloads';
 
 export const HeldRow: FC<{ held: HeldDownload }> = ({ held }) => {
-  const left = useSecondsLeft(held.liftsAt);
+  const sending = held.liftsAt === null;
   return (
     <div
       role="group"
@@ -30,9 +30,9 @@ export const HeldRow: FC<{ held: HeldDownload }> = ({ held }) => {
         {held.quantization && <span className="ml-sm text-xs text-text-secondary">{held.quantization}</span>}
       </span>
       <span role="status" className="shrink-0 text-xs text-text-secondary tabular-nums">
-        {left === null ? 'queueing…' : waitingSentence(left)}
+        {held.liftsAt === null ? 'queueing…' : <Countdown at={held.liftsAt} say={waitingSentence} />}
       </span>
-      {left !== null && (
+      {!sending && (
         <IconButton
           label={`Drop ${held.repo}`}
           size="sm"

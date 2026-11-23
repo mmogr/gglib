@@ -77,4 +77,17 @@ describe('readData', () => {
     expect(hubLimitOf(noTime)).toBeNull();
     expect(hubLimitOf(new Error('plain'))).toBeNull();
   });
+
+  it("reads no Hub limit from a wait that is not a positive number, and holds a longer one to the daemon's 900 s", async () => {
+    const refused = (metadata: Record<string, unknown>) =>
+      readData(jsonResponse({ error: 'x', status: 429, type: 'hub_rate_limited', metadata }, { status: 429 })).catch((e) => e);
+    for (const secs of [0, -5, '142', undefined, null]) {
+      expect(hubLimitOf(await refused({ bucket: 'api', retry_after_secs: secs }))).toBeNull();
+    }
+    // JSON carries no NaN; a hand-built refusal can.
+    const nan = new TransportError('INTERNAL', 'x', { status: 429, type: 'hub_rate_limited', metadata: { bucket: 'api', retry_after_secs: Number.NaN } });
+    expect(hubLimitOf(nan)).toBeNull();
+    expect(hubLimitOf(await refused({ bucket: 'api', retry_after_secs: 1e12 }))).toEqual({ bucket: 'api', retryAfterSecs: 900 });
+    expect(hubLimitOf(await refused({ bucket: 'pages', retry_after_secs: 900 }))).toEqual({ bucket: 'pages', retryAfterSecs: 900 });
+  });
 });

@@ -96,18 +96,22 @@ export class TransportError extends Error {
 /** The daemon's type for a request Hugging Face rate limited. */
 const HUB_RATE_LIMITED = 'hub_rate_limited';
 
+/** The longest wait the daemon tells, in seconds: a longer one is held to it. */
+const MOST_RETRY_AFTER_SECS = 900;
+
 /** Hugging Face's rate limit, as the daemon tells it with a refusal. */
 export interface HubLimit {
   /** The Hub's allowance that is spent: `api`, `resolvers` or `pages`. */
   bucket: string;
-  /** Whole seconds until it lifts. */
+  /** Whole seconds until it lifts, at most 900. */
   retryAfterSecs: number;
 }
 
 /**
  * The Hub's limit `err` was refused for, or `null` for any other error. Only
  * the daemon's `hub_rate_limited` type says so: it answers 429 for other
- * things too.
+ * things too. A wait that is not a positive number is none; one over the
+ * daemon's ceiling is held to it.
  */
 export function hubLimitOf(err: unknown): HubLimit | null {
   if (!TransportError.isTransportError(err)) return null;
@@ -116,7 +120,7 @@ export function hubLimitOf(err: unknown): HubLimit | null {
   const secs = details.metadata?.retry_after_secs;
   if (typeof secs !== 'number' || !Number.isFinite(secs) || secs <= 0) return null;
   const bucket = details.metadata?.bucket;
-  return { bucket: typeof bucket === 'string' ? bucket : '', retryAfterSecs: secs };
+  return { bucket: typeof bucket === 'string' ? bucket : '', retryAfterSecs: Math.min(secs, MOST_RETRY_AFTER_SECS) };
 }
 
 /**
