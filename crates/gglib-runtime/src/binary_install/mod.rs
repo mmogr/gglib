@@ -21,6 +21,7 @@ pub(crate) use install::install_prebuilt_from;
 pub(crate) use install::{PrebuiltTarget, completed, install_prebuilt, started};
 pub use pin::PinStanding;
 pub(crate) use pin::{Recorded, installed_release, standing};
+pub(crate) use place::place;
 pub use record::BuildRecord;
 pub(crate) use record::{
     InstallRecord, PrebuiltRecord, recorded_acceleration, recorded_install, recorded_release,
