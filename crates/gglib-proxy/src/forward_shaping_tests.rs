@@ -130,9 +130,9 @@ async fn the_context_length_contract_is_400_with_both_codes_set() {
     );
 }
 
-/// What calibration is skipped by, and what the request's record says: the
-/// images anywhere in the messages, each at the cap when its size cannot be
-/// read.
+/// One of the two things calibration is skipped by (an audio clip is the
+/// other), and what the request's record says: the images anywhere in the
+/// messages, each at the cap when its size cannot be read.
 #[test]
 fn shaping_says_the_images_the_request_carries() {
     let shape = |body: &'static str| {
@@ -163,6 +163,40 @@ fn shaping_says_the_images_the_request_carries() {
         shape(r#"{"model":"m","messages":[{"role":"user","content":"image_url"}]}"#)
     );
     assert_eq!(RequestImages::default(), shape("not json"));
+}
+
+/// A clip of megabytes under an 8k context is forwarded as it came, and
+/// the request says it carries audio, which calibration is skipped by: the
+/// clip's tokens do not come from the length of its base64.
+#[test]
+fn a_request_with_an_audio_clip_is_forwarded_whole_and_says_so() {
+    let clip = format!("UklGRiQAAABXQVZF{}", "A".repeat(4_000_000));
+    let sent = serde_json::json!({"model": "m", "messages": [
+        {"role": "user", "content": [
+            {"type": "text", "text": "what is said here?"},
+            {"type": "input_audio", "input_audio": {"data": clip, "format": "wav"}},
+        ]},
+    ]});
+    let shape = |body: &serde_json::Value| {
+        shape_request_body(
+            Bytes::from(serde_json::to_vec(body).unwrap()),
+            &ModelContext::passthrough(),
+            &SamplingLayers::default(),
+            Some(chars(32_768)),
+        )
+    };
+
+    let shaped = shape(&sent).expect("it fits by its stand-in");
+
+    assert!(shaped.has_audio);
+    assert_eq!(shaped.truncation.messages_truncated, 0);
+    let forwarded: serde_json::Value = serde_json::from_slice(&shaped.body).expect("valid json");
+    assert_eq!(forwarded["messages"], sent["messages"]);
+
+    let text_only = serde_json::json!({"model": "m", "messages": [
+        {"role": "user", "content": [{"type": "text", "text": "input_audio"}]},
+    ]});
+    assert!(!shape(&text_only).expect("it fits").has_audio);
 }
 
 /// A plain chat request whose history holds a drawn picture and whose tools
