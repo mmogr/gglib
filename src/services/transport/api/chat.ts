@@ -3,7 +3,7 @@
  * Handles conversations and messages for the chat feature.
  */
 
-import { get, post, put, del } from './client';
+import { apiFetch, get, post, put, del } from './client';
 import { TransportError } from '../errors';
 import { sanitizeMessagesForLlamaServer } from '../sanitizeMessages';
 import { parseGeneratedTitle } from '../parseTitleResponse';
@@ -102,6 +102,17 @@ export async function deleteConversation(id: ConversationId): Promise<void> {
  */
 export async function getThread(conversationId: ConversationId): Promise<SavedThread> {
   return get<SavedThread>(`/api/conversations/${conversationId}/thread`);
+}
+
+/**
+ * A conversation's export file, as its text: every saved message, each
+ * image's bytes beside its info as a `data:` URL, or its info alone when
+ * the store could not give them. The text is the file `gglib chat export`
+ * writes, so the page saves it as it comes; its shape is `ChatExport`.
+ */
+export async function exportConversation(conversationId: ConversationId): Promise<string> {
+  const response = await apiFetch(`/api/conversations/${conversationId}/export`);
+  return response.text();
 }
 
 /**
