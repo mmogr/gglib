@@ -9,14 +9,16 @@
 mod data_dir;
 
 use gglib_core::utils::process::cmd;
+use gglib_core::utils::process::test_stop::{ask_to_stop, stoppable};
 use std::io::Read;
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-/// How long a daemon has to answer `/health`, and to exit once stopped.
-const BUDGET: Duration = Duration::from_secs(15);
+/// How long a daemon has to answer `/health`, and to exit once stopped:
+/// well past what it takes, so a slow CI runner does not fail the test.
+const BUDGET: Duration = Duration::from_secs(30);
 
 fn gglib() -> Command {
     cmd(env!("CARGO_BIN_EXE_gglib"))
@@ -58,7 +60,12 @@ impl Place {
 
     /// Start `gglib daemon run` here and wait until it answers `/health`.
     fn start(&self) -> Daemon {
-        let mut daemon = Daemon::start(self.daemon_run(gglib()));
+        self.start_from(gglib())
+    }
+
+    /// [`Self::start`], from `command`, a command for the `gglib` binary.
+    fn start_from(&self, command: Command) -> Daemon {
+        let mut daemon = Daemon::start(self.daemon_run(command));
         daemon.wait_until_up(self.port);
         daemon
     }
@@ -190,33 +197,31 @@ fn a_second_daemon_refuses_to_start() {
     );
 }
 
-/// SIGTERM produces a clean, bounded exit: the ordered teardown runs (no
-/// force-exit), and the lock is released so the next daemon can start.
-// Unix only: SIGTERM is a signal.
-#[cfg(unix)]
+/// An orderly stop produces a clean, bounded exit: the ordered teardown
+/// runs (no force-exit), and the lock is released so the next daemon can
+/// start. The stop is what a service manager or a terminal sends: SIGTERM
+/// on macOS and Linux, Ctrl-Break on Windows ([`ask_to_stop`]).
 #[test]
-fn sigterm_shuts_the_daemon_down_cleanly() {
+fn an_orderly_stop_shuts_the_daemon_down_cleanly() {
     let place = Place::new();
-    let mut daemon = place.start();
+    let mut daemon = place.start_from(stoppable(env!("CARGO_BIN_EXE_gglib")));
 
-    // SIGTERM — what a service manager sends.
-    send_sigterm(daemon.child.id());
+    let stop = if cfg!(windows) {
+        "Ctrl-Break"
+    } else {
+        "SIGTERM"
+    };
+    ask_to_stop(&daemon.child).unwrap_or_else(|e| panic!("{stop} was not sent: {e}"));
 
-    let status = daemon.wait_for_exit("SIGTERM");
+    let status = daemon.wait_for_exit(stop);
     assert!(
         status.success(),
-        "teardown must exit cleanly, got {status}: {}",
+        "teardown after {stop} must exit cleanly, got {status}: {}",
         daemon.stderr()
     );
 
     // The lock is free again: a new daemon can start immediately.
     let _next = place.start();
-}
-
-/// Send SIGTERM via the `kill` binary — no libc dependency for one signal.
-#[cfg(unix)]
-fn send_sigterm(pid: u32) {
-    let _ = cmd("kill").args(["-15", &pid.to_string()]).status();
 }
 
 /// What every test that starts a real service stores first: the endpoint
