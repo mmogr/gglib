@@ -6,6 +6,7 @@
 //! admission at a time. That is the only way to stage a dead upstream
 //! followed by its restart, or a load that starts the server.
 
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -128,9 +129,22 @@ pub(crate) async fn chat(proxy: &str, session: &str, streaming: bool) -> Respons
 /// A restore with no file on disk stops before it calls the upstream, so a
 /// test that counts restore calls needs one there to tell a restore that ran
 /// from one that was skipped.
+///
+/// The file is dated by the clock the proxy reads, not left with the date
+/// the file system gave it. That date can come from a coarser clock, a tick
+/// behind the one the proxy reads, and the proxy takes a file dated in an
+/// earlier second than the server's start for an earlier server's. A test
+/// that starts a server as a second begins and then plants a file could
+/// have it dated in the second before.
 pub(crate) fn plant_slot_file(slot_dir: &Path, session: &str) -> PathBuf {
     let path = slot_bin_path(slot_dir, 1, session);
-    std::fs::write(&path, b"fake kv state").expect("write the slot file");
+    let mut file = std::fs::File::create(&path).expect("create the slot file");
+    file.write_all(b"fake kv state")
+        .expect("write the slot file");
+    // Set through the handle that wrote it: Windows sets a file's time only
+    // through a handle opened to write.
+    file.set_modified(SystemTime::now())
+        .expect("date the slot file");
     path
 }
 
