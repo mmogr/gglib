@@ -789,6 +789,7 @@ async fn send_following_redirects(
     let mut url = Url::parse(req.url)
         .map_err(|e| NativeError::Refused(format!("invalid URL {}: {e}", req.url)))?;
     let origin_host = url.host_str().map(str::to_owned);
+    let asked = url.path().to_owned();
     let mut linked_etag: Option<String> = None;
 
     for _ in 0..MAX_REDIRECTS {
@@ -807,7 +808,7 @@ async fn send_following_redirects(
         }
 
         let response = send_unless_cancelled(request, req.cancel.as_ref(), req.stall_after).await?;
-        if let Some(refused) = limited::heard(gate, &response) {
+        if let Some(refused) = limited::heard(gate, &response, &asked) {
             return Err(NativeError::RateLimited(refused));
         }
 

@@ -77,7 +77,11 @@ impl Limited {
 
 /// Note the limit `response` states in `gate`; the limit it refused the
 /// request with, when it is a refusal (429).
-pub(super) fn heard(gate: &HubGate, response: &Response) -> Option<HubLimit> {
+///
+/// A refusal that names no allowance is filed under the one a request for
+/// `asked`, the path the download asked for, counts against, whichever hop
+/// of its redirects answered it: a CDN's path says nothing of the Hub's.
+pub(super) fn heard(gate: &HubGate, response: &Response, asked: &str) -> Option<HubLimit> {
     let now = Instant::now();
     let stated = header(response, "ratelimit");
     if response.status() != StatusCode::TOO_MANY_REQUESTS {
@@ -86,11 +90,7 @@ pub(super) fn heard(gate: &HubGate, response: &Response) -> Option<HubLimit> {
         }
         return None;
     }
-    let limit = refusal(
-        stated,
-        header(response, "retry-after"),
-        response.url().path(),
-    );
+    let limit = refusal(stated, header(response, "retry-after"), asked);
     gate.note(limit, now);
     Some(limit)
 }

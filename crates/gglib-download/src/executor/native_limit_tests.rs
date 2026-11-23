@@ -177,6 +177,41 @@ async fn a_closed_allowance_is_not_asked_while_it_is_closed() {
     assert_eq!(*asked, 0, "the wait comes before any request");
 }
 
+/// A refusal on a redirect's hop that names no allowance is filed under the
+/// one the download asked for, a file's, not under what the hop's own path
+/// would read as.
+#[tokio::test]
+async fn a_refusal_on_a_redirect_is_filed_under_the_allowance_asked() {
+    let server = TestServer::start(vec![
+        Reply::RedirectWithLinkedEtag {
+            linked_etag: sha256_of(b"any"),
+        },
+        Reply::Status(429),
+    ])
+    .await;
+    let fx = Fixture::new();
+    let gate = HubGate::new();
+    let cancel = CancellationToken::new();
+    let (notice, _) = noting_then_cancelling(server.counter(), cancel.clone());
+    let url = server.resolve_url();
+    let req = super::super::native::NativeDownload {
+        notice: Some(notice),
+        cancel: Some(cancel),
+        ..request(&url, &fx.dest, None, None)
+    };
+
+    let ended = download_gated(&build_client(), &req, &gate).await;
+
+    assert!(
+        matches!(ended, Err(NativeError::Cancelled)),
+        "got {ended:?}"
+    );
+    assert_eq!(server.request_count(), 2, "the hop and its refusal");
+    let now = tokio::time::Instant::now();
+    assert!(gate.closed(HubBucket::Resolvers, now).is_some());
+    assert_eq!(gate.closed(HubBucket::Pages, now), None);
+}
+
 /// A refusal after bytes have arrived carries on from them once it is
 /// waited out, and bytes start the count of refusals in a row again: four
 /// refusals, a connection that brings part of the file and breaks, four
