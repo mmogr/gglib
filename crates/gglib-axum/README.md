@@ -159,6 +159,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 | `GET` | `/api/conversations/{id}` | One conversation |
 | `PUT` | `/api/conversations/{id}` | Update a conversation |
 | `DELETE` | `/api/conversations/{id}` | Delete a conversation and its messages; refused while a reply to it is being written |
+| `GET` | `/api/conversations/{id}/export` | A chat as its export file holds it: its messages, each image's bytes beside its info as a `data:` URL; what the chat page's Export saves and `gglib chat export` writes |
 | `GET` | `/api/conversations/{id}/thread` | A chat as the page reads it: its messages, its branch points, and whether it ends in an unanswered question |
 | `POST` | `/api/conversations/{id}/changes` | An edit, a regenerate or a branch of a chat (ADR 0017) |
 | `POST` | `/api/conversations/{id}/pictures` | Keep a picture beside the one it was made from (ADR 0018) |

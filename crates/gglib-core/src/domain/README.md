@@ -39,6 +39,9 @@ infrastructure concerns (database, filesystem, etc.).
 - `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
 - `chat` - Chat conversation and message types. A message carries its images
   by reference: `NewMessage.images` are ids, `Message.images` are facts
+- `chat_export` - A chat as an export writes it to a file (`ChatExport`): the
+  conversation and its saved messages, each image's bytes beside its info as
+  a `data:` URL; the chat page's Export and `gglib chat export` write the same
 - `conversation_patch` - A change to some of a conversation's settings
   (`ConversationSettingsPatch`): its model, tools and tool limits, each
   field sent replacing its setting, a limit outside a run's bounds refused

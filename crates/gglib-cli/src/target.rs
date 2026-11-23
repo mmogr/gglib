@@ -70,11 +70,16 @@ pub(crate) enum Reach {
 pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
     match command {
         // A turn, a load and the model commands are core's table. The chat
-        // history is this machine's record, whichever machine a turn ran on.
+        // history is this machine's record, whichever machine a turn ran on,
+        // and an export writes from it.
         Commands::Chat {
             command: Some(ChatCommand::History { .. }),
             ..
         } => ("chat history", Reach::Local),
+        Commands::Chat {
+            command: Some(ChatCommand::Export { .. }),
+            ..
+        } => ("chat export", Reach::Local),
         Commands::Chat { .. } => ("chat", reach_of(ModelAction::Chat)),
         Commands::Question { .. } => ("q", reach_of(ModelAction::Chat)),
         Commands::Serve { .. } => ("serve", reach_of(ModelAction::Load)),

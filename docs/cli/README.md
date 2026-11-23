@@ -59,6 +59,7 @@ Grouped as `gglib --help` groups them.
 | **Inference** | [`serve <model>`](proxy.md#serve) | The endpoint pinned to one model |
 | | [`chat <model>`](chat.md#chat) | An interactive session with tools |
 | | [`q`](chat.md#q) | One question, pipe-friendly |
+| | [`chat export <id>`](chat.md#conversations-persist) | Write a conversation, its images in it, to the JSON file the chat page's Export saves |
 | | [`run`](chat.md#run) | A reply the daemon finishes while you do something else |
 | | [`draw`](draw.md) | Draw a picture with this machine's image model, or with `--remote` the paired machine's |
 | | [`attachment save`](chat.md#attachment-save) | Write an image a chat stored to a file |

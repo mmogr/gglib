@@ -57,6 +57,7 @@ handlers were grouped.
 | `mcp_cli.rs` | `gglib mcp …` |
 | `draw.rs` | `gglib draw` — draws through the daemon, or with `--remote` the paired machine's, with one live line, and saves each PNG here |
 | `attachment.rs` | `gglib attachment save` — a stored image written to a file, found by the start of its id |
+| `chat_export.rs` | `gglib chat export` — a conversation written to the JSON file the chat page's Export saves, its images in it |
 | `history.rs`, `web.rs`, `gui.rs`, `completions.rs`, `proxy_cache_clear.rs`, `proxy_trips.rs`, `proxy_test.rs` | One command each; `proxy_test.rs` is `gglib proxy test`, the daemon's proof request and client block printed |
 
 Each directory carries its own README with the detail; this table exists so a

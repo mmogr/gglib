@@ -9,7 +9,7 @@
 
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
@@ -109,6 +109,8 @@ pub(crate) fn chat_routes_no_prefix() -> Router<AppState> {
                 .put(update_conversation)
                 .delete(delete_conversation),
         )
+        // A chat as its export file holds it, its images' bytes in it
+        .route("/conversations/{id}/export", get(export_conversation))
         // A chat read with its branch points, and changed (ADR 0017)
         .route("/conversations/{id}/thread", get(chat_changes::thread))
         .route("/conversations/{id}/changes", post(chat_changes::change))
@@ -170,6 +172,20 @@ pub(crate) async fn get_conversation(
         .await?
         .ok_or_else(|| HttpError::NotFound(format!("Conversation not found: {id}")))?;
     Ok(Json(conversation))
+}
+
+/// A conversation as its export file holds it: every saved message, each
+/// image's bytes beside its info as a `data:` URL. The body is the file's
+/// text ([`ChatExport::text`](gglib_core::domain::chat_export::ChatExport::text)),
+/// which the page saves as it comes and `gglib chat export` writes. An
+/// image the store cannot give is in it by its info alone.
+/// GET /api/conversations/:id/export
+pub(crate) async fn export_conversation(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<([(header::HeaderName, &'static str); 1], String), HttpError> {
+    let export = state.core.export_chat(id).await?;
+    Ok(([(header::CONTENT_TYPE, "application/json")], export.text()))
 }
 
 /// Update a conversation: its title, its system prompt, and the settings

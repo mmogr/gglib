@@ -121,6 +121,10 @@ export function chatTransport(fixture: ChatFixture) {
       fixture.conversations = fixture.conversations.filter((c) => c.id !== id);
     }),
     getThread: vi.fn(async (id: number) => ({ messages: fixture.rows[id] ?? [] })),
+    // The export file's text as the daemon writes it: the chat and its saved rows.
+    exportConversation: vi.fn(async (id: number) =>
+      JSON.stringify({ conversation: fixture.conversations.find((c) => c.id === id), messages: fixture.rows[id] ?? [] }, null, 2),
+    ),
     listRuns: vi.fn(async () => fixture.runs),
     readRunEvents: (id: string, _after: number, signal: AbortSignal) =>
       framesThenWait(fixture.frames[id] ?? [], signal),

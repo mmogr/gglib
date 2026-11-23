@@ -8,6 +8,7 @@ pub(crate) mod cache_budget;
 pub mod capabilities;
 pub mod capability_tags;
 pub mod chat;
+pub mod chat_export;
 mod context_fit;
 pub mod conversation_patch;
 pub mod defect_counts;

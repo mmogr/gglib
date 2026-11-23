@@ -197,6 +197,9 @@ pub async fn dispatch(
                     crate::commands::ChatCommand::History { limit } => {
                         handlers::history::execute(ctx, limit).await?;
                     }
+                    crate::commands::ChatCommand::Export { id, path, force } => {
+                        handlers::chat_export::execute(ctx, id, path.as_deref(), force).await?;
+                    }
                 }
             } else {
                 let args = handlers::inference::chat::ChatArgs {

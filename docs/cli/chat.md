@@ -124,6 +124,12 @@ Session #20 saved. Resume with: gglib chat --continue 20
   device, is not continued: `--continue` says the chat is running elsewhere
   and names the run, before it stores anything. Wait for the reply, or stop
   it with `gglib run cancel <run>`.
+- `gglib chat export <id> [path]` writes one to the JSON file the chat
+  page's Export saves: the conversation and every saved message, each image's
+  bytes beside its info as a `data:` URL. Without a path it is
+  `./conversation-<id>.json`; a directory takes that name inside it. An
+  existing file is not replaced without `--force`. An image the store cannot
+  give is in the file by its id alone, and the command says so.
 
 ### The folder it reads
 

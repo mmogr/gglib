@@ -3,6 +3,7 @@
 pub(crate) mod agent_chat;
 pub(crate) mod attachment;
 pub(crate) mod benchmark;
+pub(crate) mod chat_export;
 pub(crate) mod completions;
 pub(crate) mod config;
 pub(crate) mod daemon;

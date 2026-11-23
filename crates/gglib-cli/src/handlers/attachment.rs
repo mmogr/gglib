@@ -94,7 +94,7 @@ pub(crate) fn extension(mime: &str) -> &'static str {
 }
 
 /// Write `bytes` to `target`; an existing file is refused unless `force`.
-fn write(target: &Path, bytes: &[u8], force: bool) -> Result<()> {
+pub(crate) fn write(target: &Path, bytes: &[u8], force: bool) -> Result<()> {
     let shown = target.display();
     let mut options = OpenOptions::new();
     options.write(true);
