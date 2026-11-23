@@ -7,9 +7,8 @@
 //! Nothing here runs a real git, compiler or installer, and nothing a test
 //! starts with one of these directories as its whole `PATH` can.
 //!
-//! A stand-in does the same whatever it is asked. One that must answer by
-//! its arguments is a shell script, in `stub_tools.rs`, and runs on Unix
-//! alone.
+//! A stand-in answers by its arguments through `gglib-test-proc`'s `when`
+//! lines; with none, it does the same whatever it is asked.
 
 use std::path::PathBuf;
 
@@ -55,7 +54,7 @@ impl Machine {
     }
 
     /// Add `name`, a program that records its call and then follows
-    /// `instructions` (`gglib-test-proc`'s), whatever it is asked.
+    /// `instructions` (`gglib-test-proc`'s).
     pub(crate) fn with(self, name: &str, instructions: &str) -> Self {
         let record = self.dir.path().join("calls").join(name);
         gglib_test_proc::install(

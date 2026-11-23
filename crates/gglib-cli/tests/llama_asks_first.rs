@@ -9,9 +9,6 @@
 
 #[path = "support/stand_in_tools.rs"]
 mod stand_in_tools;
-#[cfg(unix)]
-#[path = "support/stub_tools.rs"]
-mod stub_tools;
 
 use gglib_core::utils::process::cmd;
 use std::io::Write;
@@ -371,19 +368,15 @@ fn a_source_install_with_the_build_tools_asks_before_it_clones_anything() {
 /// A clone's own output is piped into the build's log lines, and they are
 /// drawn with the spinner over the clone. Off a terminal neither is drawn, so
 /// nothing git says of the clone is left on stdout.
-// Unix only: its git stand-in must answer by its arguments, which the stand-in program cannot do yet.
-#[cfg(unix)]
 #[test]
 fn a_source_install_that_is_agreed_to_clones_under_its_spinner() {
-    let _guard = stub_tools::one_at_a_time();
     let root = tempfile::tempdir().unwrap();
-    let machine = stub_tools::Machine::bare()
+    let machine = stand_in_tools::Machine::bare()
         .with(
             "git",
-            "case \"$*\" in\n\
-             *clone*) echo \"Cloning into 'a stand-in'...\" >&2; exit 1 ;;\n\
-             *) echo 'git version 2.43.0' ;;\n\
-             esac",
+            "when clone eprint Cloning into 'a stand-in'...\n\
+             when clone exit 1\n\
+             print git version 2.43.0",
         )
         .with_tool("cmake", "cmake version 3.28.1")
         .with_tool("g++", "g++ (GCC) 14.2.1 20240910")
