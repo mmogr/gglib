@@ -5,8 +5,8 @@
 //! [`OnLimit::Wait`], told through the status line ([`hub_wait_notice`]).
 //! Ctrl-C ends the wait by ending the command, since none of these commands
 //! listens for it before its first Hub reads are done. `up`'s download
-//! monitor does listen, so a model queued from it with `a` holds a Ctrl-C
-//! until its wait is over, fifteen minutes at most.
+//! monitor does listen for it, and a model queued from it with `a` is
+//! queued under its own Ctrl-C: a press while that waits drops it unqueued.
 //!
 //! Every other command keeps [`OnLimit::Surface`]: one that answers
 //! requests (`daemon run`, `web`, `serve`, `proxy`, `chat`, `mcp`) leaves
