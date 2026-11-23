@@ -31,6 +31,7 @@ const EXITED_THEN_ASKED_ID: u32 = 999_704;
 const SHUTDOWN_ID: u32 = 999_705;
 const EXITS_CLEANLY_ID: u32 = 999_706;
 const LAUNCHED_ID: u32 = 999_707;
+const REAPED_ID: u32 = 999_708;
 
 /// How long a test waits for a line it expects.
 const LOG_WAIT: Duration = Duration::from_secs(10);
@@ -201,6 +202,9 @@ async fn a_llama_server_that_exits_by_itself_leaves_its_status_and_last_lines() 
     let pid = spawn_watched(&core, qwen(dir.path(), EXITS_ID, 19_800), EXITS_ID).await;
     let log = capture.once_it_says(EXITED).await;
     clean_up(&core, EXITS_ID).await;
+    // A second report would be written once the output settles, as the
+    // first was.
+    tokio::time::sleep(QUIET_WAIT).await;
     let after_stop = capture.text();
 
     let report = report_in(
@@ -413,6 +417,61 @@ fn a_zero_or_a_stop_signal_is_a_stop_and_anything_else_a_failure() {
     ] {
         assert!(!is_a_stop(failure.0, failure.1), "{failure:?}");
     }
+}
+
+/// A server nothing watches, found dead by `cleanup_dead`: the sweep that
+/// takes it out of tracking reports how it ended and what it printed, at
+/// warn, once; a second sweep and a stop asked of it afterwards add
+/// nothing.
+#[tokio::test]
+async fn a_server_cleanup_dead_takes_is_reported_once() {
+    let capture = Capture::start();
+    let dir = tempfile::tempdir().expect("temp dir");
+    let core = core(dir.path(), 19_870, &prints_then_exits(SAID, 4), "sleep 30");
+    // Not watched: only the sweep can tell of it.
+    let (_, pid) = core
+        .write()
+        .await
+        .spawn(qwen(dir.path(), REAPED_ID, 19_870))
+        .expect("spawn");
+    let output = core.read().await.output_of(REAPED_ID).expect("tracked");
+    let _ = tokio::time::timeout(LOG_WAIT, output.ended()).await;
+    let mut swept = Vec::new();
+    for _ in 0..100 {
+        swept = core.write().await.cleanup_dead();
+        if !swept.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(swept, [REAPED_ID], "the sweep found it dead");
+
+    let log = capture.once_it_says(EXITED).await;
+    assert!(core.write().await.cleanup_dead().is_empty());
+    assert!(
+        core.write()
+            .await
+            .kill(REAPED_ID, StopReason::Asked)
+            .await
+            .is_err(),
+        "the sweep stopped tracking it"
+    );
+    tokio::time::sleep(QUIET_WAIT).await;
+    let after = capture.text();
+    delete_pidfile(i64::from(REAPED_ID)).ok();
+
+    let report = report_in(
+        &log,
+        &format!(
+            "llama-server for qwen (model {REAPED_ID}, pid {pid}, port 19870) exited by \
+             itself, with exit code 4. The last 3 lines it printed:"
+        ),
+    );
+    for line in SAID {
+        assert!(report.contains(&format!("\n  | {line}")), "{log}");
+    }
+    assert_eq!(after.matches("llama-server for qwen").count(), 1, "{after}");
+    assert!(!after.contains("stopped, as"), "{after}");
 }
 
 /// The issue's case through a launch: an image model launched, healthy and
