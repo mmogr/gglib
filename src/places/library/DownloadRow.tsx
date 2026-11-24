@@ -18,7 +18,10 @@
  * them. One that gave up on a quiet connection or was cut off carries on
  * from its part on disk (an upgrade from its commit's own part); one whose
  * bytes failed their check starts over. × takes the ending off the queue,
- * so it does not come back.
+ * so it does not come back. A download held until Hugging Face's rate
+ * limit lifts is a row of its own (`HeldRow`) after the queue's, unless the
+ * queue has it already (queued elsewhere meanwhile), and a failed one whose
+ * Retry is held shows only that row.
  *
  * @module places/library/DownloadRow
  */
@@ -30,10 +33,12 @@ import { IconButton } from '../../components/ui/IconButton';
 import { Icon } from '../../components/ui/Icon';
 import type { DownloadRow as Row, FinishedDownload } from '../../services/transport/types/downloads';
 import { useDownloads } from '../../services/downloadsRegistry';
+import { useHeldDownloads } from '../../services/heldDownloads';
 import { cancelDownload, queueDownload, removeFromQueue, upgradeAgain } from '../../services/downloadsEvents';
 import { appLogger } from '../../services/platform';
 import { Group } from './Group';
 import { matchesDownload } from './groups';
+import { HeldRow } from './HeldRow';
 
 interface DownloadRowProps {
   row: Row;
@@ -99,7 +104,7 @@ export const DownloadRow: FC<DownloadRowProps> = ({ row, cancelling, onCancel, o
 const FailedRow: FC<{ ended: FinishedDownload }> = ({ ended }) => {
   const why = ended.outcome.kind === 'failed' ? ended.outcome.error : ended.text;
   const retry = () => {
-    const again = ended.upgrade_of !== undefined ? upgradeAgain(ended.upgrade_of) : queueDownload(ended.model_id, ended.quantization);
+    const again = ended.upgrade_of !== undefined ? upgradeAgain(ended, ended.upgrade_of) : queueDownload(ended.model_id, ended.quantization);
     again.catch((error: unknown) => appLogger.error('service.download', 'Retry failed', { error }));
   };
   return (
@@ -131,19 +136,24 @@ const FailedRow: FC<{ ended: FinishedDownload }> = ({ ended }) => {
 };
 
 /**
- * The Downloading group: the queue's rows that match `query`, then the
- * downloads that failed and are not queued again, until each is taken off
- * the queue; or nothing.
+ * The Downloading group: the queue's rows that match `query`, the downloads
+ * held until the Hub's limit lifts, then the downloads that failed and are
+ * neither queued nor held again, until each is taken off the queue; or
+ * nothing.
  */
 export const Downloads: FC<{ query: string }> = ({ query }) => {
   const { snapshot, cancellingId } = useDownloads();
+  const held = useHeldDownloads();
   const rows = snapshot ? [...(snapshot.active ? [snapshot.active] : []), ...snapshot.waiting] : [];
   const shown = rows.filter((row) => matchesDownload(row, query));
-  const queued = new Set(rows.map((row) => row.id));
+  const inQueue = new Set(rows.map((row) => row.id));
+  // The queue's own row for a download says more than the page's held one.
+  const heldShown = held.filter((h) => !inQueue.has(h.id) && matchesDownload(h, query));
+  const again = new Set([...inQueue, ...held.map((h) => h.id)]);
   const failed = (snapshot?.finished ?? []).filter(
-    (ended) => ended.outcome.kind === 'failed' && !queued.has(ended.id) && matchesDownload(ended, query),
+    (ended) => ended.outcome.kind === 'failed' && !again.has(ended.id) && matchesDownload(ended, query),
   );
-  if (shown.length === 0 && failed.length === 0) return null;
+  if (shown.length === 0 && heldShown.length === 0 && failed.length === 0) return null;
   return (
     <Group label="Downloading">
       {shown.map((row) => (
@@ -154,6 +164,9 @@ export const Downloads: FC<{ query: string }> = ({ query }) => {
           onCancel={(id) => void cancelDownload(id)}
           onRemove={(id) => void removeFromQueue(id)}
         />
+      ))}
+      {heldShown.map((h) => (
+        <HeldRow key={h.id} held={h} />
       ))}
       {failed.map((ended) => (
         <FailedRow key={ended.id} ended={ended} />

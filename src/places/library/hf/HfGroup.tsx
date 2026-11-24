@@ -10,7 +10,10 @@
  * After Enter it holds the Hub's repos as rows (a pick opens the repo's
  * preview in the inspector; with the arrow keys, the repo a run of keys
  * ends on, `KEY_PICK_MS` after the last) and "More results" while the Hub has more, or
- * a `user/repo:QUANT` download as its one row, or why it failed.
+ * a `user/repo:QUANT` download as its one row, or why it failed. A search
+ * or a repo Hugging Face rate limits says when the limit lifts in the same
+ * place, and its answer replaces the line when it comes; a "More results"
+ * that waits or fails says so under the rows already listed.
  *
  * Every figure is the daemon's: a repo's parameter count is the summary's
  * (#1740: the Hub's, which can be a draft's), whether it calls tools is the
@@ -24,17 +27,16 @@ import { useEffect, useRef, useState, type FC, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { Icon } from '../../../components/ui/Icon';
+import { HubWaitLine } from '../../../components/status/HubWaitLine';
 import { IconButton } from '../../../components/ui/IconButton';
 import { Chip } from '../../../components/ui/Chip';
 import { Listbox, tabStop } from '../../../components/ui/Listbox';
-import { useToastContext } from '../../../contexts/ToastContext';
-import { queueDownload } from '../../../services/downloadsEvents';
+import { useQueueDownload } from '../../../hooks/useQueueDownload';
 import { useModelLibrary } from '../../../services/modelRegistry';
 import { useThisMachine } from '../../../services/hostRegistry';
 import { getRecommendedModel, getSetupStatus } from '../../../services/transport/api/setup';
 import type { HfModelKind, HfModelSummary } from '../../../types';
 import type { RecommendationDto } from '../../../types/setup';
-import { formatError } from '../../../utils/errors';
 import { formatNumber, formatParamCount, formatRecommendation } from '../../../utils/format';
 import { Group, Note } from '../Group';
 import { Menu } from '../../../components/ui/Menu';
@@ -56,21 +58,6 @@ interface HfGroupProps {
   onPick: (model: HfModelSummary, replace?: boolean) => void;
   /** The daemon would refuse another download. */
   queueFull: boolean;
-}
-
-/** Queue a download, and say it was queued or why not. */
-function useQueue() {
-  const { showToast } = useToastContext();
-  return async (repo: string, quant?: string): Promise<boolean> => {
-    try {
-      await queueDownload(repo, quant);
-      showToast(`Download queued: ${repo}`, 'success');
-      return true;
-    } catch (err) {
-      showToast(formatError(err), 'error');
-      return false;
-    }
-  };
 }
 
 /** A row with a name, a line under it, and one control always shown. */
@@ -144,7 +131,7 @@ const Suggestion: FC<{ answer: RecommendationDto | null; noneReason: string | nu
   onDismiss,
 }) => {
   const { models } = useModelLibrary();
-  const queue = useQueue();
+  const queue = useQueueDownload();
   const machine = useThisMachine();
   if (answer === null) return <Note>{noneReason ?? "Nothing gglib would suggest fits. Search for a smaller model below."}</Note>;
   return (
@@ -196,8 +183,8 @@ const HfRow: FC<{ model: HfModelSummary; picked: boolean; tabIndex: 0 | -1; onPi
 const KEY_PICK_MS = 150;
 
 export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull }) => {
-  const { shown, hf, openError, setQuery } = search;
-  const queue = useQueue();
+  const { shown, hf, openError, openLiftsAt, setQuery } = search;
+  const queue = useQueueDownload();
   const suggestion = useSuggestion(shown?.kind === 'suggestion');
   // The key pick waiting, and whether the run it ends began on the picked repo.
   const pending = useRef<{ timer: ReturnType<typeof setTimeout>; replace: boolean } | null>(null);
@@ -222,7 +209,7 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
   };
   // Nothing to say while a named repo is still being read, or while the
   // suggestion is asked, failed or dismissed.
-  if (shown === null || (shown.kind === 'open' && openError === null)) return null;
+  if (shown === null || (shown.kind === 'open' && openError === null && openLiftsAt === null)) return null;
   if (shown.kind === 'suggestion' && suggestion.answer === undefined) return null;
 
   // Kind and sort act on a search, so they are drawn only with one.
@@ -257,7 +244,7 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
       body = <Suggestion answer={suggestion.answer ?? null} noneReason={suggestion.noneReason} queueFull={queueFull} onDismiss={suggestion.dismiss} />;
       break;
     case 'open':
-      body = <Note>{openError}</Note>;
+      body = openLiftsAt !== null ? <HubWaitLine liftsAt={openLiftsAt} className="px-md py-xs" /> : <Note>{openError}</Note>;
       break;
     case 'download':
       body = (
@@ -279,11 +266,11 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
     case 'search':
       body = hf.loading ? (
         <ModelListSkeleton />
-      ) : hf.error !== null ? (
-        <Note>{hf.error}</Note>
       ) : (
         <>
-          {hf.models.length === 0 && !hf.hasMore && <Note>{`No GGUF repos match '${shown.query}'.`}</Note>}
+          {hf.models.length === 0 && !hf.hasMore && hf.error === null && hf.liftsAt === null && (
+            <Note>{`No GGUF repos match '${shown.query}'.`}</Note>
+          )}
           {hf.models.length > 0 && (
             <Listbox label="Hugging Face" onPick={(i, replace) => pickByKey(hf.models[i], replace)}>
               {hf.models.map((m, i) => (
@@ -300,7 +287,8 @@ export const HfGroup: FC<HfGroupProps> = ({ search, pickedId, onPick, queueFull 
               ))}
             </Listbox>
           )}
-          {hf.hasMore && (
+          {hf.liftsAt !== null ? <HubWaitLine liftsAt={hf.liftsAt} className="px-md py-xs" /> : hf.error !== null && <Note>{hf.error}</Note>}
+          {hf.hasMore && hf.liftsAt === null && (
             <Button variant="ghost" size="sm" className="mx-md self-start" isLoading={hf.loadingMore} onClick={hf.loadMore}>
               More results
             </Button>

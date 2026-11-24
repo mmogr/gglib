@@ -16,6 +16,7 @@
 
 import type { GgufModel } from '../../types';
 import type { ModelInfo } from '../../types/generated/ModelInfo';
+import type { HeldDownload } from '../../services/heldDownloads';
 import type { DownloadRow, FinishedDownload } from '../../services/transport/types/downloads';
 import { canSee } from '../../utils/canSee';
 import { formatParamCount, formatSize } from '../../utils/format';
@@ -89,9 +90,14 @@ export function matchesFar(model: ModelInfo, query: string): boolean {
   return wordsOf(query).every((word) => text.includes(word));
 }
 
-/** Whether a download, queued or ended, matches every word of `query`, by its name. */
-export function matchesDownload(download: DownloadRow | FinishedDownload, query: string): boolean {
-  const title = typeof download.text === 'string' ? (download as FinishedDownload).title : download.text.title;
+/** Whether a download, queued, held or ended, matches every word of `query`, by its name (a held one's repository and quantization). */
+export function matchesDownload(download: DownloadRow | FinishedDownload | HeldDownload, query: string): boolean {
+  const title =
+    'repo' in download
+      ? [download.repo, download.quantization ?? ''].join(' ')
+      : typeof download.text === 'string'
+        ? (download as FinishedDownload).title
+        : download.text.title;
   const text = title.toLowerCase();
   return wordsOf(query).every((word) => text.includes(word));
 }

@@ -39,7 +39,8 @@ The event half is functions of `events/sse.ts` (`subscribe`, `onEventStreamOpen`
 | File | Role |
 |------|------|
 | `index.ts` | `getTransport()` factory; spreads the API client and event bus into one object, then memoises |
-| `errors.ts` | `TransportError` with typed error codes (`NOT_SUPPORTED`, `NETWORK`, etc.) |
+| `errors.ts` | `TransportError` with typed error codes (`NOT_SUPPORTED`, `NETWORK`, etc.); `hubLimitOf`, the Hub's rate limit a refusal of the daemon's `hub_rate_limited` type carries, its wait held to the daemon's ceiling of 900 s |
+| `hubLimit.ts` | `whenHubAllows`: a request the Hub's limit refused waits until a second after it lifts and is made again, five limited answers at most, telling its caller while it waits; the one place the page times that wait |
 | `mappers.ts` | Maps frontend types to backend request DTOs (`toStartServerRequest()`, etc.) |
 | `sanitizeMessages.ts` | Strips `<think>` tags and unsupported fields before sending to llama-server |
 | `parseTitleResponse.ts` | Parses LLM title generation responses |

@@ -2,7 +2,8 @@
  * Setup, behind the gate, driven through the real routes: the gate only
  * while the daemon says setup is not done; This Mac's facts and folder
  * Change; First model's suggestion in the route's own words, Get it with
- * its row's progress, Skip, Choose another and Join; Endpoint turned on,
+ * its row's progress (held first while Hugging Face's rate limit refuses
+ * it), Skip, Choose another and Join; Endpoint turned on,
  * its proof waiting on the download without holding anyone, and the
  * autostart setting by its wire name; Connect with the Model ID filled in
  * and Open gglib landing on the new model; "Already done" after `gglib up`;
@@ -53,6 +54,7 @@ vi.mock('../../../src/services/transport/api/setup', () => api);
 vi.mock('../../../src/services/remoteEvents', () => ({ refreshRemoteStatus: vi.fn(async () => true) }));
 vi.mock('../../../src/places/library/LibraryPlace', () => ({ default: () => <main aria-label="Library" /> }));
 
+import { TransportError } from '../../../src/services/transport/errors';
 import { cleanupDownloadEvents, initDownloadEvents } from '../../../src/services/downloadsEvents';
 import { takeQueueSnapshot } from '../../../src/services/downloadsRegistry';
 import { cleanupModelEvents, initModelEvents, refreshModels } from '../../../src/services/modelEvents';
@@ -275,6 +277,64 @@ describe('setup', () => {
     expect(await within(region).findByRole('alert')).toHaveTextContent('Qwen3-8B failed: disk full');
     await user.click(within(region).getByRole('button', { name: 'Retry' }));
     expect(transport.queueDownload).toHaveBeenCalledTimes(2);
+  });
+
+  it("holds a Get it Hugging Face's rate limit refused, says the wait, then follows the download it becomes", async () => {
+    transport.queueDownload.mockRejectedValueOnce(
+      new TransportError('INTERNAL', "Could not queue the download: Hugging Face's rate limit lifts in 0:09", {
+        status: 429,
+        statusText: 'Too Many Requests',
+        type: 'hub_rate_limited',
+        metadata: { bucket: 'resolvers', retry_after_secs: 9 },
+      }),
+    );
+    const { user } = start();
+    await reach(user, 'First model');
+    const region = await step('First model');
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await user.click(within(region).getByRole('button', { name: 'Get it' }));
+
+      expect(await within(region).findByText(/^waiting for Hugging Face's rate limit, 0:(10|09)$/)).toBeInTheDocument();
+      expect(within(region).queryByRole('alert')).not.toBeInTheDocument();
+      expect(within(region).getByRole('button', { name: 'Continue' })).toBeEnabled();
+
+      queue.snapshot = queueSnapshot({ revision: 5, active: ROW });
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(await within(region).findByText('1.25 GiB / 5.00 GiB · 52.0 MB/s · ETA 1m 12s')).toBeInTheDocument();
+      expect(within(region).queryByText(/waiting for Hugging Face/)).not.toBeInTheDocument();
+      expect(transport.queueDownload).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('offers Get it again when a held Get it then fails', async () => {
+    transport.queueDownload
+      .mockRejectedValueOnce(
+        new TransportError('INTERNAL', "Could not queue the download: Hugging Face's rate limit lifts in 0:09", {
+          status: 429,
+          statusText: 'Too Many Requests',
+          type: 'hub_rate_limited',
+          metadata: { bucket: 'resolvers', retry_after_secs: 9 },
+        }),
+      )
+      .mockRejectedValueOnce(new Error('queue full: max 10 downloads'));
+    const { user } = start();
+    await reach(user, 'First model');
+    const region = await step('First model');
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await user.click(within(region).getByRole('button', { name: 'Get it' }));
+      expect(await within(region).findByText(/^waiting for Hugging Face's rate limit, /)).toBeInTheDocument();
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(await within(region).findByRole('button', { name: 'Get it' })).toBeInTheDocument();
+      expect(within(region).queryByText(/waiting for Hugging Face/)).not.toBeInTheDocument();
+      expect(transport.queueDownload).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("says a refusal as it came, with Retry", async () => {

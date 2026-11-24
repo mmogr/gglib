@@ -10,19 +10,24 @@
  *
  * The summary comes with the pick that opened the repo (the navigation's
  * state) or is read by the address; the listing and the pick are read here,
- * each dropped if the repo changed meanwhile.
+ * each dropped if the repo changed meanwhile. A read Hugging Face rate
+ * limits waits until the limit lifts and is made again (`useHubRead`); the
+ * panel says so in one line, in the listing's place, or under the summary
+ * while only the summary waits. A pick that waits says nothing: ★ comes
+ * when it arrives.
  *
  * @module inspector/hf/HfInspector
  */
 
-import { useEffect, useState, type FC } from 'react';
+import { useState, type FC } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { ChevronRight, ExternalLink, X } from 'lucide-react';
 import { paths } from '../../app/paths';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
-import { useToastContext } from '../../contexts/ToastContext';
-import { queueDownload } from '../../services/downloadsEvents';
+import { HubWaitLine } from '../../components/status/HubWaitLine';
+import { useHubRead } from '../../hooks/useHubRead';
+import { useQueueDownload } from '../../hooks/useQueueDownload';
 import { useDownloads } from '../../services/downloadsRegistry';
 import { openUrl } from '../../services/platform';
 import { getTransport } from '../../services/transport';
@@ -40,54 +45,30 @@ export interface HfPickState {
 
 type Listing = { quants: HfQuantization[]; image: HfImagePreview | null } | { error: string };
 
-/**
- * One read of `repo`, its answer held only while it is still the repo asked.
- * A read still out when the repo changes is stopped (`signal`): a Hub read
- * can take minutes, and each one out holds one of the page's six connections
- * to the daemon.
- */
-function useRead<T>(read: (signal: AbortSignal) => Promise<T>, onError: (err: unknown) => T | null, seed: T | null = null): T | null {
-  const [answer, setAnswer] = useState<T | null>(seed);
-  useEffect(() => {
-    if (seed !== null) return;
-    let live = true;
-    const gone = new AbortController();
-    read(gone.signal)
-      .then((value) => live && setAnswer(value))
-      .catch((err: unknown) => live && setAnswer(onError(err)));
-    return () => {
-      live = false;
-      gone.abort();
-    };
-    // The inspector is keyed by the repo, so these are read once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return answer;
-}
-
 export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { showToast } = useToastContext();
+  const queue = useQueueDownload();
   const { snapshot } = useDownloads();
   const handed = (location.state as Partial<HfPickState> | null)?.hf;
-  const summary = useRead<HfModelSummary | { error: string }>(
-    (signal) => getTransport().getHfModelSummary(repo, signal),
-    (err) => ({ error: formatError(err) }),
-    handed?.id === repo ? handed : null,
-  );
-  const listing = useRead<Listing>(
+  const summaryRead = useHubRead<HfModelSummary | { error: string }>((signal) => getTransport().getHfModelSummary(repo, signal), {
+    onError: (err) => ({ error: formatError(err) }),
+    seed: handed?.id === repo ? handed : null,
+  });
+  const listingRead = useHubRead<Listing>(
     async (signal) => {
       const response = await getTransport().getHfQuantizations(repo, signal);
       // A projector is fetched with a model, never on its own, so it is not a row.
       const quants = response.quantizations.filter((q) => q.role !== 'Projector').sort((a, b) => a.size_bytes - b.size_bytes);
       return { quants, image: response.image ?? null };
     },
-    (err) => ({ error: formatError(err) }),
+    { onError: (err) => ({ error: formatError(err) }) },
   );
   // Asked beside the listing, which shows at once: the download's own pick,
   // which reads further than the listing's heads. A failure marks nothing.
-  const pick = useRead<HfPickResponse | null>((signal) => getTransport().getHfPick(repo, signal), () => null);
+  const pick = useHubRead<HfPickResponse | null>((signal) => getTransport().getHfPick(repo, signal), { onError: () => null }).answer;
+  const summary = summaryRead.answer;
+  const listing = listingRead.answer;
   const [picked, setPicked] = useState<string | null>(null);
 
   const listed = listing && 'quants' in listing ? listing.quants : [];
@@ -97,15 +78,6 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
   // The row chosen, else gglib's pick.
   const selected = quants.find((q) => q.label === picked) ?? quants.find((q) => q.picked);
   const model = summary && 'id' in summary ? summary : null;
-
-  const download = async (quant: HfQuantization) => {
-    try {
-      await queueDownload(repo, quant.label);
-      showToast(`Download queued: ${repo}`, 'success');
-    } catch (err) {
-      showToast(formatError(err), 'error');
-    }
-  };
 
   return (
     <div className="flex flex-col gap-lg p-md">
@@ -126,9 +98,12 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
           {model?.supports_tool_calls && <span>calls tools</span>}
         </p>
         {summary && 'error' in summary && <p className="m-0 text-xs text-text-secondary">{summary.error}</p>}
+        {summaryRead.liftsAt !== null && listingRead.liftsAt === null && <HubWaitLine liftsAt={summaryRead.liftsAt} />}
       </div>
 
-      {listing === null ? (
+      {listingRead.liftsAt !== null ? (
+        <HubWaitLine liftsAt={listingRead.liftsAt} />
+      ) : listing === null ? (
         <p className="m-0 text-xs text-text-secondary">Reading the repo's files…</p>
       ) : 'error' in listing ? (
         <p role="alert" className="m-0 text-xs text-text-secondary">{listing.error}</p>
@@ -136,7 +111,7 @@ export const HfInspector: FC<{ repo: string }> = ({ repo }) => {
         <p className="m-0 text-xs text-text-secondary">This repo has no GGUF files.</p>
       ) : (
         <div className="flex flex-col gap-sm">
-          <PickASize quantizations={quants} selected={selected} onSelect={(q) => setPicked(q.label)} onDownload={(q) => void download(q)} queueFull={snapshot?.full ?? false} />
+          <PickASize quantizations={quants} selected={selected} onSelect={(q) => setPicked(q.label)} onDownload={(q) => void queue(repo, q.label)} queueFull={snapshot?.full ?? false} />
           {selected && <ProjectorNote quantization={selected} />}
           {listing.image && <CompanionNote image={listing.image} />}
         </div>

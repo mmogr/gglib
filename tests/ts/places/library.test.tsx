@@ -3,8 +3,9 @@
  * routes and registries: groups of rows in their order, a model in one of
  * them, the words beside a row from the daemon's own fields, the search and
  * the sort, the paired machine's group, the empty, failed and loading
- * states, downloads as rows, and the llama.cpp banner. The search's way to
- * Hugging Face is `librarySearch.test.tsx`.
+ * states, downloads as rows (one held until Hugging Face's rate limit
+ * lifts among them), and the llama.cpp banner. The search's way to Hugging
+ * Face is `librarySearch.test.tsx`.
  *
  * The transport is the fake; the event stream is played through the
  * handlers the registries subscribe with.
@@ -75,8 +76,10 @@ vi.mock('../../../src/services/clients/proxyDashboard', () => ({
   },
 }));
 
+import { TransportError } from '../../../src/services/transport/errors';
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
-import { cleanupDownloadEvents, initDownloadEvents } from '../../../src/services/downloadsEvents';
+import { cleanupDownloadEvents, initDownloadEvents, onDownloadEndings } from '../../../src/services/downloadsEvents';
+import { takeQueueSnapshot } from '../../../src/services/downloadsRegistry';
 import { cleanupServerEvents, initServerEvents } from '../../../src/services/serverEvents';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import { applyProxyStatus, ingestProxyEvent, resetProxyState } from '../../../src/services/proxyRegistry';
@@ -127,6 +130,32 @@ function renderLibrary(path = '/library') {
   initServerEvents();
   return renderApp(path);
 }
+
+/** The daemon's refusal of a queue request for Hugging Face's rate limit. */
+const hubLimited = (secs: number) =>
+  new TransportError('INTERNAL', "Could not queue the download: Hugging Face's rate limit lifts in 2:13", {
+    status: 429,
+    statusText: 'Too Many Requests',
+    type: 'hub_rate_limited',
+    metadata: { bucket: 'resolvers', retry_after_secs: secs },
+  });
+
+/** A download that failed, as the queue's finished entry says it. */
+const failedEnding = (repo: string, quant: string, extra: Record<string, unknown> = {}) => ({
+  id: `${repo}:${quant}`,
+  title: `${repo}:${quant}`,
+  outcome: { kind: 'failed' as const, error: 'connection reset' },
+  text: `${repo}:${quant}: download failed: connection reset`,
+  model_id: repo,
+  quantization: quant,
+  ...extra,
+});
+
+/** A countdown's two copies: the one shown, ticking, and the one a screen reader is told once per wait. */
+const copies = (line: HTMLElement) => ({
+  shown: line.querySelector('[aria-hidden="true"]')?.textContent ?? '',
+  told: line.querySelector('.sr-only')?.textContent ?? '',
+});
 
 /** The names of the library's groups, in the order drawn. */
 const groupNames = () => screen.getAllByRole('region').map((r) => r.getAttribute('aria-label')).filter((n) => n !== 'Library');
@@ -425,6 +454,185 @@ describe('the library place', () => {
     await user.click(within(row).getByRole('button', { name: 'Retry' }));
     expect(transport.upgradeModel).toHaveBeenCalledWith(7);
     expect(transport.queueDownload).not.toHaveBeenCalled();
+  });
+
+  describe("a queue request Hugging Face's rate limit refused", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('is held as a row with the wait counting down, several at once, then queued and replaced by the real download', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      downloads.queue = queueSnapshot({ revision: 3, finished: [failedEnding('owner/zeta-GGUF', 'Q8_0'), failedEnding('owner/b', 'Q4_K_M')] });
+      transport.queueDownload.mockRejectedValueOnce(hubLimited(133)).mockRejectedValueOnce(hubLimited(133));
+      renderLibrary();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('button', { name: 'Retry' }));
+      await user.click(within(screen.getByRole('group', { name: 'owner/b:Q4_K_M' })).getByRole('button', { name: 'Retry' }));
+
+      const held = await screen.findByRole('group', { name: 'owner/zeta-GGUF' });
+      expect(held).toHaveTextContent('Q8_0');
+      const told = copies(within(held).getByRole('status')).told;
+      expect(told).toMatch(/^waiting for Hugging Face's rate limit, 2:1[34]$/);
+      expect(copies(within(held).getByRole('status')).shown).toMatch(/^waiting for Hugging Face's rate limit, 2:1[34]$/);
+      expect(screen.getByRole('group', { name: 'owner/b' })).toHaveTextContent('Q4_K_M');
+      // A Retry held shows only the held row, not its failure as well.
+      expect(screen.queryByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).not.toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(2_000));
+      expect(copies(within(held).getByRole('status')).shown).toMatch(/, 2:1[12]$/);
+      expect(copies(within(held).getByRole('status')).told).toBe(told);
+
+      downloads.queue = queueSnapshot({ revision: 4, active: runningRow({ id: 'owner/zeta-GGUF:Q8_0' }), waiting: [] });
+      await act(() => vi.advanceTimersByTimeAsync(132_000));
+      await waitFor(() => expect(screen.queryByRole('group', { name: 'owner/zeta-GGUF' })).not.toBeInTheDocument());
+      expect(screen.queryByRole('group', { name: 'owner/b' })).not.toBeInTheDocument();
+      // The queue's own row, in its own words.
+      expect(within(screen.getByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('progressbar')).toBeInTheDocument();
+      expect(transport.queueDownload).toHaveBeenCalledTimes(4);
+      expect(transport.queueDownload.mock.calls.slice(2).map(([p]) => p)).toEqual([
+        { modelId: 'owner/zeta-GGUF', quantization: 'Q8_0' },
+        { modelId: 'owner/b', quantization: 'Q4_K_M' },
+      ]);
+    });
+
+    it('is dropped with ×, and nothing is sent', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      downloads.queue = queueSnapshot({ revision: 3, finished: [failedEnding('owner/zeta-GGUF', 'Q8_0')] });
+      transport.queueDownload.mockRejectedValueOnce(hubLimited(133));
+      renderLibrary();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('button', { name: 'Retry' }));
+      await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF' })).getByRole('button', { name: 'Drop owner/zeta-GGUF' }));
+
+      expect(screen.queryByRole('group', { name: 'owner/zeta-GGUF' })).not.toBeInTheDocument();
+      // Its failure is back, with Retry.
+      expect(await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(300_000));
+      expect(transport.queueDownload).toHaveBeenCalledTimes(1);
+    });
+
+    it('joins a second Retry made while the first is still out, so one × drops both', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      downloads.queue = queueSnapshot({ revision: 3, finished: [failedEnding('owner/zeta-GGUF', 'Q8_0')] });
+      let refuse: (err: unknown) => void = () => {};
+      transport.queueDownload.mockImplementationOnce(() => new Promise((_resolve, reject) => (refuse = reject)));
+      renderLibrary();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const failed = await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' });
+
+      await user.click(within(failed).getByRole('button', { name: 'Retry' }));
+      await user.click(within(failed).getByRole('button', { name: 'Retry' }));
+      expect(transport.queueDownload).toHaveBeenCalledTimes(1);
+      act(() => refuse(hubLimited(133)));
+      await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF' })).getByRole('button', { name: 'Drop owner/zeta-GGUF' }));
+
+      await act(() => vi.advanceTimersByTimeAsync(300_000));
+      expect(transport.queueDownload).toHaveBeenCalledTimes(1);
+    });
+
+    it('says a held download that then fails as a failure is said, and shows its ending again', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      downloads.queue = queueSnapshot({ revision: 3, finished: [failedEnding('owner/zeta-GGUF', 'Q8_0')] });
+      transport.queueDownload.mockRejectedValueOnce(hubLimited(9)).mockRejectedValueOnce(new Error('queue full: max 10 downloads'));
+      // What the app's download toasts are told.
+      const failed = vi.fn();
+      const stop = onDownloadEndings({ completed: () => {}, failed });
+      renderLibrary();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('button', { name: 'Retry' }));
+      await screen.findByRole('group', { name: 'owner/zeta-GGUF' });
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+
+      await waitFor(() => expect(failed).toHaveBeenCalledWith({ id: 'owner/zeta-GGUF:Q8_0', text: 'owner/zeta-GGUF:Q8_0 was not queued: queue full: max 10 downloads' }));
+      stop();
+      expect(screen.queryByRole('group', { name: 'owner/zeta-GGUF' })).not.toBeInTheDocument();
+      expect(screen.getByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).toBeInTheDocument();
+      expect(transport.queueDownload).toHaveBeenCalledTimes(2);
+    });
+
+    it('says it is being queued, with no ×, while the request is sent again after the wait', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      downloads.queue = queueSnapshot({ revision: 3, finished: [failedEnding('owner/zeta-GGUF', 'Q8_0')] });
+      let answer: (r: { id: string }) => void = () => {};
+      transport.queueDownload.mockRejectedValueOnce(hubLimited(9)).mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+      renderLibrary();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('button', { name: 'Retry' }));
+      const held = await screen.findByRole('group', { name: 'owner/zeta-GGUF' });
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+
+      await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledTimes(2));
+      expect(held).toHaveTextContent('queueing…');
+      expect(within(held).queryByRole('button', { name: 'Drop owner/zeta-GGUF' })).not.toBeInTheDocument();
+
+      downloads.queue = queueSnapshot({ revision: 4, active: runningRow({ id: 'owner/zeta-GGUF:Q8_0' }), waiting: [] });
+      await act(async () => answer({ id: 'owner/zeta-GGUF:Q8_0' }));
+      await waitFor(() => expect(screen.queryByRole('group', { name: 'owner/zeta-GGUF' })).not.toBeInTheDocument());
+    });
+
+    it("gives way to the queue's own row for the same download, and settles as it when the limit lifts", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      downloads.queue = queueSnapshot({ revision: 3, finished: [failedEnding('owner/zeta-GGUF', 'Q8_0')] });
+      transport.queueDownload.mockRejectedValueOnce(hubLimited(9));
+      const failed = vi.fn();
+      const stop = onDownloadEndings({ completed: () => {}, failed });
+      renderLibrary();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('button', { name: 'Retry' }));
+      await screen.findByRole('group', { name: 'owner/zeta-GGUF' });
+      // Queued meanwhile from elsewhere: the queue's row alone is shown.
+      downloads.queue = queueSnapshot({ revision: 10, active: runningRow({ id: 'owner/zeta-GGUF:Q8_0' }), waiting: [] });
+      act(() => takeQueueSnapshot(downloads.queue as ReturnType<typeof queueSnapshot>));
+      expect(screen.queryByRole('group', { name: 'owner/zeta-GGUF' })).not.toBeInTheDocument();
+      expect(within(screen.getByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('progressbar')).toBeInTheDocument();
+
+      // The daemon attaches the request to the download it has.
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledTimes(2));
+      expect(failed).not.toHaveBeenCalled();
+      stop();
+    });
+
+    it("settles a held upgrade the queue refuses as already running as that download, with no failure told", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      downloads.queue = queueSnapshot({ revision: 3, finished: [failedEnding('owner/zeta-GGUF', 'Q8_0', { upgrade_of: 7 })] });
+      transport.upgradeModel
+        .mockRejectedValueOnce(hubLimited(9))
+        .mockRejectedValueOnce(new TransportError('CONFLICT', 'A download of owner/zeta-GGUF:Q8_0 is already waiting or running. Upgrade the model once it has ended.'));
+      const failed = vi.fn();
+      const stop = onDownloadEndings({ completed: () => {}, failed });
+      renderLibrary();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('button', { name: 'Retry' }));
+      await screen.findByRole('group', { name: 'owner/zeta-GGUF' });
+      downloads.queue = queueSnapshot({ revision: 4, active: runningRow({ id: 'owner/zeta-GGUF:Q8_0' }), waiting: [] });
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+
+      await waitFor(() => expect(transport.upgradeModel).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(screen.queryByRole('group', { name: 'owner/zeta-GGUF' })).not.toBeInTheDocument());
+      expect(failed).not.toHaveBeenCalled();
+      stop();
+    });
+
+    it('holds a failed upgrade tried again the same way, and upgrades its model when the limit lifts', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      downloads.queue = queueSnapshot({ revision: 3, finished: [failedEnding('owner/zeta-GGUF', 'Q8_0', { upgrade_of: 7 })] });
+      transport.upgradeModel.mockRejectedValueOnce(hubLimited(9));
+      renderLibrary();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      await user.click(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF:Q8_0' })).getByRole('button', { name: 'Retry' }));
+      expect(within(await screen.findByRole('group', { name: 'owner/zeta-GGUF' })).getByRole('status')).toHaveTextContent(/, 0:(10|09)/);
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      await waitFor(() => expect(transport.upgradeModel).toHaveBeenCalledTimes(2));
+      expect(transport.upgradeModel).toHaveBeenLastCalledWith(7);
+      expect(transport.queueDownload).not.toHaveBeenCalled();
+    });
   });
 
   it('picks a row by the address, changing only its fill, and opens the inspector beside it', async () => {

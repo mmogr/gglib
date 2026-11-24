@@ -21,6 +21,7 @@ Shared TypeScript helpers used across the React frontend.
 | `canSee.ts` | Whether a row's model reads images: a local row's `imageInput`, or a far row's `vision` capability |
 | `thinks.ts` | Whether a row's model thinks, which is what a Thinking switch is offered for: a local row's `reasoning` tag in any case (never its capability bit), or a far row's `reasoning` capability |
 | `contextUsage.ts` | A usage meter's whole-number percent (a half rounds up, never over 100) and its severity (warning from 70, danger from 90), so a meter's colour, figure and words agree |
+| `countdown.ts` | A countdown to a deadline: the whole seconds left (rounded up, never below zero) and `clock`, m:ss; a pairing code's time left and the wait for Hugging Face's rate limit |
 | `dbTimestamp.ts` | Parse a database timestamp, reading SQLite's zone-less `YYYY-MM-DD HH:MM:SS` as the UTC it is rather than as local time |
 | `messages/` | Chat message transformation helpers |
 

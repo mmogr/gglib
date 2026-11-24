@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { readData, TransportError } from '../../../../src/services/transport/errors';
+import { hubLimitOf, readData, TransportError } from '../../../../src/services/transport/errors';
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -45,5 +45,49 @@ describe('readData', () => {
     );
     expect(TransportError.hasCode(error, 'INTERNAL')).toBe(true);
     expect((error as TransportError).message).toBe('boom');
+  });
+
+  it("keeps the Hub's limit with a refusal of that type, for hubLimitOf to read", async () => {
+    const body = {
+      error: "Failed to get quantizations: Hugging Face's rate limit lifts in 2:22",
+      status: 429,
+      type: 'hub_rate_limited',
+      metadata: { bucket: 'api', retry_after_secs: 142 },
+    };
+    const error = await readData(jsonResponse(body, { status: 429, statusText: 'Too Many Requests' })).catch((e) => e);
+    expect(error).toBeInstanceOf(TransportError);
+    expect((error as TransportError).message).toBe(body.error);
+    expect((error as TransportError).details).toEqual({
+      status: 429,
+      statusText: 'Too Many Requests',
+      type: 'hub_rate_limited',
+      metadata: { bucket: 'api', retry_after_secs: 142 },
+    });
+    expect(hubLimitOf(error)).toEqual({ bucket: 'api', retryAfterSecs: 142 });
+  });
+
+  it('reads no Hub limit from another 429, or from one with no time to wait', async () => {
+    const busy = await readData(jsonResponse({ error: 'busy', status: 429, type: 'agent_busy' }, { status: 429 })).catch((e) => e);
+    expect(hubLimitOf(busy)).toBeNull();
+    const untyped = await readData(jsonResponse({ error: 'slow down' }, { status: 429 })).catch((e) => e);
+    expect(hubLimitOf(untyped)).toBeNull();
+    const noTime = await readData(
+      jsonResponse({ error: 'x', status: 429, type: 'hub_rate_limited', metadata: { bucket: 'api' } }, { status: 429 }),
+    ).catch((e) => e);
+    expect(hubLimitOf(noTime)).toBeNull();
+    expect(hubLimitOf(new Error('plain'))).toBeNull();
+  });
+
+  it("reads no Hub limit from a wait that is not a positive number, and holds a longer one to the daemon's 900 s", async () => {
+    const refused = (metadata: Record<string, unknown>) =>
+      readData(jsonResponse({ error: 'x', status: 429, type: 'hub_rate_limited', metadata }, { status: 429 })).catch((e) => e);
+    for (const secs of [0, -5, '142', undefined, null]) {
+      expect(hubLimitOf(await refused({ bucket: 'api', retry_after_secs: secs }))).toBeNull();
+    }
+    // JSON carries no NaN; a hand-built refusal can.
+    const nan = new TransportError('INTERNAL', 'x', { status: 429, type: 'hub_rate_limited', metadata: { bucket: 'api', retry_after_secs: Number.NaN } });
+    expect(hubLimitOf(nan)).toBeNull();
+    expect(hubLimitOf(await refused({ bucket: 'api', retry_after_secs: 1e12 }))).toEqual({ bucket: 'api', retryAfterSecs: 900 });
+    expect(hubLimitOf(await refused({ bucket: 'pages', retry_after_secs: 900 }))).toEqual({ bucket: 'pages', retryAfterSecs: 900 });
   });
 });

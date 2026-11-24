@@ -9,7 +9,10 @@
  * the selected variant brings, following the selection; an image model's
  * companions, "already here" only for one present, and what they add; the
  * queue-full reason, and Download offered with room or the queue not known
- * yet; and the one line for a repo with no model.
+ * yet; and the one line for a repo with no model. A listing Hugging Face
+ * rate limits says when the limit lifts, counting down, and is read again
+ * then in the same place; leaving stops the wait. A Download the limit
+ * refused is held, said in a toast, and queued when it lifts.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -53,6 +56,7 @@ vi.mock('../../../src/services/transport/api/setup', () => ({
 }));
 vi.mock('../../../src/services/remoteEvents', () => ({ refreshRemoteStatus: vi.fn() }));
 
+import { TransportError } from '../../../src/services/transport/errors';
 import { cleanupModelEvents, initModelEvents } from '../../../src/services/modelEvents';
 import { cleanupDownloadEvents, initDownloadEvents } from '../../../src/services/downloadsEvents';
 import { renderApp } from './harness';
@@ -86,6 +90,21 @@ function renderHf(quants: HfQuantization[], image: HfImagePreview | null = null)
 }
 
 const inspector = () => screen.getByRole('complementary', { name: 'Inspector' });
+
+/** A countdown's two copies: the one shown, ticking, and the one a screen reader is told once per wait. */
+const copies = (line: HTMLElement) => ({
+  shown: line.querySelector('[aria-hidden="true"]')?.textContent ?? '',
+  told: line.querySelector('.sr-only')?.textContent ?? '',
+});
+
+/** The daemon's refusal of a Hub read for Hugging Face's rate limit. */
+const hubLimited = (secs: number) =>
+  new TransportError('INTERNAL', "Failed to get quantizations: Hugging Face's rate limit lifts in 2:13", {
+    status: 429,
+    statusText: 'Too Many Requests',
+    type: 'hub_rate_limited',
+    metadata: { bucket: 'api', retry_after_secs: secs },
+  });
 const size = (label: string) => within(inspector()).getByRole('option', { name: new RegExp(`^${label}`) });
 
 describe('the inspector, a Hugging Face repo', () => {
@@ -275,5 +294,79 @@ describe('the inspector, a Hugging Face repo', () => {
   it('says so for a repo with no model in it', async () => {
     renderHf([quant('mmproj-BF16', 880, { role: 'Projector' })]);
     expect(await within(inspector()).findByText('This repo has no GGUF files.')).toBeInTheDocument();
+  });
+
+  describe("Hugging Face's rate limit", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('says when the limit lifts in the listing\'s place, counting down, then shows the listing there', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      transport.getHfQuantizations.mockRejectedValueOnce(hubLimited(133));
+      renderHf([quant('Q4_K_M', 4000, { picked: true })]);
+      const heading = await within(inspector()).findByRole('heading', { name: REPO });
+
+      const line = await within(inspector()).findByRole('status');
+      expect(copies(line).shown).toMatch(/^Hugging Face's rate limit lifts in 2:1[34]\. gglib will read this again then\.$/);
+      const told = copies(line).told;
+      expect(told).toMatch(/^Hugging Face's rate limit lifts in 2:1[34]\. gglib will read this again then\.$/);
+      expect(line).toHaveClass('text-text-secondary');
+      // One line for the panel: the summary and the pick say nothing of it.
+      expect(within(inspector()).getAllByRole('status')).toHaveLength(1);
+      expect(within(inspector()).queryByRole('alert')).not.toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(2_000));
+      expect(copies(line).shown).toMatch(/lifts in 2:1[12]\./);
+      // Told once: the live region's words do not tick.
+      expect(copies(line).told).toBe(told);
+
+      await act(() => vi.advanceTimersByTimeAsync(132_000));
+      expect(await within(inspector()).findByRole('listbox', { name: 'Sizes' })).toBeInTheDocument();
+      expect(within(inspector()).queryByText(/rate limit lifts/)).not.toBeInTheDocument();
+      expect(transport.getHfQuantizations).toHaveBeenCalledTimes(2);
+      expect(transport.getHfModelSummary).toHaveBeenCalledTimes(1);
+      // The same panel, not a new one.
+      expect(within(inspector()).getByRole('heading', { name: REPO })).toBe(heading);
+    });
+
+    it('asks nothing more once the repo is left during the wait', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      transport.getHfQuantizations.mockRejectedValueOnce(hubLimited(133));
+      const { router } = renderHf([quant('Q4_K_M', 4000, { picked: true })]);
+      await within(inspector()).findByRole('status');
+
+      await act(() => router.navigate('/'));
+      await act(() => vi.advanceTimersByTimeAsync(300_000));
+
+      expect(transport.getHfQuantizations).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds a Download clicked while limited, says it will be queued, and holds a second click as the same one', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      transport.queueDownload.mockRejectedValueOnce(hubLimited(133));
+      renderHf([quant('Q4_K_M', 4000, { picked: true })]);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const download = await within(inspector()).findByRole('button', { name: 'Download' });
+
+      await user.click(download);
+      expect(await screen.findByText(`${REPO} will be queued when Hugging Face's rate limit lifts`)).toBeInTheDocument();
+      expect(screen.queryByText(`Download queued: ${REPO}`)).not.toBeInTheDocument();
+      await user.click(download);
+      expect(transport.queueDownload).toHaveBeenCalledTimes(1);
+
+      await act(() => vi.advanceTimersByTimeAsync(134_000));
+      await waitFor(() => expect(transport.queueDownload).toHaveBeenCalledTimes(2));
+      expect(transport.queueDownload).toHaveBeenLastCalledWith({ modelId: REPO, quantization: 'Q4_K_M' });
+    });
+
+    it('says it under the summary when only the summary waits', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      transport.getHfModelSummary.mockRejectedValueOnce(hubLimited(9));
+      renderHf([quant('Q4_K_M', 4000, { picked: true })]);
+      await within(inspector()).findByRole('listbox', { name: 'Sizes' });
+      expect(within(inspector()).getByRole('status')).toHaveTextContent(/lifts in 0:(10|09)\./);
+
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      expect(await within(inspector()).findByText('calls tools')).toBeInTheDocument();
+      expect(within(inspector()).queryByRole('status')).not.toBeInTheDocument();
+    });
   });
 });

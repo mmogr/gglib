@@ -51,6 +51,7 @@ Custom React hooks for gglib GUI functionality.
 
 | Hook | Description |
 |------|-------------|
+| [`useQueueDownload.ts`](useQueueDownload.ts) | A Download button's queue request and its toast: "Download queued: <repo>", "<repo> will be queued when Hugging Face's rate limit lifts" for one held (`services/heldDownloads`), or the refusal in the daemon's words; the inspector's Hugging Face repo and the library's Hugging Face group |
 | [`useDownloadToasts.ts`](useDownloadToasts.ts) | How downloads ended, as toasts on any screen, mounted once by the app's layout: completions batched by `services/downloadsEvents` (one download in the daemon's words, several counted), each failure its own error toast. The queue itself is `services/downloadsRegistry` |
 
 ### System Hooks
@@ -73,6 +74,8 @@ Custom React hooks for gglib GUI functionality.
 | [`useClickOutside.ts`](useClickOutside.ts) | Click outside detection for dropdowns |
 | [`useFileDropGuard.ts`](useFileDropGuard.ts) | Refuses a file dragged or dropped where nothing takes it, so the desktop window never opens it in place of the app |
 | [`useToastTimer.ts`](useToastTimer.ts) | Toast auto-dismiss countdown with pause and resume |
+| [`useSecondsLeft.ts`](useSecondsLeft.ts) | The seconds left until a deadline, ticking once a second and read from the deadline itself (`utils/countdown`): a pairing code's, in the Devices place and the sidebar's line, and the end of a wait for Hugging Face's rate limit |
+| [`useHubRead.ts`](useHubRead.ts) | One read of the Hub through the daemon, made on mount unless a seed is in hand and stopped on unmount: its answer, or what the caller makes of a failure, and while Hugging Face's rate limit holds it, when the limit lifts; it is read again then (`whenHubAllows`). The inspector's Hugging Face repo |
 
 ### Runtime Hook
 

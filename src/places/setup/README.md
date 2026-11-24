@@ -27,8 +27,8 @@ so Back starts nothing twice.
 | `EnginesStep.tsx` | Step 2: llama.cpp installing then its `ENGINE_WORDS` state (with why, when it does not work, and Repair beside the daemon's words where gglib can repair it; Continue held until it works; an install whose engine cannot run said only so, its install having completed), a failed install's error with Retry until the engine works, or Not installed with the source build's command and Check again; stable-diffusion.cpp installed or skipped, a warning; faster downloads On (`FAST_DOWNLOADS_WORDS`), to be set up with the first model, or needing Python 3 |
 | `useEngines.ts` | Step 2's state: the engines read and installed on the first arrival, llama.cpp first and stable-diffusion.cpp after it whatever llama.cpp did, a stream that closes without a result ended with a reason, an install's failure forgotten once its engine is read working, a source build looked for every few seconds until found, a repair on request with both engines read again after it; leaving setup stops reading the streams and starts no further install |
 | `useFastDownloads.ts` | The download accelerator: set up, unasked, when Get it is pressed and before the download is queued, as `gglib up` does once a download is agreed; never where Python 3 is not there; a failure a warning with Retry, the download going ahead |
-| `FirstModelStep.tsx` | Step 3: the suggestion in the route's words, Get it (faster downloads set up first) with the download's row (a note such as a reconnect in place of its speed and time left; a failure with Retry, which carries on from the part when the download was cut off), Choose another, Skip, and the pairing field for another machine's models |
-| `useFirstModel.ts` | Step 3's state: the choice, the download by the id the queue answered with (or, when the queue refuses the repo as already queued, the repo's row it has), and the library's model from that repository |
+| `FirstModelStep.tsx` | Step 3: the suggestion in the route's words, Get it (faster downloads set up first) with the download's row (a note such as a reconnect in place of its speed and time left; a failure with Retry, which carries on from the part when the download was cut off; while Hugging Face's rate limit holds it, `waiting for Hugging Face's rate limit, 2:14`, counting down, then "queueing…" while it is sent again), Choose another, Skip, and the pairing field for another machine's models |
+| `useFirstModel.ts` | Step 3's state: the choice, the download by the id the queue answered with (or, when the queue refuses the repo as already queued, the repo's row it has; or, held for Hugging Face's rate limit, the held download until it is queued, and Get it again if it is dropped or then fails), and the library's model from that repository |
 | `EndpointStep.tsx` | Step 4: the endpoint's line with Copy (and "Copied" beside it), the proof or what it waits for, a failed start or proof with Retry, Start the endpoint when gglib launches (`proxyAutostart`) |
 | `ConnectStep.tsx` | Step 5: Connect a client with the first model's Model ID, and Open gglib |
 
@@ -43,7 +43,7 @@ works without it" (the engine states themselves are `ENGINE_WORDS`); "<the machi
 built from source. In a terminal:", "gglib looks again every few
 seconds."; "Faster downloads", "set up when you get a model",
 "setting up", "needs Python 3; downloads still work", "not set up;
-downloads still work", "setting up faster downloads first"; "Suggested",
+downloads still work", "setting up faster downloads first"; "queueing…" (a held Get it being sent again); "Suggested",
 "Nothing gglib would suggest fits." (or, when its GPU's memory could not be
 read, the daemon's `noSuggestionReason` in its place); the suggestion's
 "At …, " and the daemon's fit sentence (`fitSentence`), or from an older hub
