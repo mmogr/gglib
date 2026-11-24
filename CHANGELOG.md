@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.40.0-rc.1](https://github.com/mmogr/gglib/compare/v0.39.1-rc.1...v0.40.0-rc.1) (2026-11-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **download:** a rate-limited download waits, and the daemon answers a Hub limit with its reset ([#2237](https://github.com/mmogr/gglib/issues/2237))
+* **hf:** HfPortError::RateLimited carries the bucket and the time to its reset, and reads "Hugging Face's rate limit lifts in 2:14".
+* **gui:** GET /api/models/hf/tool-support/{model_id} is removed. A search hit and a model summary carry supports_tool_calls instead.
+* **cli:** `gglib image` is now `gglib draw`, and in a chat `/draw <model>` is now `/draw with <model>`.
+
+### What gglib now does
+
+* **cli:** a --max-tool-iterations above the ceiling says so and runs at it ([#2225](https://github.com/mmogr/gglib/issues/2225)) ([f6d31ed](https://github.com/mmogr/gglib/commit/f6d31edf2a492647797b32a6e784530860118f70))
+* **cli:** gglib chat export writes the file the chat page's Export saves ([#2228](https://github.com/mmogr/gglib/issues/2228)) ([edcb2bb](https://github.com/mmogr/gglib/commit/edcb2bb41b6c0db741fb589802e92f221150cc68))
+* **cli:** gglib draw, and /draw with a description draws it ([#2209](https://github.com/mmogr/gglib/issues/2209)) ([97658ab](https://github.com/mmogr/gglib/commit/97658ab9e19e5ab75472628c03707c97df6caf43))
+* **cli:** pictures in WezTerm and older iTerm2, links inside tmux 3.4, and an attached image drawn under its receipt ([#2234](https://github.com/mmogr/gglib/issues/2234)) ([e9929e0](https://github.com/mmogr/gglib/commit/e9929e00757b7a037410503ddcdd4db80ecc6ca5))
+* **download:** a rate-limited download waits, and the daemon answers a Hub limit with its reset ([#2237](https://github.com/mmogr/gglib/issues/2237)) ([8e75189](https://github.com/mmogr/gglib/commit/8e75189213cab8db141b6081bb39bfa01a70da47))
+* **gui:** the window counts down a Hub rate limit and asks again ([#2238](https://github.com/mmogr/gglib/issues/2238)) ([facd6ed](https://github.com/mmogr/gglib/commit/facd6ed94ee97780d95bde3115a0f45103f6212a))
+* **hf:** a Hub rate limit carries its reset, and one-shot commands wait it out ([#2235](https://github.com/mmogr/gglib/issues/2235)) ([d2d84f2](https://github.com/mmogr/gglib/commit/d2d84f24a1777bb41130e8aaebe2dd1fa9092151))
+
+
+### What it stopped getting wrong
+
+* **ci:** every Label Check run finishes, so a cancelled one cannot block a merge ([#2213](https://github.com/mmogr/gglib/issues/2213)) ([d13fdc1](https://github.com/mmogr/gglib/commit/d13fdc1affbe2a478e3f6b0f76842e44f471e1cc))
+* **gui:** a menu is as wide as its rows, and a long row wraps under itself ([#2205](https://github.com/mmogr/gglib/issues/2205)) ([2f7819f](https://github.com/mmogr/gglib/commit/2f7819f2e437c17cf84638a6facc71b84765b55f))
+* **gui:** a search row reads whether its repo calls tools from the search ([#2230](https://github.com/mmogr/gglib/issues/2230)) ([5cf6fb2](https://github.com/mmogr/gglib/commit/5cf6fb2246ea80ce609d26ea0becca59fe1d2fb7)), closes [#2227](https://github.com/mmogr/gglib/issues/2227)
+* **mcp:** a server's command may be the full path of a file with a space in it ([#2226](https://github.com/mmogr/gglib/issues/2226)) ([17d0c28](https://github.com/mmogr/gglib/commit/17d0c28702debc0320a0c1a9297dcdaf78b8ad5f))
+* **proxy:** a start that cannot bind says the status's sentence, and a taken port is told from other reasons ([#2236](https://github.com/mmogr/gglib/issues/2236)) ([cb6653b](https://github.com/mmogr/gglib/commit/cb6653b4938627239bbcb9bd37ceea35361c6f2f))
+* **proxy:** an audio part is measured at a stand-in, not its base64 length ([#2229](https://github.com/mmogr/gglib/issues/2229)) ([8347f9c](https://github.com/mmogr/gglib/commit/8347f9cce9253e7654efde0aba642299eca1efcf))
+* **runtime:** a llama or image server that stops leaves its reason in gglib's log ([#2231](https://github.com/mmogr/gglib/issues/2231)) ([dd1519f](https://github.com/mmogr/gglib/commit/dd1519f54a488820c0b2610412439593b71588b7))
+* **runtime:** an engine's files are installed as new files ([#2206](https://github.com/mmogr/gglib/issues/2206)) ([e9070a8](https://github.com/mmogr/gglib/commit/e9070a8750157d69828264eaa85d958d649c7ec4))
+
+
+### Internal
+
+* **cli:** an agreed source install's clone is tested on Windows too ([#2222](https://github.com/mmogr/gglib/issues/2222)) ([a71b103](https://github.com/mmogr/gglib/commit/a71b103e9ad4d963a60f3232723dbf0861026343))
+* **core:** the tied_child test waits for every stand-in's pid ([#2211](https://github.com/mmogr/gglib/issues/2211)) ([ded7dd5](https://github.com/mmogr/gglib/commit/ded7dd58963750d0dd89423584926b355df78c5f))
+* **daemon:** a daemon's orderly stop is tested on every OS, SIGTERM and Ctrl-Break ([#2223](https://github.com/mmogr/gglib/issues/2223)) ([344ca81](https://github.com/mmogr/gglib/commit/344ca81841b14e70c7d0cf1b27ef232b4c54ffd8))
+* **deps:** move stable-diffusion.cpp's pin from master-1098-b521db4 to master-1106-532d2c1 ([#2202](https://github.com/mmogr/gglib/issues/2202)) ([188ec1b](https://github.com/mmogr/gglib/commit/188ec1b535877186beeead71b4be0e8b154d700a))
+* **download:** a broken connection's reconnect is checked without a one-second wall-clock bound ([#2220](https://github.com/mmogr/gglib/issues/2220)) ([fb91209](https://github.com/mmogr/gglib/commit/fb912094bc880a80e6a8229e3e9912073423b610))
+* **mcp:** a path through the root's canonical name keeps its own names ([#2224](https://github.com/mmogr/gglib/issues/2224)) ([4917e78](https://github.com/mmogr/gglib/commit/4917e78a8ad51d73df66d2fedd58da5a28a15e80))
+* **proxy:** a planted slot file is dated by the clock the proxy reads ([#2218](https://github.com/mmogr/gglib/issues/2218)) ([14a2364](https://github.com/mmogr/gglib/commit/14a2364177750bad9728e975b22a3e373e98422b))
+* **tray:** the panel's place on macOS and Windows is a pure function, tested on every system ([#2221](https://github.com/mmogr/gglib/issues/2221)) ([6c25a6d](https://github.com/mmogr/gglib/commit/6c25a6d8e31d0ab1b847b3f186b8a4472f3901a8))
+
 ## [0.39.1-rc.1](https://github.com/mmogr/gglib/compare/v0.39.0-rc.3...v0.39.1-rc.1) (2026-11-22)
 
 
