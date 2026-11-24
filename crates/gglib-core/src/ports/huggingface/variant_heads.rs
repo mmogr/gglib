@@ -1,10 +1,10 @@
 //! What a repository's variants are, read from the head of each one's first
 //! file, and the variant a stored model came as.
 
-use futures_util::{StreamExt, stream};
+use futures_util::{StreamExt, TryStreamExt, stream};
 
 use super::client::HfClientPort;
-use super::error::HfPortResult;
+use super::error::{HfPortError, HfPortResult};
 use super::types::HfQuantInfo;
 use super::variant_match::match_variant;
 use crate::domain::{HeadMetadata, Model};
@@ -24,22 +24,30 @@ const HEADS_AT_ONCE: usize = 4;
 /// The head of `variant`'s first file in `model_id`, read as far as
 /// [`VARIANT_HEAD_BYTES`]; `None` when it cannot be read or is not a GGUF
 /// header.
+///
+/// # Errors
+///
+/// [`HfPortError::RateLimited`], when the Hub's rate limit refused the read:
+/// what the variant is was not read, and a caller is not to guess it.
 pub async fn variant_head(
     client: &dyn HfClientPort,
     parser: &dyn GgufParserPort,
     model_id: &str,
     variant: &HfQuantInfo,
-) -> Option<HeadMetadata> {
-    let first = variant.file_paths.first()?;
+) -> HfPortResult<Option<HeadMetadata>> {
+    let Some(first) = variant.file_paths.first() else {
+        return Ok(None);
+    };
     let head = match client.read_head(model_id, first, VARIANT_HEAD_BYTES).await {
         Ok(head) => head,
+        Err(limited @ HfPortError::RateLimited { .. }) => return Err(limited),
         Err(unread) => {
             tracing::debug!(model_id, path = %first, error = %unread, "a variant's head could not be read");
-            return None;
+            return Ok(None);
         }
     };
     let file_name = first.rsplit('/').next().unwrap_or(first);
-    parser.parse_head(&head, file_name).ok()
+    Ok(parser.parse_head(&head, file_name).ok())
 }
 
 /// What `variant` of `model_id` is: its role when known, else what the head
@@ -48,19 +56,23 @@ pub async fn variant_head(
 /// The head says a draft or helper ([`GgufFileRole::Sidecar`]) or a
 /// projector when it settles it, and a model in every other case. A head
 /// that cannot be read is a model's.
+///
+/// # Errors
+///
+/// [`HfPortError::RateLimited`], as [`variant_head`].
 pub async fn variant_role(
     client: &dyn HfClientPort,
     parser: &dyn GgufParserPort,
     model_id: &str,
     variant: &HfQuantInfo,
-) -> GgufFileRole {
+) -> HfPortResult<GgufFileRole> {
     if let Some(role) = variant.role {
-        return role;
+        return Ok(role);
     }
-    variant_head(client, parser, model_id, variant)
-        .await
+    Ok(variant_head(client, parser, model_id, variant)
+        .await?
         .and_then(|head| head.role)
-        .unwrap_or_default()
+        .unwrap_or_default())
 }
 
 /// `variants` of `model_id`, each with its head read and kept beside it.
@@ -69,38 +81,47 @@ pub async fn variant_role(
 /// and the role set from it. The head stays beside the variant: a listing
 /// judges whether a model fits from its trained context and KV shape, the
 /// same read its role came from.
+///
+/// # Errors
+///
+/// [`HfPortError::RateLimited`], when the Hub's rate limit refused a read
+/// ([`variant_head`]); no head is read after it.
 pub async fn read_heads(
     client: &dyn HfClientPort,
     parser: &dyn GgufParserPort,
     model_id: &str,
     variants: Vec<HfQuantInfo>,
-) -> Vec<(HfQuantInfo, Option<HeadMetadata>)> {
+) -> HfPortResult<Vec<(HfQuantInfo, Option<HeadMetadata>)>> {
     stream::iter(variants)
         .map(|mut variant| async move {
-            let head = variant_head(client, parser, model_id, &variant).await;
+            let head = variant_head(client, parser, model_id, &variant).await?;
             if variant.role.is_none() {
                 variant.role = Some(head.as_ref().and_then(|h| h.role).unwrap_or_default());
             }
-            (variant, head)
+            Ok((variant, head))
         })
         .buffered(HEADS_AT_ONCE)
-        .collect()
+        .try_collect()
         .await
 }
 
 /// `variants` of `model_id`, each with its role read by [`variant_role`],
 /// four heads at once.
+///
+/// # Errors
+///
+/// [`HfPortError::RateLimited`], as [`read_heads`].
 pub async fn read_roles(
     client: &dyn HfClientPort,
     parser: &dyn GgufParserPort,
     model_id: &str,
     variants: Vec<HfQuantInfo>,
-) -> Vec<HfQuantInfo> {
-    read_heads(client, parser, model_id, variants)
-        .await
+) -> HfPortResult<Vec<HfQuantInfo>> {
+    Ok(read_heads(client, parser, model_id, variants)
+        .await?
         .into_iter()
         .map(|(variant, _)| variant)
-        .collect()
+        .collect())
 }
 
 /// The label a Hub lookup asks `repo_id` for to find `model`'s files again.

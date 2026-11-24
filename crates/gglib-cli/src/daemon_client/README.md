@@ -33,6 +33,15 @@ library left it there, and a key says nothing of which library a daemon
 serves. A daemon that is not there, or does not take the event, fails
 nothing.
 
+`hub_limited.rs` sends a call again when the daemon answers that Hugging
+Face's rate limit refused a Hub read it needed (429, type
+`hub_rate_limited`): it waits the seconds the answer names, its status line
+counting down, and sends it again, five times in all at most, so it waits
+at most four times. The daemon does not hold a request while
+the limit lasts, so a one-shot command's call waits here; the queue of
+`gglib model download` goes through it. A 429 of any other type is the
+call's own.
+
 `repair.rs` holds the call that has the daemon repair a model, and
 `explain.rs` the one that asks it for a model's launch explained over the
 models it has loaded, which `gglib model explain` prints while it runs.

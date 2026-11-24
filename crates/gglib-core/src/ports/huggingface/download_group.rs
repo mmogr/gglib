@@ -61,7 +61,8 @@ pub async fn download_group(
 ///
 /// # Errors
 ///
-/// Whatever the client answers for the repository's listing.
+/// Whatever the client answers for the repository's listing, and a rate
+/// limit that refused a head ([`read_roles`]).
 pub async fn repository_projector(
     client: &dyn HfClientPort,
     parser: &dyn GgufParserPort,
@@ -69,7 +70,7 @@ pub async fn repository_projector(
 ) -> HfPortResult<Option<HfFileInfo>> {
     let files = client.list_gguf_files(model_id).await?;
     let variants = variants_of(files.iter().map(|file| (file.path.as_str(), file.size)));
-    let variants = read_roles(client, parser, model_id, variants).await;
+    let variants = read_roles(client, parser, model_id, variants).await?;
     let first = largest_projector(&variants).and_then(|projector| projector.file_paths.first());
     Ok(first.and_then(|path| files.into_iter().find(|file| &file.path == path)))
 }

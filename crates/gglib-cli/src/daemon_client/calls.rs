@@ -10,6 +10,7 @@ use std::time::Duration;
 use anyhow::{Context as _, Result, anyhow};
 use gglib_app_services::types::{McpServerInfo, QueueDownloadResponse, ServerInfo};
 use gglib_core::download::{DownloadId, QueueSnapshot};
+use gglib_core::hub_limit::LimitNotice;
 use gglib_core::ports::LoadFailure;
 
 use super::wire::{
@@ -318,17 +319,24 @@ impl DaemonHandle {
     /// Queue a model download on the daemon, and answer the ID the daemon
     /// gave it: the download this request is, whatever else the queue holds.
     ///
-    /// Long timeout: the daemon resolves the repo and its shard list against
-    /// `HuggingFace` before answering, and with no quant named it reads the
-    /// head of each variant it weighs and the whole header of one that fits,
-    /// which can run to tens of megabytes on a slow link.
-    pub(crate) async fn queue_download(&self, body: &QueueDownloadBody) -> Result<DownloadId> {
-        let response = self
-            .post(paths::DOWNLOADS_QUEUE_PATH)
-            .json(body)
-            .timeout(Duration::from_mins(2))
-            .send()
-            .await?;
+    /// Long timeout, for each attempt: the daemon resolves the repo and its
+    /// shard list against `HuggingFace` before answering, and with no quant
+    /// named it reads the head of each variant it weighs and the whole
+    /// header of one that fits, which can run to tens of megabytes on a slow
+    /// link. A request Hugging Face's rate limit refused there is sent again
+    /// once it lifts, the wait told to `notice`
+    /// ([`Self::sent_past_the_hubs_limit`]).
+    pub(crate) async fn queue_download(
+        &self,
+        body: &QueueDownloadBody,
+        notice: &LimitNotice,
+    ) -> Result<DownloadId> {
+        let queue = || {
+            self.post(paths::DOWNLOADS_QUEUE_PATH)
+                .json(body)
+                .timeout(Duration::from_mins(2))
+        };
+        let response = Self::sent_past_the_hubs_limit(queue, notice).await?;
         let queued: QueueDownloadResponse = Self::expect_ok(response).await?.json().await?;
         Ok(queued_id(&queued))
     }
@@ -429,9 +437,10 @@ mod tests {
             model_id: "owner/repo".to_owned(),
             quantization: None,
         };
+        let no_notice: LimitNotice = std::sync::Arc::new(|_| {});
 
         let queued = STAND_IN_PORT
-            .scope(port, handle.queue_download(&body))
+            .scope(port, handle.queue_download(&body, &no_notice))
             .await
             .expect("the daemon's answer");
 

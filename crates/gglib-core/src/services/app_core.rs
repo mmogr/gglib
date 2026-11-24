@@ -3,7 +3,7 @@
 //! This is the composition root for core services. Adapters (CLI, GUI, Web)
 //! receive an `AppCore` instance and use it to access all functionality.
 
-use crate::hub_limit::OnLimit;
+use crate::hub_limit::{HubGate, OnLimit};
 use crate::ports::{DownloadManagerPort, GgufParserPort, HfClientPort, Repos};
 use std::sync::Arc;
 
@@ -36,6 +36,7 @@ pub struct AppCore {
     secrets: SecretsService,
     hf_token: Option<String>,
     on_hub_limit: OnLimit,
+    hub_gate: Arc<HubGate>,
 }
 
 impl AppCore {
@@ -64,6 +65,7 @@ impl AppCore {
             attachments: AttachmentService::new(repos.attachments),
             hf_token: None,
             on_hub_limit: OnLimit::Surface,
+            hub_gate: Arc::default(),
         }
     }
 
@@ -143,6 +145,23 @@ impl AppCore {
     #[must_use]
     pub fn on_hub_limit(&self) -> OnLimit {
         self.on_hub_limit.clone()
+    }
+
+    /// This core, keeping the Hub's rate limit in `gate` in the requests its
+    /// own Hub client does not make: the gate that client keeps, so a limit
+    /// one of them meets closes the allowance for the other.
+    #[must_use]
+    pub fn with_hub_gate(mut self, gate: Arc<HubGate>) -> Self {
+        self.hub_gate = gate;
+        self
+    }
+
+    /// Where the requests [`Self::hf_token`] is for keep the Hub's rate
+    /// limit: its process's one gate, or with none handed over a gate of
+    /// this core's own.
+    #[must_use]
+    pub fn hub_gate(&self) -> Arc<HubGate> {
+        Arc::clone(&self.hub_gate)
     }
 }
 

@@ -302,6 +302,7 @@ fn spawn_daemon(endpoint: Endpoint) -> Result<std::path::PathBuf> {
 pub(crate) mod auth;
 mod calls;
 mod explain;
+mod hub_limited;
 pub(crate) mod images;
 pub(crate) mod library_changes;
 mod remote;

@@ -39,11 +39,18 @@ impl fmt::Debug for OnLimit {
     }
 }
 
+/// `left` in whole seconds, rounded up, so that a wait never reads as over
+/// before it is: what a `Retry-After` says, and what [`clock`] shows.
+#[must_use]
+pub fn whole_seconds(left: Duration) -> u64 {
+    left.as_secs() + u64::from(left.subsec_nanos() > 0)
+}
+
 /// `left` as minutes and seconds, `2:14`, its seconds rounded up so that a
 /// wait never reads `0:00` before it is over.
 #[must_use]
 pub fn clock(left: Duration) -> String {
-    let seconds = left.as_secs() + u64::from(left.subsec_nanos() > 0);
+    let seconds = whole_seconds(left);
     format!("{}:{:02}", seconds / 60, seconds % 60)
 }
 

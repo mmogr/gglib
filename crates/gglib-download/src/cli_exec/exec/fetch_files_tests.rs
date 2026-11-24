@@ -12,6 +12,9 @@ use crate::executor::FileProgress;
 
 const NOTE: &str = "using direct transfer…";
 
+/// The gate the transfers keep the Hub's rate limit in: never closed here.
+static GATE: std::sync::LazyLock<HubGate> = std::sync::LazyLock::new(HubGate::new);
+
 fn id() -> DownloadId {
     DownloadId::new("owner/zeta-GGUF", Some("Q8_0"))
 }
@@ -31,6 +34,7 @@ fn transfer(destination: &Path) -> Transfer<'_> {
         destination,
         token: Some("a-token"),
         force: true,
+        gate: &GATE,
     }
 }
 

@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use gglib_core::download::{DownloadError, DownloadId};
-use gglib_core::hub_limit::OnLimit;
+use gglib_core::hub_limit::{HubGate, OnLimit};
 use gglib_core::ports::{GgufParserPort, HfClientPort, QuantizationResolver, ResolvedFile};
 
 use super::types::{CliDownloadRequest, CliDownloadResult, CliUpdateRequest, UpdateCheckResult};
@@ -46,6 +46,7 @@ pub(super) async fn download(
     let hub: Arc<dyn HfClientPort> = Arc::new(super::api::hub_client(
         request.token.clone(),
         request.on_limit.clone(),
+        Arc::clone(&request.gate),
     ));
     let commit_sha = hub
         .get_commit_sha(&request.model_id)
@@ -97,6 +98,7 @@ pub(super) async fn download(
         destination: &model_dir,
         token: request.token.as_deref(),
         force: request.force,
+        gate: &request.gate,
     };
     fetch_files(id, &resolution.files, &transfer, rows.as_ref(), |plan| {
         let url = hub.file_url(plan.repo_id, plan.file, plan.revision);
@@ -135,6 +137,8 @@ struct Transfer<'a> {
     token: Option<&'a str>,
     /// Re-fetch a file that is already on disk.
     force: bool,
+    /// Where the transfers keep the Hub's rate limit.
+    gate: &'a HubGate,
 }
 
 /// Fetch the download `id` of `files` with `fetch_one`, one file after
@@ -170,13 +174,15 @@ where
             notice: shown.then_some(notice),
             expected_size: file.size,
             cancel: None,
+            gate: transfer.gate,
         })
     };
     fetch_solo(id, files, rows, PROGRESS_TICK, fetch).await
 }
 
 /// Check if a model has an update available, asking the Hub with `token`
-/// when there is one, and meeting its rate limit as `on_limit` says.
+/// when there is one, and meeting its rate limit as `on_limit` says,
+/// keeping it in `gate`.
 ///
 /// `has_update` is true when no `current_sha` is recorded: there is no
 /// baseline to compare against, so the caller cannot claim the model is
@@ -187,9 +193,10 @@ pub async fn check_update(
     current_sha: Option<&str>,
     token: Option<String>,
     on_limit: OnLimit,
+    gate: Arc<HubGate>,
 ) -> Result<UpdateCheckResult> {
     check_update_with(
-        &super::api::hub_client(token, on_limit),
+        &super::api::hub_client(token, on_limit, gate),
         repo_id,
         current_sha,
     )
@@ -234,6 +241,7 @@ pub async fn update_model(
         force: true,
         token: request.token,
         on_limit: request.on_limit,
+        gate: request.gate,
     };
 
     download(download_request, parser, rows).await

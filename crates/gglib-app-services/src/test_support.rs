@@ -63,10 +63,13 @@ impl AppEventEmitter for RecordingEmitter {
 /// - `reorder_position` → the position value returned by `reorder_queue`
 /// - `calls` → the upgrade, cancel, remove and clear calls it was sent, in
 ///   order
+/// - `queue_refusal` → what `queue_smart` and `queue_upgrade` refuse with,
+///   when set
 pub(crate) struct MockDownloadManager {
     pub fail_cancel: bool,
     pub reorder_position: u32,
     pub calls: Arc<Mutex<Vec<String>>>,
+    pub queue_refusal: Option<DownloadError>,
 }
 
 impl Default for MockDownloadManager {
@@ -75,6 +78,7 @@ impl Default for MockDownloadManager {
             fail_cancel: false,
             reorder_position: 1,
             calls: Arc::default(),
+            queue_refusal: None,
         }
     }
 }
@@ -106,6 +110,9 @@ impl DownloadManagerPort for MockDownloadManager {
         _quantization: Option<String>,
         _budget_bytes: Option<u64>,
     ) -> Result<DownloadId, DownloadError> {
+        if let Some(refused) = &self.queue_refusal {
+            return Err(refused.clone());
+        }
         Ok(DownloadId::new("mock/model", Some("Q8_0")))
     }
 
@@ -119,6 +126,9 @@ impl DownloadManagerPort for MockDownloadManager {
         self.record(format!(
             "queue_upgrade {repo_id} {quantization} {model_id} {commit}"
         ));
+        if let Some(refused) = &self.queue_refusal {
+            return Err(refused.clone());
+        }
         Ok(DownloadId::new(
             repo_id.as_str(),
             Some(quantization.as_str()),

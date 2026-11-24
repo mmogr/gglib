@@ -91,7 +91,7 @@ impl QuantizationSelector {
         }
 
         let pick = pick_among(self.variants.as_ref(), repo_id, &available, budget_bytes)
-            .await
+            .await?
             .map_err(|NoWeights| {
                 DownloadError::other(format!("No model in '{repo_id}', {NoWeights}"))
             })?;
@@ -112,7 +112,7 @@ impl QuantizationSelector {
             return Ok(());
         };
         let judged = HfQuantInfo {
-            role: Some(self.resolver.role_of(repo_id, variant).await),
+            role: Some(self.resolver.role_of(repo_id, variant).await?),
             ..variant.clone()
         };
         judged
@@ -129,12 +129,18 @@ impl QuantizationSelector {
 ///
 /// The one pick a download and the listing's ★ both make
 /// ([`crate::download_pick`]).
+///
+/// # Errors
+///
+/// [`DownloadError::HubLimited`] when the Hub's rate limit refused a read
+/// the pick asked for: a pick made without it is not the pick. The inner
+/// result is the pick's own.
 pub(crate) async fn pick_among(
     source: &dyn VariantSource,
     repo_id: &str,
     available: &[HfQuantInfo],
     budget_bytes: Option<u64>,
-) -> Result<Pick, NoWeights> {
+) -> Result<Result<Pick, NoWeights>, DownloadError> {
     let contenders: Vec<Contender> = available
         .iter()
         .map(|variant| Contender {
@@ -158,12 +164,13 @@ pub(crate) async fn pick_among(
     let projector = largest_projector(&roles).map_or(0, |p| p.total_size);
     let judge =
         budget_bytes.map(|budget_bytes| MemoryFit { budget_bytes }.loading().beside(projector));
-    pick_variant(
+    let pick = pick_variant(
         &contenders,
         reader.as_ref(),
         judge.as_ref().map(|judge| judge as &dyn FitJudge),
     )
-    .await
+    .await;
+    reader.limited().map_or(Ok(pick), Err)
 }
 
 /// Say which variant was taken with none asked, and why.

@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod limited;
 pub(crate) mod native;
 mod progress;
 
@@ -10,6 +11,7 @@ use reqwest::Client;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::download::DownloadError;
+use gglib_core::hub_limit::HubGate;
 
 use crate::cli_exec::{
     FastDownloadRequest, NoticeCallback, PythonBridgeError, fast_helper_provisioned,
@@ -53,6 +55,9 @@ pub(crate) struct DownloadPlan<'a> {
     pub expected_size: Option<u64>,
     /// Cancellation token for the download.
     pub cancel: Option<CancellationToken>,
+    /// Where the Hub's rate limit is kept: the native transport opens no
+    /// connection while the allowance the file counts against is closed.
+    pub gate: &'a HubGate,
 }
 
 /// Fetch the file `plan` names, whose bytes the native transport reads from
@@ -197,7 +202,7 @@ async fn run_native(
         stall_after: native::STALL_AFTER,
     };
 
-    native::download_file(http_client(), &request)
+    native::download_gated(http_client(), &request, plan.gate)
         .await
         .map_err(to_download_error)
 }
@@ -232,6 +237,11 @@ fn to_download_error(e: NativeError) -> DownloadError {
         NativeError::Cancelled => DownloadError::Cancelled,
         NativeError::Stalled { kept, quiet } => {
             DownloadError::interrupted(kept, u32::try_from(quiet.as_secs()).unwrap_or(u32::MAX))
+        }
+        // A single refusal is waited out inside the transfer, and never
+        // reaches here.
+        e @ (NativeError::KeptLimited | NativeError::RateLimited(_)) => {
+            DownloadError::network_with_status(e.to_string(), 429)
         }
         // A single quiet connection is answered with a reconnect inside the
         // transfer, and never reaches here.
@@ -269,6 +279,24 @@ mod tests {
             DownloadError::Network { status_code, .. } => assert_eq!(status_code, Some(503)),
             other => panic!("expected Network, got {other:?}"),
         }
+    }
+
+    /// A download the Hub kept refusing says so, and keeps the status.
+    #[test]
+    fn a_download_kept_rate_limited_says_hugging_face_kept_limiting_it() {
+        let mapped = to_download_error(NativeError::KeptLimited);
+        assert_eq!(
+            mapped.to_string(),
+            "Network error: Hugging Face kept rate limiting the download: it refused it 5 \
+             times in a row"
+        );
+        assert!(matches!(
+            mapped,
+            DownloadError::Network {
+                status_code: Some(429),
+                ..
+            }
+        ));
     }
 
     #[test]

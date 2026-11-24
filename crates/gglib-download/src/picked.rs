@@ -24,7 +24,9 @@ use crate::variant_reader::HubSource;
 ///
 /// # Errors
 ///
-/// What listing the repository answers when it fails.
+/// What listing the repository answers when it fails, and
+/// [`DownloadError::HubLimited`] when the Hub's rate limit refused a read
+/// the pick asked for.
 pub async fn download_pick(
     client: Arc<dyn HfClientPort>,
     parser: Arc<dyn GgufParserPort>,
@@ -39,7 +41,7 @@ pub async fn download_pick(
         parser,
     };
     Ok(pick_among(&source, repo_id, &available, budget_bytes)
-        .await
+        .await?
         .ok()
         .map(|pick| available[pick.index].label.clone()))
 }

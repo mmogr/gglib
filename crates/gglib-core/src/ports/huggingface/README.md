@@ -50,4 +50,10 @@ the head of the first weights file names the family, and each companion of the
 family's recipe is looked up in its own repository. A head that cannot be read,
 or that is a chat model's, is no image model and fails nothing.
 
+A head read the Hub's rate limit refused is the one read that is not taken
+for nothing: `variant_head`, `read_heads` and `image_family_of` pass
+`HfPortError::RateLimited` up, so a listing does not show a variant it could
+not read as a plain model, and an image model is not downloaded without its
+companions.
+
 <!-- module-docs:end -->

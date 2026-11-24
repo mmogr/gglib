@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::download::{DownloadError, DownloadId, QueueSnapshot};
+use crate::hub_limit::HubGate;
 
 /// Configuration for creating a download manager.
 ///
@@ -36,6 +37,11 @@ pub struct DownloadManagerConfig {
     pub max_queue_size: u32,
     /// `HuggingFace` authentication token (for private repos).
     pub hf_token: Option<String>,
+    /// Where the Hub's rate limit is kept: a file is not asked for while the
+    /// allowance it counts against is closed. The bootstrap hands the
+    /// manager the gate its Hub client keeps, so a limit either meets
+    /// closes it for both.
+    pub hub_gate: Arc<HubGate>,
 }
 
 impl Default for DownloadManagerConfig {
@@ -44,6 +50,7 @@ impl Default for DownloadManagerConfig {
             models_directory: None,
             max_queue_size: crate::settings::DEFAULT_DOWNLOAD_QUEUE_SIZE,
             hf_token: None,
+            hub_gate: Arc::default(),
         }
     }
 }

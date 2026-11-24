@@ -67,7 +67,9 @@ impl QuantizationResolver for HfQuantizationResolver {
         )
         .await
         .map_err(|e| {
-            DownloadError::resolution_failed(format!("Failed to get quantization files: {e}"))
+            DownloadError::from_hub(e, |e| {
+                DownloadError::resolution_failed(format!("Failed to get quantization files: {e}"))
+            })
         })?;
 
         if group.weights.is_empty() {
@@ -93,9 +95,11 @@ impl QuantizationResolver for HfQuantizationResolver {
             )
             .await
             .map_err(|e| {
-                DownloadError::resolution_failed(format!(
-                    "Failed to find the image model's companions: {e}"
-                ))
+                DownloadError::from_hub(e, |e| {
+                    DownloadError::resolution_failed(format!(
+                        "Failed to find the image model's companions: {e}"
+                    ))
+                })
             })?
         } else {
             None
@@ -136,11 +140,19 @@ impl QuantizationResolver for HfQuantizationResolver {
         self.hf_client
             .list_quantizations(repo_id)
             .await
-            .map_err(|e| DownloadError::resolution_failed(format!("Failed to list variants: {e}")))
+            .map_err(|e| {
+                DownloadError::from_hub(e, |e| {
+                    DownloadError::resolution_failed(format!("Failed to list variants: {e}"))
+                })
+            })
     }
 
     /// Read from the head of the variant's first file.
-    async fn role_of(&self, repo_id: &str, variant: &HfQuantInfo) -> GgufFileRole {
+    async fn role_of(
+        &self,
+        repo_id: &str,
+        variant: &HfQuantInfo,
+    ) -> Result<GgufFileRole, DownloadError> {
         variant_role(
             self.hf_client.as_ref(),
             self.head_reader.as_ref(),
@@ -148,6 +160,11 @@ impl QuantizationResolver for HfQuantizationResolver {
             variant,
         )
         .await
+        .map_err(|e| {
+            DownloadError::from_hub(e, |e| {
+                DownloadError::resolution_failed(format!("Failed to read the variant's head: {e}"))
+            })
+        })
     }
 }
 

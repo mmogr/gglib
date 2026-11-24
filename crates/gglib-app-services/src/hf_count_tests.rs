@@ -101,7 +101,7 @@ async fn a_count_the_hub_read_from_a_draft_gives_way_to_the_names() {
     let counted =
         checked_parameters(&hub, &CountParser, REPO, Some(1.863_907_84), &hauhaucs()).await;
 
-    assert_eq!(counted, Some(27.0));
+    assert_eq!(counted.ok(), Some(Some(27.0)));
     assert!(hub.heads_asked.lock().unwrap().is_empty());
 }
 
@@ -114,7 +114,7 @@ async fn names_that_state_nothing_give_way_to_the_models_header() {
     let counted =
         checked_parameters(&hub, &CountParser, REPO, Some(1.863_907_84), &unnamed()).await;
 
-    assert_eq!(counted, Some(27.0));
+    assert_eq!(counted.ok(), Some(Some(27.0)));
     let asked = hub.heads_asked.lock().unwrap().clone();
     assert_eq!(asked.len(), 1);
     assert_eq!(asked[0].1, UNNAMED_Q8);
@@ -128,7 +128,7 @@ async fn a_count_the_files_can_hold_is_the_hubs() {
 
     let counted = checked_parameters(&hub, &CountParser, REPO, Some(27.3), &hauhaucs()).await;
 
-    assert_eq!(counted, Some(27.3));
+    assert_eq!(counted.ok(), Some(Some(27.3)));
     assert!(hub.heads_asked.lock().unwrap().is_empty());
 }
 
@@ -144,7 +144,7 @@ async fn a_rejected_count_with_no_models_header_is_none() {
     for hub in [draft, misread, unread] {
         let counted =
             checked_parameters(&hub, &CountParser, REPO, Some(1.863_907_84), &unnamed()).await;
-        assert_eq!(counted, None);
+        assert_eq!(counted.ok(), Some(None));
     }
 }
 
@@ -162,5 +162,25 @@ async fn a_repository_of_no_weights_keeps_the_hubs_count() {
     )
     .await;
 
-    assert_eq!(counted, Some(1.0));
+    assert_eq!(counted.ok(), Some(Some(1.0)));
+}
+
+/// A head the Hub's rate limit refused is the limit, not a count unknown.
+#[tokio::test]
+async fn a_rate_limited_head_is_a_rate_limit_and_not_no_count() {
+    let hub = FakeHub {
+        heads_limited: true,
+        ..hub_with_head(UNNAMED_Q8, b"27")
+    };
+
+    let counted =
+        checked_parameters(&hub, &CountParser, REPO, Some(1.863_907_84), &unnamed()).await;
+
+    assert!(
+        matches!(
+            counted,
+            Err(gglib_core::ports::HfPortError::RateLimited { .. })
+        ),
+        "got {counted:?}"
+    );
 }

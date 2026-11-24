@@ -181,7 +181,16 @@ pub trait QuantizationResolver: Send + Sync {
 
     /// What `variant` of `repo_id` is, from its first file's header; one that
     /// cannot be read is a model's.
-    async fn role_of(&self, repo_id: &str, variant: &HfQuantInfo) -> GgufFileRole;
+    ///
+    /// # Errors
+    ///
+    /// [`DownloadError::HubLimited`] when the Hub's rate limit refused the
+    /// read: what the variant is was not read.
+    async fn role_of(
+        &self,
+        repo_id: &str,
+        variant: &HfQuantInfo,
+    ) -> Result<GgufFileRole, DownloadError>;
 }
 
 #[cfg(test)]

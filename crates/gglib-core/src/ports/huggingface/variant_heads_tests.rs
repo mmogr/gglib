@@ -85,7 +85,9 @@ async fn each_variant_is_what_its_head_settles_and_else_a_model() {
         "unlisted",
     ];
 
-    let read = read_roles(&hub, &RoleParser, "o/r", labels.map(variant).to_vec()).await;
+    let read = read_roles(&hub, &RoleParser, "o/r", labels.map(variant).to_vec())
+        .await
+        .expect("no read is rate limited");
 
     let roles: Vec<(&str, Option<GgufFileRole>)> =
         read.iter().map(|v| (v.label.as_str(), v.role)).collect();
@@ -119,10 +121,32 @@ async fn a_known_role_is_not_read_again() {
     };
 
     assert_eq!(
-        variant_role(&hub, &RoleParser, "o/r", &known).await,
-        GgufFileRole::Sidecar
+        variant_role(&hub, &RoleParser, "o/r", &known).await.ok(),
+        Some(GgufFileRole::Sidecar)
     );
     assert!(hub.heads_asked.lock().unwrap().is_empty());
+}
+
+/// A head the Hub's rate limit refused is not read as a model's: the
+/// limit is passed up, from one variant's read and from a listing's.
+#[tokio::test]
+async fn a_rate_limited_head_is_a_rate_limit_and_not_a_model() {
+    let hub = FakeHub {
+        heads_limited: true,
+        ..hub()
+    };
+
+    let one = variant_role(&hub, &RoleParser, "o/r", &variant("Q4_K_P")).await;
+    let listing = read_roles(&hub, &RoleParser, "o/r", vec![variant("Q4_K_P")]).await;
+
+    assert!(
+        matches!(one, Err(HfPortError::RateLimited { .. })),
+        "got {one:?}"
+    );
+    assert!(
+        matches!(listing, Err(HfPortError::RateLimited { .. })),
+        "got {listing:?}"
+    );
 }
 
 fn stored(variant_label: Option<&str>, hf_filename: Option<&str>, path: &str) -> Model {

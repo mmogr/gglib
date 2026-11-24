@@ -324,3 +324,135 @@ async fn an_upgrade_run_again_carries_on_from_its_own_commits_part() {
         .collect();
     assert_eq!(left, ["up.gguf"], "no part of any revision is left");
 }
+
+/// A download the Hub refused for its rate limit shows the wait on its row,
+/// and the row drops it once the file's bytes arrive after the wait.
+#[tokio::test]
+async fn a_rate_limit_wait_is_shown_on_the_row_until_bytes_arrive() {
+    gglib_core::paths::isolate_data_root();
+    let body = body_of(4096);
+    let server = TestServer::start(vec![
+        Reply::Limited { t: 1 },
+        Reply::File {
+            body: body.clone(),
+            etag: Some(sha256_of(&body)),
+        },
+    ])
+    .await;
+    let models = tempfile::tempdir().unwrap();
+
+    let (progress_tx, mut progress_rx) = watch::channel(ProgressUpdate::default());
+    let job = DownloadJob {
+        id: DownloadId::new("tester/limited-GGUF", Some("Q4_0")),
+        repo: "tester/limited-GGUF".to_string(),
+        destination: DownloadDestination::plan(
+            models.path(),
+            "tester/limited-GGUF",
+            vec!["limited.gguf".to_string()],
+        ),
+        revision: None,
+        cancel: CancellationToken::new(),
+        progress_tx,
+        expected_size: Some(body.len() as u64),
+        upgrade: None,
+    };
+    let deps = WorkerDeps {
+        config: DownloadManagerConfig::default(),
+        hub: Arc::new(ServedAt(server.resolve_url())),
+    };
+    let waiting = gglib_core::hub_limit::waiting_sentence(Duration::from_secs(1));
+    let shown = async {
+        progress_rx
+            .wait_for(|update| update.notice.as_deref() == Some(waiting.as_str()))
+            .await
+            .is_ok()
+    };
+
+    let (fetched, shown) = tokio::time::timeout(Duration::from_secs(30), async {
+        tokio::join!(execute_download(&job, &deps), shown)
+    })
+    .await
+    .expect("the fetch ends");
+
+    fetched.expect("the fetch completes once the limit lifts");
+    assert!(shown, "the row showed the wait");
+    let last = progress_rx.borrow().clone();
+    assert_eq!(last.notice, None, "the bytes that came after it cleared it");
+    assert_eq!(server.request_count(), 2);
+}
+
+/// A job's transfer keeps the Hub's rate limit in the manager's gate: with
+/// the file allowance already closed there, the row shows the wait and the
+/// file is not asked for.
+#[tokio::test]
+async fn a_job_waits_on_the_managers_gate_before_asking() {
+    use gglib_core::hub_limit::{HubBucket, HubGate, HubLimit};
+
+    gglib_core::paths::isolate_data_root();
+    let body = body_of(2048);
+    let server = TestServer::start(vec![Reply::File {
+        body: body.clone(),
+        etag: Some(sha256_of(&body)),
+    }])
+    .await;
+    let models = tempfile::tempdir().unwrap();
+    let gate = Arc::new(HubGate::new());
+    gate.note(
+        HubLimit {
+            bucket: HubBucket::Resolvers,
+            remaining: 0,
+            resets_in: Duration::from_mins(2),
+        },
+        tokio::time::Instant::now(),
+    );
+
+    let (progress_tx, mut progress_rx) = watch::channel(ProgressUpdate::default());
+    let job = DownloadJob {
+        id: DownloadId::new("tester/gated-GGUF", Some("Q4_0")),
+        repo: "tester/gated-GGUF".to_string(),
+        destination: DownloadDestination::plan(
+            models.path(),
+            "tester/gated-GGUF",
+            vec!["gated.gguf".to_string()],
+        ),
+        revision: None,
+        cancel: CancellationToken::new(),
+        progress_tx,
+        expected_size: Some(body.len() as u64),
+        upgrade: None,
+    };
+    let deps = WorkerDeps {
+        config: DownloadManagerConfig {
+            hub_gate: gate,
+            ..DownloadManagerConfig::default()
+        },
+        hub: Arc::new(ServedAt(server.resolve_url())),
+    };
+    let cancel_once_shown = async {
+        progress_rx
+            .wait_for(|update| {
+                update
+                    .notice
+                    .as_deref()
+                    .is_some_and(|note| note.starts_with("waiting for Hugging Face's rate limit"))
+            })
+            .await
+            .expect("the row shows the wait");
+        let asked = server.request_count();
+        job.cancel.cancel();
+        asked
+    };
+
+    let (fetched, asked) = tokio::time::timeout(Duration::from_secs(30), async {
+        tokio::join!(execute_download(&job, &deps), cancel_once_shown)
+    })
+    .await
+    .expect("the cancel ends the wait");
+
+    assert_eq!(asked, 0, "the wait is shown before any request");
+    assert!(
+        matches!(fetched, Err(DownloadError::Cancelled)),
+        "got {fetched:?}"
+    );
+    assert_eq!(server.request_count(), 0);
+}

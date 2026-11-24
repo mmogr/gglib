@@ -13,6 +13,7 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client;
+use crate::presentation::status_line::hub_wait_notice;
 
 use super::{companions, list_quants, remote};
 
@@ -26,7 +27,8 @@ pub(crate) struct DownloadArgs<'a> {
 /// Execute the download command.
 ///
 /// Queues `model_id` on the daemon and watches the queue until the download
-/// the daemon answered with has ended.
+/// the daemon answered with has ended. A queue Hugging Face's rate limit
+/// refused is asked again once it lifts, the wait on the status line.
 /// Ctrl-C detaches; the daemon keeps downloading and registers the model
 /// itself.
 pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
@@ -44,6 +46,9 @@ pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<
         model_id: args.model_id.to_string(),
         quantization: args.quantization.map(String::from),
     };
-    let queue = handle.queue_download(&body);
+    // The daemon answers a queue the Hub's rate limit refused at once; this
+    // command waits it out on its status line and asks again.
+    let waiting = hub_wait_notice(Arc::clone(&ctx.console));
+    let queue = handle.queue_download(&body, &waiting);
     remote::monitor(&handle, Arc::clone(&ctx.console), queue).await
 }

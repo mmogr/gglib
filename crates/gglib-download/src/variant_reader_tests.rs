@@ -17,9 +17,12 @@ use gglib_core::ports::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata,
 };
 
-use super::{HEAD_BYTES, HubVariants};
+use super::{HEAD_BYTES, HubReader, HubVariants};
 
 const MIB: u64 = 1 << 20;
+
+/// A file every read of which the Hub's rate limit refuses.
+const LIMITED: &str = "limited.gguf";
 const Q8_0: FileType = FileType(7);
 
 /// One file: its length, where its metadata ends, and where its tensor
@@ -87,6 +90,12 @@ impl HfClientPort for Hub {
             .lock()
             .unwrap()
             .push((path.to_owned(), max_bytes));
+        if path == LIMITED {
+            return Err(HfPortError::RateLimited {
+                bucket: gglib_core::hub_limit::HubBucket::Resolvers,
+                resets_in: std::time::Duration::from_mins(2),
+            });
+        }
         let file = self
             .files
             .get(path)
@@ -279,6 +288,30 @@ async fn a_file_that_cannot_be_read_has_no_head_and_no_header() {
     assert!(reader.head(0).await.is_none());
     assert!(reader.header(0).await.is_none());
     assert!(reader.head(1).await.is_none());
+    assert_eq!(reader.limited(), None, "a file not there is no rate limit");
+}
+
+/// A read the Hub's rate limit refused reads as nothing to the pick, and
+/// the reader keeps the limit for the caller, so a pick made without the
+/// read is not taken.
+#[tokio::test]
+async fn a_rate_limited_read_is_kept_for_the_caller() {
+    let hub = Hub::new(&[("chat.gguf", CHAT)]);
+    let parser = Parser(&hub);
+    let reader = variants(&hub, &parser, &["chat.gguf", LIMITED]);
+
+    assert!(reader.head(0).await.is_some());
+    assert_eq!(reader.limited(), None);
+    assert!(reader.head(1).await.is_none());
+
+    let kept = reader.limited().expect("the limit is kept");
+    assert_eq!(
+        kept.hub_limit(),
+        Some((
+            gglib_core::hub_limit::HubBucket::Resolvers,
+            std::time::Duration::from_mins(2)
+        ))
+    );
 }
 
 /// Fits whatever is at most its bytes, once the trained context is read.

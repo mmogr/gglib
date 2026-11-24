@@ -4,8 +4,12 @@
 //! `GuiError` to their specific error types (`TauriError`, `HttpError`).
 
 use std::fmt;
+use std::time::Duration;
 
+use gglib_core::download::DownloadError;
+use gglib_core::hub_limit::HubBucket;
 use gglib_core::paths::{LLAMA_INSTALL_COMMAND, llama_server_path};
+use gglib_core::ports::HfPortError;
 
 /// Semantic errors for GUI backend operations.
 ///
@@ -43,6 +47,18 @@ pub enum GuiError {
         reason: String,
     },
 
+    /// Hugging Face's rate limit refused a request the operation needed, or
+    /// would have (429-ish). The same operation asked again once it lifts
+    /// can go ahead.
+    HubLimited {
+        /// The allowance that is spent.
+        bucket: HubBucket,
+        /// The time until it opens again.
+        retry_after: Duration,
+        /// What was being done, and when the limit lifts.
+        message: String,
+    },
+
     /// A model did not load, and why: the runtime's
     /// [`LoadFailure`](gglib_core::ports::LoadFailure) in its own words,
     /// which every surface shows as they stand.
@@ -69,7 +85,7 @@ impl fmt::Display for GuiError {
                     "llama-server not installed: {reason} at {expected_path}\nRun: {suggested_command}"
                 )
             }
-            Self::LoadFailed(msg) => f.write_str(msg),
+            Self::HubLimited { message, .. } | Self::LoadFailed(message) => f.write_str(message),
             Self::Internal(msg) => write!(f, "internal error: {msg}"),
         }
     }
@@ -81,9 +97,15 @@ impl std::error::Error for GuiError {}
 // Conversions from core errors
 // ============================================================================
 
-impl From<gglib_core::download::DownloadError> for GuiError {
-    fn from(err: gglib_core::download::DownloadError) -> Self {
-        use gglib_core::download::DownloadError;
+impl From<DownloadError> for GuiError {
+    fn from(err: DownloadError) -> Self {
+        if let Some((bucket, retry_after)) = err.hub_limit() {
+            return Self::HubLimited {
+                bucket,
+                retry_after,
+                message: err.to_string(),
+            };
+        }
         match err {
             DownloadError::NotFound { message } => Self::NotFound {
                 entity: "download",
@@ -165,10 +187,62 @@ impl GuiError {
             Self::Conflict(msg) => Self::Conflict(led(msg)),
             Self::Unavailable(msg) => Self::Unavailable(led(msg)),
             Self::Internal(msg) => Self::Internal(led(msg)),
+            Self::HubLimited {
+                bucket,
+                retry_after,
+                message,
+            } => Self::HubLimited {
+                bucket,
+                retry_after,
+                message: led(message),
+            },
             // A failed load is its own sentence, which already says what.
             named @ (Self::NotFound { .. }
             | Self::LlamaServerNotInstalled { .. }
             | Self::LoadFailed(_)) => named,
+        }
+    }
+}
+
+/// The Hub's errors as an operation that asked it answers them: its rate
+/// limit is [`GuiError::HubLimited`], which a caller can wait out and ask
+/// again, and any other is what it has always been.
+impl GuiError {
+    /// `error`, which the Hub answered while `doing`, led by `doing`: its
+    /// rate limit is [`Self::HubLimited`], and any other error is internal.
+    pub(crate) fn from_hub(doing: &str, error: HfPortError) -> Self {
+        Self::from_hub_or(doing, error, |e| Self::Internal(format!("{doing}: {e}")))
+    }
+
+    /// [`Self::from_hub`], with any error that is not the rate limit made
+    /// by `otherwise`.
+    pub(crate) fn from_hub_or(
+        doing: &str,
+        error: HfPortError,
+        otherwise: impl FnOnce(HfPortError) -> Self,
+    ) -> Self {
+        match error {
+            HfPortError::RateLimited { bucket, resets_in } => Self::HubLimited {
+                bucket,
+                retry_after: resets_in,
+                message: format!("{doing}: {error}"),
+            },
+            other => otherwise(other),
+        }
+    }
+
+    /// `error`, a download's, met while `doing`: the Hub's rate limit is
+    /// [`Self::HubLimited`], led by `doing`, and any other error is what
+    /// `otherwise` makes of it.
+    pub(crate) fn from_download_or(
+        doing: &str,
+        error: DownloadError,
+        otherwise: impl FnOnce(DownloadError) -> Self,
+    ) -> Self {
+        if error.hub_limit().is_some() {
+            Self::from(error).context(doing)
+        } else {
+            otherwise(error)
         }
     }
 }

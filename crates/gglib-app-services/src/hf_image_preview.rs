@@ -6,7 +6,9 @@ use std::path::Path;
 use gglib_core::domain::ImageFamily;
 use gglib_core::download::GgufFileRole;
 use gglib_core::paths::repository_dir;
-use gglib_core::ports::huggingface::{companions_of, image_family_of, match_variant};
+use gglib_core::ports::huggingface::{
+    HfPortError, HfPortResult, companions_of, image_family_of, match_variant,
+};
 use gglib_core::ports::{GgufParserPort, HfClientPort, HfFileInfo, HfQuantInfo};
 
 use crate::types::{HfCompanion, HfImagePreview};
@@ -45,22 +47,28 @@ pub(crate) struct ImageLook {
 /// A family whose companions cannot all be looked up is logged and its
 /// preview is `None`: the listing of the quantizations still shows, and a
 /// download stops on the same lookup with its own message.
+///
+/// # Errors
+///
+/// [`HfPortError::RateLimited`], when the Hub's rate limit refused the head
+/// read or a companion's lookup: what is read is then not what the
+/// repository is.
 pub(crate) async fn image_look(
     client: &dyn HfClientPort,
     parser: &dyn GgufParserPort,
     model_id: &str,
     quants: &[HfQuantInfo],
     models_dir: Option<&Path>,
-) -> ImageLook {
+) -> HfPortResult<ImageLook> {
     let none = ImageLook {
         family: None,
         preview: None,
     };
     let Some(quant) = sniffed_quantization(quants) else {
-        return none;
+        return Ok(none);
     };
     let Some(path) = quant.file_paths.first() else {
-        return none;
+        return Ok(none);
     };
     let first = HfFileInfo {
         path: path.clone(),
@@ -68,11 +76,12 @@ pub(crate) async fn image_look(
         is_gguf: true,
         oid: None,
     };
-    let Some(family) = image_family_of(client, parser, model_id, &first).await else {
-        return none;
+    let Some(family) = image_family_of(client, parser, model_id, &first).await? else {
+        return Ok(none);
     };
     let preview = match companions_of(client, family).await {
         Ok(companions) => Some(preview_of(family, companions, models_dir)),
+        Err(limited @ HfPortError::RateLimited { .. }) => return Err(limited),
         Err(unlisted) => {
             tracing::warn!(
                 model_id,
@@ -82,10 +91,10 @@ pub(crate) async fn image_look(
             None
         }
     };
-    ImageLook {
+    Ok(ImageLook {
         family: Some(family),
         preview,
-    }
+    })
 }
 
 /// The preview alone: [`image_look`]'s, `None` when the repository is not
@@ -100,6 +109,7 @@ pub(crate) async fn image_preview(
 ) -> Option<HfImagePreview> {
     image_look(client, parser, model_id, quants, models_dir)
         .await
+        .ok()?
         .preview
 }
 

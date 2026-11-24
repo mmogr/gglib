@@ -87,6 +87,10 @@ impl DownloadOps {
     ///
     /// The variant named by `quantization`, or with none named the largest
     /// quantized one that fits this machine's [`download_budget`].
+    ///
+    /// A request Hugging Face's rate limit refused while the download was
+    /// chosen is [`GuiError::HubLimited`]; nothing is queued, and the same
+    /// request can be made once it lifts.
     pub async fn queue_download(
         &self,
         model_id: String,
@@ -95,7 +99,11 @@ impl DownloadOps {
         let id = Arc::clone(&self.downloads)
             .queue_smart(model_id, quantization, download_budget().await)
             .await
-            .map_err(|e| GuiError::Internal(e.to_string()))?;
+            .map_err(|e| {
+                GuiError::from_download_or("Could not queue the download", e, |e| {
+                    GuiError::Internal(e.to_string())
+                })
+            })?;
         Ok(QueueDownloadResponse { id: id.to_string() })
     }
 
@@ -204,7 +212,7 @@ impl DownloadOps {
         &self,
         model_id: &str,
     ) -> Result<HfQuantizationsResponse, GuiError> {
-        let failed = |e| GuiError::Internal(format!("Failed to get quantizations: {e}"));
+        let failed = |e| GuiError::from_hub("Failed to get quantizations", e);
         let quants = self
             .hf_client
             .list_quantizations(model_id)
@@ -216,7 +224,8 @@ impl DownloadOps {
             model_id,
             quants,
         )
-        .await;
+        .await
+        .map_err(failed)?;
         let infos: Vec<gglib_core::ports::HfQuantInfo> =
             quants.iter().map(|(q, _)| q.clone()).collect();
 
@@ -231,7 +240,8 @@ impl DownloadOps {
             &infos,
             models_dir.as_deref(),
         )
-        .await;
+        .await
+        .map_err(failed)?;
         // The budget the picker chooses a variant by, so the Fit column and
         // the download it leads to agree.
         let budget_bytes = download_budget().await;
@@ -268,7 +278,11 @@ impl DownloadOps {
             download_budget().await,
         )
         .await
-        .map_err(|e| GuiError::Internal(format!("Failed to pick a variant: {e}")))?;
+        .map_err(|e| {
+            GuiError::from_download_or("Failed to pick a variant", e, |e| {
+                GuiError::Internal(format!("Failed to pick a variant: {e}"))
+            })
+        })?;
         Ok(HfPickResponse {
             model_id: model_id.to_owned(),
             label,
@@ -283,21 +297,20 @@ impl DownloadOps {
     /// Returns an error if the model doesn't exist or has no GGUF files.
     pub async fn get_model_summary(&self, model_id: &str) -> Result<HfModelSummary, GuiError> {
         // Fetch model info directly by ID
-        let info =
-            self.hf_client
-                .get_model_info(model_id)
-                .await
-                .map_err(|e| GuiError::NotFound {
-                    entity: "model",
-                    id: format!("{model_id}: {e}"),
-                })?;
+        let info = self.hf_client.get_model_info(model_id).await.map_err(|e| {
+            GuiError::from_hub_or("Failed to get model info", e, |e| GuiError::NotFound {
+                entity: "model",
+                id: format!("{model_id}: {e}"),
+            })
+        })?;
 
         // Check if the model has GGUF files by checking quantizations
+        let checking = "Failed to check quantizations";
         let quants = self
             .hf_client
             .list_quantizations(model_id)
             .await
-            .map_err(|e| GuiError::Internal(format!("Failed to check quantizations: {e}")))?;
+            .map_err(|e| GuiError::from_hub(checking, e))?;
 
         if quants.is_empty() {
             return Err(GuiError::ValidationFailed(format!(
@@ -312,7 +325,8 @@ impl DownloadOps {
             info.parameters_b,
             &quants,
         )
-        .await;
+        .await
+        .map_err(|e| GuiError::from_hub(checking, e))?;
         Ok(HfModelSummary {
             parameters_b,
             ..info.into()
@@ -360,7 +374,7 @@ pub async fn search_hf_hits(
 
     hf.search(&options)
         .await
-        .map_err(|e| GuiError::Internal(format!("HF search failed: {e}")))
+        .map_err(|e| GuiError::from_hub("HF search failed", e))
 }
 
 #[cfg(test)]
@@ -370,3 +384,7 @@ mod tests;
 #[cfg(test)]
 #[path = "downloads_search_tests.rs"]
 mod search_tests;
+
+#[cfg(test)]
+#[path = "downloads_limit_tests.rs"]
+mod limit_tests;

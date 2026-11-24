@@ -93,6 +93,15 @@ The native path (`native.rs`) is responsible for:
   Hence two rules that must stay together: the client is built with
   `redirect::Policy::none()` (see `native::build_client`, which the tests share
   so the two cannot drift), and plain `ETag` is never accepted as a digest.
+- **Hugging Face's rate limit.** Each hop's `RateLimit` header is noted in
+  the plan's gate, the one the process's Hub client keeps. No connection is
+  opened while the allowance the file counts against is closed, and a
+  refusal (429) is waited out and the file asked for again; the row shows
+  the wait as `waiting for Hugging Face's rate limit, 2:14`, each second,
+  until bytes arrive, and a cancel ends it. A refusal spends no reconnect
+  and keeps what the last connection handed on. After five refusals in a
+  row with nothing arriving between, the download fails with a 429 whose
+  text says Hugging Face kept rate limiting it (`limited.rs`).
 - **Atomic publication.** The final path is only ever created by renaming a
   fully verified `.part` file, so a partial transfer can never be mistaken for a
   complete model.

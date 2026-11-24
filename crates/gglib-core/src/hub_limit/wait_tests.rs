@@ -33,6 +33,8 @@ fn a_part_of_a_second_rounds_up() {
     assert_eq!(clock(Duration::from_millis(1)), "0:01");
     assert_eq!(clock(Duration::from_millis(59_001)), "1:00");
     assert_eq!(clock(Duration::from_millis(133_500)), "2:14");
+    assert_eq!(whole_seconds(Duration::from_millis(9_001)), 10);
+    assert_eq!(whole_seconds(Duration::from_secs(10)), 10);
 }
 
 /// The wait is told the time left at its start and once a second, and ends
