@@ -118,7 +118,7 @@ jobs:
       # names. cargo-shear reads the source as text and compiles nothing, so
       # code for another platform or behind a feature counts as a use.
       - name: Install cargo-shear
-        uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
         with:
           tool: cargo-shear
 
