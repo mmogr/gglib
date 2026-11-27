@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.1-rc.1](https://github.com/mmogr/gglib/compare/v0.40.0-rc.1...v0.40.1-rc.1) (2026-11-27)
+
+
+### Internal
+
+* **deps:** bump taiki-e/install-action ([#2240](https://github.com/mmogr/gglib/issues/2240)) ([ca57a8f](https://github.com/mmogr/gglib/commit/ca57a8f1b40b3d0f1149063e35d902ad323822d0))
+
 ## [0.40.0-rc.1](https://github.com/mmogr/gglib/compare/v0.39.1-rc.1...v0.40.0-rc.1) (2026-11-24)
 
 
