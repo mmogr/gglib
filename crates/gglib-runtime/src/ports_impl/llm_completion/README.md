@@ -94,8 +94,13 @@ request that names one keeps it: `--max-tokens`, a stored setting, the
 `reasoning` recipe's 32768. A reply cut off at the limit while it writes a
 call, or before it writes any text, ends the loop's run; one cut off in its
 text is taken as if it had stopped. The words after a Draw's picture are the
-exception and are always answered for. The limit is written after the ladder is
-folded, so the sampling observer, and `gglib model explain`, do not report it.
+exception and are always answered for. So a turn whose limit is gglib's own
+(the one written here, or the built-in `reasoning` recipe's) and whose ladder
+names no `reasoning_budget_tokens` is also given that limit less 8192 as its
+thinking budget: 8192, or 24576 under the recipe's limit. A limit or a budget
+any other rung named derives nothing. On a send straight to llama-server the
+limit and the budget are written after the ladder is folded, so the sampling
+observer, and `gglib model explain`, do not report them.
 A send to another machine is not limited: a run on a paired machine's model
 gets no limit from this side, and that machine's proxy applies its own
 settings for the model, as it would for any client that names none. A send
@@ -103,8 +108,9 @@ through this machine's endpoint is: the endpoint takes `max_tokens` as the
 client's own budget whatever it trusts, so a limit written here would
 outrank one its ladder names. The ladder is folded on a copy, with the
 layers and model the endpoint folds with, and the limit is written only when
-that fold names no `max_tokens`. An adapter without it, such as a benchmark
-arm's, sends none.
+that fold names no `max_tokens`, the budget only when it names no
+`reasoning_budget_tokens`. An adapter without it, such as a benchmark arm's,
+sends neither.
 
 # Layout
 

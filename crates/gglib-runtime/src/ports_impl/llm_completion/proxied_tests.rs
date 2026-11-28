@@ -129,6 +129,7 @@ fn the_first_calls_demand_reaches_the_endpoint() {
 fn only_this_machines_endpoint_is_given_the_turns_limit() {
     let local = body(&through(Some(endpoint()), None), &conversation(), false);
     assert_eq!(local["max_tokens"], json!(16_384));
+    assert_eq!(local["reasoning_budget_tokens"], json!(8_192), "{local}");
 
     let far = Door {
         name: Some("desk".to_owned()),
@@ -136,6 +137,7 @@ fn only_this_machines_endpoint_is_given_the_turns_limit() {
     };
     let far = body(&through(Some(far), None), &conversation(), false);
     assert!(far.get("max_tokens").is_none(), "{far}");
+    assert!(far.get("reasoning_budget_tokens").is_none(), "{far}");
 }
 
 /// A `max_tokens` the endpoint's ladder will name, from this machine's
@@ -154,6 +156,7 @@ fn a_limit_the_ladder_names_is_left_for_the_endpoint() {
     let by_settings = through(Some(endpoint()), None).with_layers(global);
     let sent = body(&by_settings, &[AgentMessage::user("hi")], false);
     assert!(sent.get("max_tokens").is_none(), "{sent}");
+    assert!(sent.get("reasoning_budget_tokens").is_none(), "{sent}");
 
     let own = ModelContext {
         inference_defaults: Some(InferenceConfig {
@@ -165,12 +168,14 @@ fn a_limit_the_ladder_names_is_left_for_the_endpoint() {
     let by_model = through(Some(endpoint()), None).with_model_context(own);
     let sent = body(&by_model, &[AgentMessage::user("hi")], false);
     assert!(sent.get("max_tokens").is_none(), "{sent}");
+    assert!(sent.get("reasoning_budget_tokens").is_none(), "{sent}");
 }
 
 /// The limit through this machine's endpoint is the class's: a `reasoning`
 /// model whose own recipe names no `max_tokens` is given 32768. One whose
 /// recipe is the `reasoning` one has that recipe's 32768 from the
-/// endpoint's ladder, and none from here.
+/// endpoint's ladder, and none from here. Both limits are gglib's own, so
+/// both turns are given the thinking budget of 24576 from here.
 #[test]
 fn a_reasoning_model_through_the_endpoint_is_given_its_classs_limit() {
     let published = through(Some(endpoint()), None).with_model_context(ModelContext {
@@ -180,6 +185,7 @@ fn a_reasoning_model_through_the_endpoint_is_given_its_classs_limit() {
     });
     let sent = body(&published, &[AgentMessage::user("hi")], false);
     assert_eq!(sent["max_tokens"], json!(32_768));
+    assert_eq!(sent["reasoning_budget_tokens"], json!(24_576), "{sent}");
 
     let recipe = through(Some(endpoint()), None).with_model_context(ModelContext {
         tags: vec!["reasoning".to_owned()],
@@ -188,6 +194,36 @@ fn a_reasoning_model_through_the_endpoint_is_given_its_classs_limit() {
     });
     let sent = body(&recipe, &[AgentMessage::user("hi")], false);
     assert!(sent.get("max_tokens").is_none(), "{sent}");
+    assert_eq!(sent["reasoning_budget_tokens"], json!(24_576), "{sent}");
+    assert!(sent.get("reasoning_budget_message").is_none(), "{sent}");
+}
+
+/// A thinking budget the endpoint's ladder names, a profile's `0` among
+/// them, is left for the endpoint to send: the endpoint takes a client's
+/// budget as authoritative, so one from here would outrank it. A budget the
+/// person named goes as they named it.
+#[test]
+fn a_budget_the_ladder_names_is_left_for_the_endpoint() {
+    for budget in [0, -1, 4_096] {
+        let profile = SamplingLayers {
+            profile: Some(InferenceConfig {
+                reasoning_budget_tokens: Some(budget),
+                ..InferenceConfig::default()
+            }),
+            ..SamplingLayers::default()
+        };
+        let by_profile = through(Some(endpoint()), None).with_layers(profile);
+        let sent = body(&by_profile, &[AgentMessage::user("hi")], false);
+        assert!(sent.get("reasoning_budget_tokens").is_none(), "{sent}");
+
+        let chosen = InferenceConfig {
+            reasoning_budget_tokens: Some(budget),
+            ..InferenceConfig::default()
+        };
+        let by_person = through(Some(endpoint()), Some(chosen));
+        let sent = body(&by_person, &[AgentMessage::user("hi")], false);
+        assert_eq!(sent["reasoning_budget_tokens"], json!(budget), "{sent}");
+    }
 }
 
 /// A prior turn's thinking is the endpoint's to strip, as it strips any
