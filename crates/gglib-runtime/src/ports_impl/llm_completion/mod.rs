@@ -11,7 +11,6 @@ use reqwest::Client;
 use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
-    domain::capability_tags,
     ports::{AttachmentStore, LlmCompletionPort, RetryObserver, UsageSink},
     request_pipeline::{self, ModelContext, SamplingLayers},
     retry::RetryPolicy,
@@ -157,9 +156,10 @@ pub struct LlmCompletionAdapter {
     /// global state. `shaped_body` runs once per turn — outside the retry loop
     /// — so a retried request cannot spend it early.
     first_turn_pending: AtomicBool,
-    /// Give a request that names no `max_tokens` a turn's limit
-    /// (`turn_limit`), unless it goes to another machine. Set for the agent
-    /// loop's turns; off by default.
+    /// Give a request that names no `max_tokens` a turn's limit, and one
+    /// whose limit is gglib's own a thinking budget within it where nothing
+    /// names one (`turn_limit`), unless it goes to another machine. Set for
+    /// the agent loop's turns; off by default.
     limit_turns: bool,
 }
 
@@ -268,8 +268,7 @@ impl LlmCompletionAdapter {
         .map_err(|e| anyhow!("conversation exceeds the model's context budget: {e}"))?;
 
         if self.limit_turns {
-            let reasoning = capability_tags::is_reasoning(&self.model_context.tags);
-            turn_limit::limit_turn(&mut body, reasoning);
+            turn_limit::limit_loop_turn(&mut body, &self.model_context, &report.sampling);
         }
 
         if report.truncation.messages_truncated > 0 {

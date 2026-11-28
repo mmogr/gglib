@@ -1,7 +1,7 @@
 # ADR 0007 — Ask the server for template capabilities
 
 - **Status:** Accepted; decision 3 superseded (amended 2026-11-12, 2026-11-14,
-  2026-11-16)
+  2026-11-16, 2026-11-28)
 - **Date:** 2026-08-17
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0002](0002-defer-tool-call-constraint-to-llama-cpp.md),
@@ -351,6 +351,26 @@ is a **budget**: it says what the request *is*, not how it should sample, and
 joins `max_tokens` on the client-authoritative side (the "taste, not
 function" line `request_pipeline::sampling` already draws). Finding 6 closes
 behind them.
+
+> **Amended 2026-11-28 — gglib's own loop turns get a budget from their
+> limit.** A turn of gglib's own agent loop whose `max_tokens` is gglib's own
+> (the turn limit the completion adapter writes when no rung names one, or
+> the built-in `reasoning` recipe's on the ladder's bottom rung) and whose
+> ladder names no `reasoning_budget_tokens` is also sent a budget of that
+> limit less the 8192 tokens kept for the answer: 8192 under the default
+> limit, 24576 under a `reasoning` model's. Which rung named each value is
+> read from the fold's provenance, so a `max_tokens` from the person, a
+> client, a profile, the model's own settings or the global ones derives
+> nothing, and a budget any of them names, `0` and `-1` included, is left as
+> it is. Through this machine's endpoint the budget is written only when the
+> endpoint's own fold names none, because the endpoint takes a client's
+> budget as authoritative and one written by gglib's side would otherwise
+> outrank a profile's; a send to another machine gets none. No
+> `reasoning_budget_message` is sent, and nothing counts, logs or shows the
+> budget, which finding 7a says nothing can observe. A client's own request
+> through the proxy is unchanged. The reading behind it is in
+> [#2244](https://github.com/mmogr/gglib/issues/2244); the rule is
+> `crates/gglib-runtime/src/ports_impl/llm_completion/turn_limit.rs`.
 
 ## Classification: the control is policy, the observation is a self-report
 

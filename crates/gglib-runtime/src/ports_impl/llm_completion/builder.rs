@@ -222,7 +222,9 @@ impl LlmCompletionAdapter {
     /// Give each request that leaves the ladder with no `max_tokens` a
     /// turn's limit (16384 tokens, 32768 for a `reasoning`-tagged model, or
     /// more for a thinking budget: see `turn_limit`), so a turn the model
-    /// never ends stops. A send through a paired machine's door
+    /// never ends stops, and a turn whose limit is gglib's own a thinking
+    /// budget that keeps room for the answer where nothing names one. A send
+    /// through a paired machine's door
     /// ([`with_door`](Self::with_door)) is never limited: the settings of the
     /// machine behind it apply. One through this machine's endpoint is: the
     /// endpoint takes it as a client's own budget.
