@@ -139,6 +139,7 @@ impl Message {
                             Some(self.content.clone())
                         },
                         tool_calls,
+                        reasoning: None,
                     },
                 }
             }

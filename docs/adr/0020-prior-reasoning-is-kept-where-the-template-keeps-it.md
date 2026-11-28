@@ -99,6 +99,19 @@ row has not been read (kill criterion 1).
    catalog row (a model on a paired machine, `gglib chat` against a remote
    target) has no caps and keeps stripping.
 
+   > **Amended 2026-11-28.** The built-in agent now sends its own reasoning
+   > back. A loop composed by `compose_agent_loop` (`gglib-runtime`) keeps
+   > each step's reasoning on that step's assistant message for the rest of
+   > the run, sends it as `reasoning_content`, and counts it against the
+   > loop's context budget, only when the model's stored caps answer
+   > `supports_preserve_reasoning: true` (`preserve_reasoning_support` is
+   > `Support::Yes`). On any other answer, and for a model on a paired
+   > machine, it keeps and counts none. It holds within one run: a saved
+   > chat's rows carry no reasoning, and a chat rebuilt from them sends
+   > none. The tuner's loop keeps none. Before this the agent sent no
+   > reasoning of its own, so the gate had nothing of its to keep
+   > ([#2243](https://github.com/mmogr/gglib/issues/2243)).
+
 ### Where it lives
 
 - [`request_pipeline/messages.rs`](../../crates/gglib-core/src/request_pipeline/messages.rs):

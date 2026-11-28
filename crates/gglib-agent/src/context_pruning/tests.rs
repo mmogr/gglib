@@ -19,6 +19,7 @@ fn assistant_text(s: &str) -> AgentMessage {
         content: AssistantContent {
             text: Some(s.to_owned()),
             tool_calls: vec![],
+            reasoning: None,
         },
     }
 }
@@ -31,6 +32,7 @@ fn assistant_with_calls(id: &str, name: &str) -> AgentMessage {
                 name: name.to_owned(),
                 arguments: json!({}),
             }],
+            reasoning: None,
         },
     }
 }
@@ -141,6 +143,7 @@ fn pass1_strips_pruned_call_ids_from_partially_surviving_assistant_message() {
                     arguments: json!({}),
                 },
             ],
+            reasoning: None,
         },
     };
     let msgs = vec![

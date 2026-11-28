@@ -54,9 +54,42 @@ pub struct AssistantContent {
     /// vec, which is a state a bare `Vec` cannot express in TypeScript.
     #[cfg_attr(feature = "ts-bindings", ts(as = "Option<Vec<ToolCall>>", optional))]
     pub tool_calls: Vec<ToolCall>,
+    /// The reasoning the model wrote on this step, kept only by the agent
+    /// loop and only while its run is in progress, for a model whose
+    /// template renders it back ([ADR 0020]). Never the only thing a message
+    /// holds ([`AssistantContent::step`]).
+    ///
+    /// Not part of the serialized form, nor of the binding: a saved row, a
+    /// payload and a rebuilt chat carry none, and read back as `None`.
+    ///
+    /// [ADR 0020]: https://github.com/mmogr/gglib/blob/main/docs/adr/0020-prior-reasoning-is-kept-where-the-template-keeps-it.md
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub reasoning: Option<String>,
 }
 
 impl AssistantContent {
+    /// One step's assistant message: its `text` (empty is none), its
+    /// `tool_calls`, and its `reasoning` (empty is none).
+    ///
+    /// `None` when the step wrote neither text nor a call, whatever its
+    /// reasoning: reasoning is never the only thing a message holds.
+    #[must_use]
+    pub fn step(
+        text: String,
+        tool_calls: Vec<ToolCall>,
+        reasoning: Option<String>,
+    ) -> Option<Self> {
+        let text = (!text.is_empty()).then_some(text);
+        if text.is_none() && tool_calls.is_empty() {
+            return None;
+        }
+        Some(Self {
+            text,
+            tool_calls,
+            reasoning: reasoning.filter(|r| !r.is_empty()),
+        })
+    }
+
     /// Consume `self` and return a new value with `calls` as the tool-call
     /// list, preserving any existing text content.
     #[must_use]
@@ -165,7 +198,9 @@ impl AgentMessage {
     /// Estimate the Unicode scalar-value count of this message.
     ///
     /// An image a user message carries is charged [`IMAGE_CHARGE_CHARS`]:
-    /// the most an image can cost, with no look at its size.
+    /// the most an image can cost, with no look at its size. An assistant
+    /// message's [`reasoning`](AssistantContent::reasoning) is counted when
+    /// it holds one, since it is sent.
     ///
     /// Uses `str::chars().count()` rather than [`str::len`] (byte count) so
     /// that multi-byte characters are counted as one unit, matching how LLMs
@@ -186,6 +221,7 @@ impl AgentMessage {
             }
             Self::Assistant { content } => {
                 content.text.as_ref().map_or(0, |s| s.chars().count())
+                    + content.reasoning.as_ref().map_or(0, |s| s.chars().count())
                     + content
                         .tool_calls
                         .iter()

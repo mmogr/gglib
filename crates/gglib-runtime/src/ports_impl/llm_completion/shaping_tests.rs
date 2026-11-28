@@ -45,6 +45,7 @@ fn prior_turn_reasoning_is_stripped() {
             content: AssistantContent {
                 text: Some("<think>ramble</think>answer".to_owned()),
                 tool_calls: vec![],
+                reasoning: None,
             },
         },
     ];
@@ -83,6 +84,7 @@ fn coalescing_preserves_tool_call_ids() {
                     name: "f".to_owned(),
                     arguments: json!({}),
                 }],
+                reasoning: None,
             },
         },
         AgentMessage::Tool {

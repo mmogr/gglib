@@ -62,6 +62,11 @@ fn message_to_openai(index: usize, msg: &AgentMessage, images: &ImageUrls) -> Va
                     content.tool_calls.iter().map(tool_call_to_openai).collect();
                 obj["tool_calls"] = Value::Array(calls);
             }
+            // Where a client puts it, for stage 1 of the pipeline to keep or
+            // strip as it does any client's.
+            if let Some(reasoning) = &content.reasoning {
+                obj["reasoning_content"] = Value::String(reasoning.clone());
+            }
             obj
         }
         AgentMessage::Tool {
@@ -292,5 +297,33 @@ mod tests {
         assert_eq!(body["messages"][0]["content"], json!("hello"));
         // …and the sampling keys still landed alongside them.
         assert_eq!(body["min_p"], json!(0.0625));
+    }
+
+    /// An assistant message that holds its step's reasoning sends it as
+    /// `reasoning_content`, beside its calls; one with none sends no key.
+    #[test]
+    fn an_assistant_messages_reasoning_is_sent_as_reasoning_content() {
+        use gglib_core::domain::agent::AssistantContent;
+        let step = |reasoning: Option<&str>| AgentMessage::Assistant {
+            content: AssistantContent {
+                text: None,
+                tool_calls: vec![ToolCall {
+                    id: "c1".to_owned(),
+                    name: "read_file".to_owned(),
+                    arguments: json!({}),
+                }],
+                reasoning: reasoning.map(str::to_owned),
+            },
+        };
+        let messages = [step(Some("Read a.rs first.")), step(None)];
+
+        let body = build_chat_body("m", &messages, &[], None, &ImageUrls::default());
+
+        let kept = &body["messages"][0];
+        assert_eq!(kept["reasoning_content"], json!("Read a.rs first."));
+        assert_eq!(kept["tool_calls"][0]["id"], json!("c1"));
+        assert!(kept.get("content").is_none(), "{kept}");
+        let none = body["messages"][1].as_object().unwrap();
+        assert!(!none.contains_key("reasoning_content"), "{none:?}");
     }
 }

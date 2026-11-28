@@ -95,6 +95,7 @@ fn assistant_content_only_omits_tool_calls() {
         content: AssistantContent {
             text: Some("hi".into()),
             tool_calls: vec![],
+            reasoning: None,
         },
     };
     let json = serde_json::to_value(&msg).unwrap();
@@ -114,6 +115,7 @@ fn assistant_tool_calls_only_omits_content() {
                 name: "search".into(),
                 arguments: json!({}),
             }],
+            reasoning: None,
         },
     };
     let json_val = serde_json::to_value(&msg).unwrap();
@@ -148,6 +150,7 @@ fn assistant_both_round_trips() {
                     arguments: json!({ "path": "/tmp/x" }),
                 },
             ],
+            reasoning: None,
         },
     };
 
@@ -182,6 +185,7 @@ fn with_replaced_tool_calls_preserves_text() {
     let original = AssistantContent {
         text: Some("hello".into()),
         tool_calls: vec![],
+        reasoning: None,
     };
     let calls = vec![ToolCall {
         id: "c1".into(),
@@ -204,6 +208,7 @@ fn with_replaced_tool_calls_replaces_existing() {
             name: "old_tool".into(),
             arguments: json!({}),
         }],
+        reasoning: None,
     };
     let new_calls = vec![ToolCall {
         id: "new".into(),
@@ -226,6 +231,7 @@ fn with_replaced_tool_calls_no_text() {
             name: "old".into(),
             arguments: json!({}),
         }],
+        reasoning: None,
     };
     let new_calls = vec![ToolCall {
         id: "new".into(),
@@ -251,4 +257,77 @@ fn only_a_user_message_with_an_image_carries_one() {
         content: "prompt".into(),
     };
     assert!(!system.has_images());
+}
+
+/// A tool step of the loop's, with `reasoning` on it.
+fn step_with(reasoning: Option<&str>) -> AgentMessage {
+    use serde_json::json;
+    AgentMessage::Assistant {
+        content: AssistantContent {
+            text: Some("Looking.".into()),
+            tool_calls: vec![ToolCall {
+                id: "c1".into(),
+                name: "read_file".into(),
+                arguments: json!({ "path": "a.rs" }),
+            }],
+            reasoning: reasoning.map(str::to_owned),
+        },
+    }
+}
+
+/// A step's reasoning is not part of the serialized form: a message that
+/// holds some writes byte for byte what one without it writes, and reads
+/// back with none.
+#[test]
+fn an_assistant_messages_reasoning_is_not_serialized() {
+    let with = serde_json::to_string(&step_with(Some("The bug is in a.rs."))).unwrap();
+    let without = serde_json::to_string(&step_with(None)).unwrap();
+    assert_eq!(with, without);
+    assert!(!with.contains("reasoning"), "{with}");
+
+    let back: AgentMessage = serde_json::from_str(&with).unwrap();
+    let AgentMessage::Assistant { content } = back else {
+        panic!("expected an assistant message");
+    };
+    assert!(content.reasoning.is_none());
+    let keyed: AgentMessage = serde_json::from_str(
+        r#"{"role":"assistant","content":"hi","reasoning_content":"thought"}"#,
+    )
+    .unwrap();
+    let AgentMessage::Assistant { content } = keyed else {
+        panic!("expected an assistant message");
+    };
+    assert!(content.reasoning.is_none(), "a payload's key is not read");
+}
+
+/// What the loop counts is what it sends: an assistant message's reasoning
+/// is counted with its text and calls, and one with none counts as before.
+#[test]
+fn char_count_counts_an_assistant_messages_reasoning() {
+    let reasoning = "Read a.rs first. é";
+    let with = step_with(Some(reasoning)).char_count();
+    let without = step_with(None).char_count();
+    assert_eq!(with, without + reasoning.chars().count());
+    let expected = "Looking.".len() + "c1".len() + "read_file".len() + r#"{"path":"a.rs"}"#.len();
+    assert_eq!(without, expected);
+}
+
+/// A step is a message only when it wrote text or a call: reasoning alone
+/// makes none. Empty text and empty reasoning are none.
+#[test]
+fn a_step_of_reasoning_alone_is_no_message() {
+    assert!(AssistantContent::step(String::new(), Vec::new(), Some("thinking".into())).is_none());
+    assert!(AssistantContent::step(String::new(), Vec::new(), None).is_none());
+
+    let call = ToolCall {
+        id: "c1".into(),
+        name: "read_file".into(),
+        arguments: serde_json::json!({}),
+    };
+    let made = AssistantContent::step(String::new(), vec![call], Some("thinking".into())).unwrap();
+    assert_eq!(made.text, None);
+    assert_eq!(made.reasoning.as_deref(), Some("thinking"));
+    let answered = AssistantContent::step("done".into(), Vec::new(), Some(String::new())).unwrap();
+    assert_eq!(answered.text.as_deref(), Some("done"));
+    assert_eq!(answered.reasoning, None, "empty reasoning is none");
 }

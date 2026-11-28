@@ -8,9 +8,11 @@
 //!    [`ToolExecutorPort`], routing qualified names to MCP and bare ones to the
 //!    built-ins, and storing an MCP tool's images in the same attachment store
 //!    the completion adapter reads.
-//! 3. `AgentLoop::build_observed(llm, tool_executor, tool_filter, guard)` —
-//!    compose both ports into an [`AgentLoopPort`], optionally filtering the
-//!    tool set, and say where the loop's guard decisions are counted.
+//! 3. `AgentLoop::build_observed(llm, tool_executor, tool_filter, guard,
+//!    keep_reasoning)` — compose both ports into an [`AgentLoopPort`],
+//!    optionally filtering the tool set, say where the loop's guard decisions
+//!    are counted, and say whether each step's reasoning is sent back on the
+//!    run's later requests.
 //!
 //! One function, so every run applies the same defaults and wiring order.
 //! One of those defaults is a turn's limit: a request that names no `max_tokens`
@@ -23,14 +25,16 @@
 //! Through an endpoint the request is shaped there, so the context decides
 //! only what the adapter still does itself: whether the most recent drawn
 //! picture is shown, and a turn's limit. The context is handed to the
-//! adapter whole rather than being taken apart here.
+//! adapter whole rather than being taken apart here. It also decides one
+//! thing about the loop: whether each step's reasoning is kept for the rest
+//! of the run (`keeps_reasoning`).
 
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use gglib_agent::AgentLoop;
-use gglib_core::domain::InferenceConfig;
+use gglib_core::domain::{InferenceConfig, Support, preserve_reasoning_support};
 use gglib_core::ports::{
     AgentGuardReporter, AgentLoopPort, AttachmentStore, LlmCompletionPort, RetryObserver,
     ToolExecutorPort,
@@ -45,6 +49,19 @@ use reqwest::Client;
 
 use crate::{Door, LlmCompletionAdapter};
 
+/// Whether a loop on the model `context` describes keeps each step's
+/// reasoning for the rest of its run: only when the model's stored
+/// capabilities say its template renders earlier reasoning back, the one
+/// answer on which stage 1 of the pipeline keeps it ([ADR 0020]). No,
+/// unknown, a model never launched here and one on another machine (a
+/// passthrough context) keep none, so nothing is counted that stage 1 would
+/// strip.
+///
+/// [ADR 0020]: https://github.com/mmogr/gglib/blob/main/docs/adr/0020-prior-reasoning-is-kept-where-the-template-keeps-it.md
+fn keeps_reasoning(context: &ModelContext) -> bool {
+    preserve_reasoning_support(&context.template_caps) == Support::Yes
+}
+
 /// Compose a ready-to-run [`AgentLoopPort`] from infrastructure primitives.
 ///
 /// # Parameters
@@ -56,7 +73,9 @@ use crate::{Door, LlmCompletionAdapter};
 ///   profile as its `:<profile>` suffix.
 /// * `model_context` — resolved per-model facts from
 ///   [`gglib_core::request_pipeline::resolve()`]. Pass
-///   [`ModelContext::passthrough`] when the model is unknown.
+///   [`ModelContext::passthrough`] when the model is unknown. Its stored
+///   capabilities also decide whether the loop keeps each step's reasoning
+///   (`keeps_reasoning`).
 /// * `mcp` — handle to the running MCP service (for tool discovery/execution).
 /// * `tool_filter` — `Some(set)` restricts the visible tools to the named
 ///   allowlist; `None` exposes all tools from all connected MCP servers.
@@ -112,6 +131,7 @@ pub fn compose_agent_loop(
     attachments: Arc<dyn AttachmentStore>,
     drawing: Option<(DrawingTool, DrawArm)>,
 ) -> Arc<dyn AgentLoopPort> {
+    let keep_reasoning = keeps_reasoning(&model_context);
     let images = Arc::new(AttachmentService::new(Arc::clone(&attachments)));
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
         LlmCompletionAdapter::with_client(base_url, http_client, model)
@@ -134,5 +154,9 @@ pub fn compose_agent_loop(
         .with_drawing(drawing);
     let tool_executor: Arc<dyn ToolExecutorPort> =
         Arc::new(CombinedToolExecutor::with_builtin(mcp, images, builtin));
-    AgentLoop::build_observed(llm, tool_executor, tool_filter, guard)
+    AgentLoop::build_observed(llm, tool_executor, tool_filter, guard, keep_reasoning)
 }
+
+#[cfg(test)]
+#[path = "compose_tests.rs"]
+mod tests;

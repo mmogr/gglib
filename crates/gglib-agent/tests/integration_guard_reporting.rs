@@ -39,6 +39,7 @@ fn looping_agent(recorder: &Arc<Recorder>) -> Arc<dyn AgentLoopPort> {
         Arc::new(unchanging_executor()),
         None,
         Some(reporter(recorder)),
+        false,
     )
 }
 
@@ -75,6 +76,7 @@ async fn a_stagnation_trip_names_the_stagnation_detector() {
         Arc::new(MockToolExecutorPort::new()),
         None,
         Some(reporter(&recorder)),
+        false,
     );
 
     let result = run_to_end(
@@ -103,6 +105,7 @@ async fn a_quiet_tool_call_turn_is_reported_with_no_trip() {
         Arc::new(unchanging_executor()),
         None,
         Some(reporter(&recorder)),
+        false,
     );
 
     let result = run_to_end(&agent, guarded()).await;
@@ -130,6 +133,7 @@ async fn a_quiet_text_only_turn_is_reported_with_no_trip() {
         Arc::new(MockToolExecutorPort::new()),
         None,
         Some(reporter(&recorder)),
+        false,
     );
 
     let result = run_to_end(&agent, guarded()).await;
@@ -149,6 +153,7 @@ async fn a_run_with_both_guards_disabled_reports_nothing() {
         Arc::new(unchanging_executor()),
         None,
         Some(reporter(&recorder)),
+        false,
     );
 
     let result = run_to_end(

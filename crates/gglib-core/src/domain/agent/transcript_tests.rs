@@ -125,6 +125,7 @@ fn assistant_text_only() {
         content: AssistantContent {
             text: Some("The answer is 4.".into()),
             tool_calls: vec![],
+            reasoning: None,
         },
     };
     let out = to_new_message(&msg, 42);
@@ -143,6 +144,7 @@ fn assistant_with_tool_calls() {
                 name: "read_file".into(),
                 arguments: serde_json::json!({"path": "src/main.rs"}),
             }],
+            reasoning: None,
         },
     };
     let out = to_new_message(&msg, 42);
@@ -165,6 +167,7 @@ fn assistant_tool_calls_no_text() {
                 name: "list_directory".into(),
                 arguments: serde_json::json!({"path": "."}),
             }],
+            reasoning: None,
         },
     };
     let out = to_new_message(&msg, 42);
@@ -210,6 +213,7 @@ fn a_user_and_a_tool_message_keep_their_images_and_no_other_row_has_any() {
             content: AssistantContent {
                 text: Some("a".into()),
                 tool_calls: vec![],
+                reasoning: None,
             },
         },
         AgentMessage::Tool {

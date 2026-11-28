@@ -61,6 +61,7 @@ fn build_long_history(n_pairs: u32) -> Vec<AgentMessage> {
                     name: "search".into(),
                     arguments: json!({}),
                 }],
+                reasoning: None,
             },
         });
         messages.push(AgentMessage::Tool {

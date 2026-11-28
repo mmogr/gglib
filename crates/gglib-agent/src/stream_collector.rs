@@ -8,7 +8,8 @@
 //!
 //! Reasoning deltas ([`LlmStreamEvent::ReasoningDelta`]) are forwarded live
 //! as [`AgentEvent::ReasoningDelta`] and accumulated in a separate buffer; they
-//! are never mixed into the `content` field and are not sent back as context.
+//! are never mixed into the `content` field. The loop decides whether the
+//! step's reasoning goes back on its assistant message.
 //!
 //! # Why separate from the main loop?
 //!
@@ -82,9 +83,9 @@ pub struct CollectedResponse {
     pub content: String,
     /// All reasoning/CoT fragments joined into a single string.
     ///
-    /// Empty for models that do not emit `reasoning_content` frames.
-    /// Present for informational purposes (logging, CLI rendering); it is
-    /// **not** fed back into the conversation history.
+    /// Empty for models that do not emit `reasoning_content` frames. A loop
+    /// built to keep reasoning puts it on the step's assistant message for
+    /// the rest of the run; any other loop logs its length and drops it.
     pub reasoning_content: String,
     /// Tool calls requested by the model (empty when the model answered directly).
     pub tool_calls: Vec<ToolCall>,

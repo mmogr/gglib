@@ -39,8 +39,9 @@ pub enum AgentEvent {
     ///
     /// Emitted by reasoning-capable models (e.g. `DeepSeek` R1, `QwQ`) that expose
     /// their chain-of-thought via a separate `reasoning_content` SSE field.
-    /// These fragments are forwarded to the UI as they arrive but are **not**
-    /// included in the conversation history sent back to the model.
+    /// These fragments are forwarded to the UI as they arrive and kept apart
+    /// from the reply's text. The agent loop decides whether a step's
+    /// reasoning goes back to the model on the run's later requests.
     ReasoningDelta {
         /// The new reasoning fragment (append to the current reasoning buffer).
         content: String,
@@ -256,8 +257,9 @@ pub enum LlmStreamEvent {
     /// llama-server is started with `--reasoning-format deepseek`.  The
     /// runtime adapter maps `delta["reasoning_content"]` frames to this
     /// variant; the stream collector forwards them as
-    /// [`AgentEvent::ReasoningDelta`] and accumulates them in a separate
-    /// buffer that is never sent back to the LLM as context.
+    /// [`AgentEvent::ReasoningDelta`] and accumulates them in a buffer kept
+    /// apart from `content`; the agent loop decides whether a step's
+    /// reasoning is sent back to the model.
     ReasoningDelta {
         /// The new reasoning fragment (append to the current reasoning buffer).
         content: String,

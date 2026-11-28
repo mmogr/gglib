@@ -328,6 +328,7 @@ async fn test_both_text_and_tool_calls_in_history() {
                 content: AssistantContent {
                     text: Some(_),
                     tool_calls,
+                    ..
                 },
             } if !tool_calls.is_empty()
         )

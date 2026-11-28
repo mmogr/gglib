@@ -200,6 +200,7 @@ fn a_prior_turns_thinking_is_left_for_the_endpoint() {
             content: AssistantContent {
                 text: Some("<think>ramble</think>answer".to_owned()),
                 tool_calls: vec![],
+                reasoning: None,
             },
         },
         AgentMessage::user("and?"),

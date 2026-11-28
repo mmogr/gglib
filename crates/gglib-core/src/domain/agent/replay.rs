@@ -146,6 +146,7 @@ impl Turn {
             content: AssistantContent {
                 text: Some(self.text).filter(|t| !t.is_empty()),
                 tool_calls: self.calls.iter().map(|c| c.tool_call.clone()).collect(),
+                reasoning: None,
             },
         };
         let mut row = to_new_message(&assistant, conversation_id);

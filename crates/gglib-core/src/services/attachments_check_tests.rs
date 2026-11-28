@@ -67,6 +67,7 @@ fn assistant() -> AgentMessage {
         content: AssistantContent {
             text: Some("seen".to_owned()),
             tool_calls: Vec::new(),
+            reasoning: None,
         },
     }
 }
