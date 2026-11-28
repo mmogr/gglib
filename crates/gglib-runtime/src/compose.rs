@@ -134,5 +134,5 @@ pub fn compose_agent_loop(
         .with_drawing(drawing);
     let tool_executor: Arc<dyn ToolExecutorPort> =
         Arc::new(CombinedToolExecutor::with_builtin(mcp, images, builtin));
-    AgentLoop::build_observed(llm, tool_executor, tool_filter, guard)
+    AgentLoop::build_observed(llm, tool_executor, tool_filter, guard, false)
 }

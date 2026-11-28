@@ -175,6 +175,13 @@ pub struct AgentLoop {
     /// count it under. `None` reports nowhere, which is what every caller
     /// that has no ledger to reach passes.
     guard: Option<AgentGuardReporter>,
+    /// Whether a step's reasoning is kept on its assistant message, and so
+    /// sent back on the run's later requests and counted against its budget.
+    /// Only a model whose template renders earlier reasoning back is built
+    /// with it on ([ADR 0020]); its runs' saved rows carry none either way.
+    ///
+    /// [ADR 0020]: https://github.com/mmogr/gglib/blob/main/docs/adr/0020-prior-reasoning-is-kept-where-the-template-keeps-it.md
+    keep_reasoning: bool,
 }
 
 impl AgentLoop {
@@ -192,11 +199,13 @@ impl AgentLoop {
         llm: Arc<dyn LlmCompletionPort>,
         tool_executor: Arc<dyn ToolExecutorPort>,
         guard: Option<AgentGuardReporter>,
+        keep_reasoning: bool,
     ) -> Self {
         Self {
             llm,
             tool_executor,
             guard,
+            keep_reasoning,
         }
     }
 
@@ -350,23 +359,28 @@ impl AgentLoop {
     /// * `tool_filter` — `Some(set)` restricts the visible and executable tools
     ///   to the names in `set`; `None` exposes all tools from `tool_executor`.
     ///
-    /// Reports no guard decisions. Use [`AgentLoop::build_observed`] where
-    /// there is a ledger to report to.
+    /// Reports no guard decisions and keeps no reasoning. Use
+    /// [`AgentLoop::build_observed`] where there is a ledger to report to or
+    /// a model that keeps it.
     pub fn build(
         llm: Arc<dyn LlmCompletionPort>,
         tool_executor: Arc<dyn ToolExecutorPort>,
         tool_filter: Option<HashSet<String>>,
     ) -> Arc<dyn AgentLoopPort> {
-        Self::build_observed(llm, tool_executor, tool_filter, None)
+        Self::build_observed(llm, tool_executor, tool_filter, None, false)
     }
 
-    /// [`AgentLoop::build`], plus somewhere to report what the guard decides.
+    /// [`AgentLoop::build`], plus somewhere to report what the guard decides
+    /// and whether a step's reasoning is kept.
     ///
     /// # Parameters
     ///
     /// * `guard` — `Some(reporter)` counts every decision the loop's guard
     ///   takes, under the model name the reporter carries (#1091); `None`
     ///   counts nowhere and changes nothing else about the run.
+    /// * `keep_reasoning` — `true` keeps each step's reasoning on its
+    ///   assistant message for the rest of the run: sent back on every later
+    ///   request and counted against the context budget. `false` keeps none.
     ///
     /// Separate from `build` rather than a fifth argument to it because
     /// `build`'s callers are almost entirely tests, none of which has a ledger
@@ -376,6 +390,7 @@ impl AgentLoop {
         tool_executor: Arc<dyn ToolExecutorPort>,
         tool_filter: Option<HashSet<String>>,
         guard: Option<AgentGuardReporter>,
+        keep_reasoning: bool,
     ) -> Arc<dyn AgentLoopPort> {
         let executor: Arc<dyn ToolExecutorPort> = match tool_filter {
             // No filter supplied — expose every tool from the inner executor.
@@ -387,7 +402,7 @@ impl AgentLoop {
             // Non-empty allowlist — restrict to the named set.
             Some(allowed) => Arc::new(FilteredToolExecutor::new(tool_executor, allowed)),
         };
-        Arc::new(Self::new(llm, executor, guard))
+        Arc::new(Self::new(llm, executor, guard, keep_reasoning))
     }
 
     /// Emit a `FinalAnswer` event, append the assistant reply to `messages`,
@@ -459,7 +474,14 @@ impl AgentLoop {
             .map(|r| Some(hash_result_text(&r.content)))
             .collect();
         let answers_hash = batch_results_hash(&response.tool_calls, &answers);
-        append_iteration_messages(messages, response.content, response.tool_calls, results);
+        let reasoning = kept_reasoning(self.keep_reasoning, response.reasoning_content);
+        append_iteration_messages(
+            messages,
+            response.content,
+            response.tool_calls,
+            reasoning,
+            results,
+        );
 
         messages.prune(config);
 
@@ -593,8 +615,15 @@ impl AgentLoopPort for AgentLoop {
                 //    by retrying with a smaller batch.
                 // 3. Append assistant + synthetic results to history and
                 //    continue the loop.
-                recover_from_parallel_overflow(&mut messages, response, &config, iteration, &tx)
-                    .await;
+                recover_from_parallel_overflow(
+                    &mut messages,
+                    response,
+                    self.keep_reasoning,
+                    &config,
+                    iteration,
+                    &tx,
+                )
+                .await;
                 continue;
             }
 
@@ -679,6 +708,7 @@ impl AgentLoopPort for AgentLoop {
 async fn recover_from_parallel_overflow(
     messages: &mut Pruned,
     response: CollectedResponse,
+    keep_reasoning: bool,
     config: &AgentConfig,
     iteration: usize,
     tx: &mpsc::Sender<AgentEvent>,
@@ -723,6 +753,7 @@ async fn recover_from_parallel_overflow(
         messages,
         response.content,
         response.tool_calls,
+        kept_reasoning(keep_reasoning, response.reasoning_content),
         synthetic_results,
     );
     messages.prune(config);
@@ -735,28 +766,27 @@ async fn recover_from_parallel_overflow(
         .await;
 }
 
-/// Append an assistant turn and its tool results to `messages`.
+/// A step's `reasoning`, as its assistant message keeps it: all of it when
+/// the loop keeps reasoning, and none otherwise.
+fn kept_reasoning(keep: bool, reasoning: String) -> Option<String> {
+    (keep && !reasoning.is_empty()).then_some(reasoning)
+}
+
+/// Append an assistant turn, with the step's kept `reasoning`, and its tool
+/// results to `messages`.
 ///
-/// Selects the correct [`AssistantContent`] variant based on whether
-/// `content` is empty, avoiding the vacuous all-`None` state.
+/// A step with neither text nor a call appends no assistant message
+/// ([`AssistantContent::step`]), so none holds reasoning alone.
 fn append_iteration_messages(
     messages: &mut Vec<AgentMessage>,
     content: String,
     tool_calls: Vec<ToolCall>,
+    reasoning: Option<String>,
     results: Vec<ToolResult>,
 ) {
-    let assistant = AgentMessage::Assistant {
-        content: AssistantContent {
-            text: if content.is_empty() {
-                None
-            } else {
-                Some(content)
-            },
-            tool_calls,
-            reasoning: None,
-        },
-    };
-    messages.push(assistant);
+    if let Some(content) = AssistantContent::step(content, tool_calls, reasoning) {
+        messages.push(AgentMessage::Assistant { content });
+    }
     for result in results {
         // The ids of the images the tool made stay on its message: what a
         // later request shows the model is decided from them
