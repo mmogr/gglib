@@ -46,6 +46,23 @@ fn launch_jinja(options: &ServeOptions) -> Option<bool> {
         .and_then(crate::handlers::model::update::TriState::stored)
 }
 
+/// The banner line for a `--reasoning-effort` level in `stated`, the
+/// sampling flags as typed, that `model`'s template does not list, or `None`
+/// when no level was stated, the list holds it, or the list is unknown. The
+/// level is sent as given.
+fn unlisted_effort_line(
+    stated: &gglib_core::domain::InferenceConfig,
+    model: &gglib_core::Model,
+) -> Option<String> {
+    let listed = gglib_core::domain::reasoning_effort_levels(&model.template_caps);
+    let note = crate::reasoning_args::unlisted_effort_note(
+        stated.reasoning_effort?,
+        listed.as_deref(),
+        "is sent",
+    )?;
+    Some(format!("  {note}"))
+}
+
 /// Execute the serve command: here, or on the paired machine.
 ///
 /// On the paired machine "serve" is what the word can mean there: have the
@@ -201,6 +218,9 @@ async fn serve_here(
     if let Some(ref stated) = stated_sampling {
         log_inference_info(stated);
         warn_client_budgets_are_capped(stated);
+        if let Some(line) = unlisted_effort_line(stated, &model) {
+            eprintln!("{line}");
+        }
     }
     match launch_jinja(&options) {
         Some(true) => eprintln!("  Jinja templates: enabled"),

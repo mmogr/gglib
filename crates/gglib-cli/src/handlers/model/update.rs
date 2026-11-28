@@ -10,7 +10,7 @@ use gglib_app_services::ModelOps;
 use gglib_app_services::types::UpdateModelRequest;
 use gglib_core::{
     Model,
-    domain::{InferenceConfig, ReasoningEffort},
+    domain::{InferenceConfig, ReasoningEffort, reasoning_effort_levels},
 };
 
 use super::{resolver, update_components, update_projector};
@@ -106,6 +106,29 @@ pub(crate) async fn execute(ctx: &CliContext, ops: &ModelOps, args: UpdateArgs) 
     let request = build_request(&existing_model, &args)?;
     let mut updated_model = existing_model.clone();
     request.apply_to(&mut updated_model);
+
+    // A level the flag stores that the template does not list is noted and
+    // stored as given. Read from the row the request leaves, since a clear in
+    // the same command (`--unset reasoning-effort`) wins over the flag. The
+    // note comes before the confirm, so it says "is stored" only when `--yes`
+    // has answered the confirm already: a refused confirm stores nothing.
+    let stored = updated_model
+        .inference_defaults
+        .as_ref()
+        .and_then(|d| d.reasoning_effort);
+    if let Some(level) = args.reasoning_effort.and(stored)
+        && let Some(note) = crate::reasoning_args::unlisted_effort_note(
+            level,
+            reasoning_effort_levels(&existing_model.template_caps).as_deref(),
+            if args.yes && !args.dry_run {
+                "is stored"
+            } else {
+                "would be stored"
+            },
+        )
+    {
+        eprintln!("{note}");
+    }
 
     // Show preview of changes
     show_changes_preview(&existing_model, &updated_model);

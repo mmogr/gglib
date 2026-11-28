@@ -1,7 +1,7 @@
 //! A data directory for a test to point `GGLIB_DATA_DIR` at, with its
 //! settings written and read, a chat saved and read back, an MCP server
-//! stored, and a model added to its catalogue, through the stores the
-//! binary's bootstrap wires.
+//! stored, and a model added to its catalogue, read and changed, through the
+//! stores the binary's bootstrap wires.
 //!
 //! Lives in a subdirectory because anything directly under `tests/` is built
 //! as its own test binary; `#[path]`-included from the suites that need it.
@@ -15,7 +15,7 @@ use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::domain::NewModel;
 use gglib_core::domain::chat::{Conversation, NewConversation};
 use gglib_core::domain::mcp::NewMcpServer;
-use gglib_core::{NoopEmitter, Settings};
+use gglib_core::{Model, NoopEmitter, Settings};
 
 /// The database the binary opens when `GGLIB_DATA_DIR` is `root`.
 pub(crate) fn database(root: &Path) -> PathBuf {
@@ -107,6 +107,33 @@ pub(crate) fn add_model(root: &Path, model: NewModel) {
         let added = built.app.models().add(model).await;
         built.pool.close().await;
         added.expect("the model is added");
+    });
+}
+
+/// The model `id` as `root`'s database stores it.
+pub(crate) fn read_model(root: &Path, id: i64) -> Model {
+    runtime().block_on(async {
+        let built = open(root).await;
+        let read = built.app.models().get_by_id(id).await;
+        built.pool.close().await;
+        read.expect("the model is read")
+            .expect("the model is there")
+    })
+}
+
+/// Apply `change` to the model `id` in `root`'s database and store it, as
+/// a field no command writes (its template caps) is written.
+pub(crate) fn update_model(root: &Path, id: i64, change: impl FnOnce(&mut Model)) {
+    runtime().block_on(async {
+        let built = open(root).await;
+        let read = built.app.models().get_by_id(id).await;
+        let mut model = read
+            .expect("the model is read")
+            .expect("the model is there");
+        change(&mut model);
+        let updated = built.app.models().update(&model).await;
+        built.pool.close().await;
+        updated.expect("the model is stored");
     });
 }
 

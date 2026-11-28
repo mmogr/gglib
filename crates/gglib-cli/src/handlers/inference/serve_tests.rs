@@ -292,3 +292,70 @@ fn jinja_takes_auto_on_or_off() {
     assert_eq!(jinja(&[]), None);
     assert!(Cli::try_parse_from(["gglib", "serve", "qwen3", "--jinja"]).is_err());
 }
+
+// ---------------------------------------------------------------
+// An effort level the template does not list
+// ---------------------------------------------------------------
+
+/// A model whose template's list is `levels`, or unknown for `None`.
+fn listing(levels: Option<&[&str]>) -> gglib_core::Model {
+    let new = gglib_core::NewModel::new(
+        "qwen3".to_owned(),
+        "/m/qwen3.gguf".into(),
+        Some(8.0),
+        chrono::Utc::now(),
+    );
+    let mut model = gglib_core::Model::stored(3, &new);
+    model.template_caps = levels.map(|levels| gglib_core::domain::TemplateCaps {
+        supports_reasoning_effort: Some(true),
+        reasoning_effort_levels: Some(levels.iter().map(|&l| l.to_owned()).collect()),
+        ..gglib_core::domain::TemplateCaps::default()
+    });
+    model
+}
+
+/// The level `gglib serve qwen3 <flags>` sends, as `serve_here` states its
+/// sampling, and the banner line it earns on `model`.
+fn effort_line(flags: &[&str], model: &gglib_core::Model) -> (Option<String>, Option<String>) {
+    let argv = [&["gglib", "serve", "qwen3"], flags].concat();
+    let Some(Commands::Serve { sampling, .. }) = Cli::parse_from(argv).command else {
+        panic!("{flags:?} is not `gglib serve`");
+    };
+    let stated = sampling.into_override().expect("a sampling flag");
+    let sent = stated.reasoning_effort.map(|l| l.as_str().to_owned());
+    (sent, super::unlisted_effort_line(&stated, model))
+}
+
+/// `--reasoning-effort max` on Qwen3.8's list earns a note naming the listed
+/// levels, and the stated sampling still carries `max`.
+#[test]
+fn a_level_the_template_does_not_list_is_noted_and_still_sent() {
+    let qwen = listing(Some(&["low", "medium", "xhigh"]));
+
+    let (sent, line) = effort_line(&["--reasoning-effort", "max"], &qwen);
+
+    assert_eq!(sent.as_deref(), Some("max"));
+    assert_eq!(
+        line.as_deref(),
+        Some(
+            "  Note: this model's template lists the reasoning-effort levels low, medium, \
+             xhigh, and not max. The level is sent all the same: one the list leaves out \
+             can still work."
+        )
+    );
+}
+
+/// A listed level, any level while the list is unknown, and sampling that
+/// states no level earn no note.
+#[test]
+fn a_listed_unknown_or_unstated_level_earns_no_note() {
+    let qwen = listing(Some(&["low", "medium", "xhigh"]));
+    let unknown = listing(None);
+
+    assert_eq!(effort_line(&["--reasoning-effort", "xhigh"], &qwen).1, None);
+    assert_eq!(
+        effort_line(&["--reasoning-effort", "max"], &unknown).1,
+        None
+    );
+    assert_eq!(effort_line(&["--temperature", "0.5"], &qwen).1, None);
+}
