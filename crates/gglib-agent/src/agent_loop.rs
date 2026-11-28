@@ -409,6 +409,7 @@ impl AgentLoop {
             content: AssistantContent {
                 text: Some(content.clone()),
                 tool_calls: vec![],
+                reasoning: None,
             },
         });
         Ok(AgentRunOutput {
@@ -752,6 +753,7 @@ fn append_iteration_messages(
                 Some(content)
             },
             tool_calls,
+            reasoning: None,
         },
     };
     messages.push(assistant);

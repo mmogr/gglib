@@ -46,6 +46,7 @@ async fn a_refused_batch_over_budget_is_pruned_and_counted() {
             content: AssistantContent {
                 text: None,
                 tool_calls: vec![search(&id)],
+                reasoning: None,
             },
         });
         history.push(AgentMessage::Tool {

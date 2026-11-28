@@ -52,6 +52,7 @@ async fn only_a_users_last_message_is_saved_and_a_devices_says_which() {
         content: AssistantContent {
             text: Some("hello".to_owned()),
             tool_calls: Vec::new(),
+            reasoning: None,
         },
     };
 

@@ -14,6 +14,7 @@ use super::tool_types::ToolCall;
 // AssistantContent — Serialize
 // =============================================================================
 
+/// Writes `content` and `tool_calls`, never `reasoning`.
 impl Serialize for AssistantContent {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let has_text = self.text.is_some();
@@ -75,6 +76,7 @@ impl<'de> serde::de::Visitor<'de> for AssistantContentVisitor {
         Ok(AssistantContent {
             text: content,
             tool_calls,
+            reasoning: None,
         })
     }
 }

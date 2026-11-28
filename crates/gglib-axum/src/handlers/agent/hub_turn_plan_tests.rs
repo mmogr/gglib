@@ -37,6 +37,7 @@ async fn the_history_is_the_prompt_the_rows_and_the_new_message() {
             content: gglib_core::domain::agent::AssistantContent {
                 text: Some("answer".to_owned()),
                 tool_calls: Vec::new(),
+                reasoning: None,
             },
         },
         user("second"),

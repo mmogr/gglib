@@ -282,7 +282,11 @@ pub fn into_agent_messages(
                         .collect::<Result<_, _>>()?,
                 },
                 OpenAiTurn::Assistant { text, tool_calls } => AgentMessage::Assistant {
-                    content: AssistantContent { text, tool_calls },
+                    content: AssistantContent {
+                        text,
+                        tool_calls,
+                        reasoning: None,
+                    },
                 },
                 OpenAiTurn::Tool {
                     tool_call_id,

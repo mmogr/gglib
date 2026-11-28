@@ -33,6 +33,7 @@ fn call(id: &str, tool: &str) -> AgentMessage {
                 name: tool.to_owned(),
                 arguments: json!({ "prompt": "a fox" }),
             }],
+            reasoning: None,
         },
     }
 }
@@ -50,6 +51,7 @@ fn said(text: &str) -> AgentMessage {
         content: AssistantContent {
             text: Some(text.to_owned()),
             tool_calls: Vec::new(),
+            reasoning: None,
         },
     }
 }

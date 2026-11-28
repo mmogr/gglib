@@ -221,6 +221,7 @@ async fn a_run_over_budget_reports_the_count_on_its_turn_usage() {
                     name: "search".into(),
                     arguments: json!({}),
                 }],
+                reasoning: None,
             },
         });
         history.push(AgentMessage::Tool {
