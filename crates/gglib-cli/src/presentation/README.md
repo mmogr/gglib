@@ -99,10 +99,10 @@ terminal pieces built on them.
 
 Draws the sampling half of `gglib model explain`: each resolved sampling
 parameter beside the layer that supplied it, from the `SamplingExplanationDto`
-inside the explanation the explain call answers with.
+inside the explanation the explain call answers with, and under the effort row
+the levels the model's template lists when they are known.
 
 **Key Functions:**
-- `print_explanation()` - Prints the table
 - `explanation_text()` - The table as text: heading, one row per parameter, caveats
 - `explanation_lines()` - One string per parameter
 

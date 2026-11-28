@@ -69,25 +69,22 @@ const MARK_INFO: char = '\u{b7}';
 /// Marks a note gglib cannot draw a conclusion from.
 const MARK_UNKNOWN: char = '?';
 
-/// Print the resolved parameters and their provenance.
-pub(crate) fn print_explanation(name: &str, id: i64, explanation: &SamplingExplanationDto) {
-    print!("{}", explanation_text(name, id, explanation));
-}
-
 /// The table as text: its heading, a row per parameter between two rules,
-/// and the caveats.
+/// and the caveats. `levels` is the effort levels the model's template lists
+/// (`gglib_core::domain::reasoning_effort_levels`), `None` when unknown.
 #[must_use]
 pub(crate) fn explanation_text(
     name: &str,
     id: i64,
     explanation: &SamplingExplanationDto,
+    levels: Option<&[ReasoningEffort]>,
 ) -> String {
     let rule = "-".repeat(SEP_WIDTH);
     let profile = explanation.profile.as_ref();
     let profile = profile.map_or_else(String::new, |profile| format!(", profile '{profile}'"));
 
     let mut out = format!("\n  Sampling for {name} (id {id}){profile}\n{rule}\n");
-    for line in explanation_lines(explanation) {
+    for line in explanation_lines(explanation, levels) {
         let _ = writeln!(out, "  {line}");
     }
     let _ = writeln!(out, "{rule}");
@@ -113,8 +110,14 @@ pub(crate) fn explanation_text(
 /// [`NAME_WIDTH`] too narrow for its longest name.
 /// `every_provenance_row_is_rendered` and the assertion below say that a row
 /// without a value column is a fault, with no register of approved omissions.
+///
+/// `levels`, when the template's list is known, hangs a note under the
+/// `reasoning_effort` row naming the levels it lists.
 #[must_use]
-pub(crate) fn explanation_lines(explanation: &SamplingExplanationDto) -> Vec<String> {
+pub(crate) fn explanation_lines(
+    explanation: &SamplingExplanationDto,
+    levels: Option<&[ReasoningEffort]>,
+) -> Vec<String> {
     let resolved = &explanation.resolved;
     let values = [
         ("temperature", fmt_f32(resolved.temperature)),
@@ -165,7 +168,11 @@ pub(crate) fn explanation_lines(explanation: &SamplingExplanationDto) -> Vec<Str
         let note = published
             .map(published_note)
             .map(|n| format!("{:NOTE_INDENT$}{n}", ""));
-        std::iter::once(row).chain(note)
+        let listed = levels
+            .filter(|_| field == "reasoning_effort")
+            .map(|listed| levels_note(listed, resolved.reasoning_effort))
+            .map(|n| format!("{:NOTE_INDENT$}{n}", ""));
+        std::iter::once(row).chain(note).chain(listed)
     })
     .collect()
 }
@@ -229,6 +236,23 @@ fn trim_f32_artifact(value: f64) -> f64 {
     let magnitude = value.abs().log10().floor();
     let factor = 10f64.powf(5.0 - magnitude);
     (value * factor).round() / factor
+}
+
+/// The levels the model's template lists, for the note under the effort row,
+/// and the resolved level when the list leaves it out. Information, not a
+/// fault: a level the list leaves out can still work, and it is sent as
+/// resolved.
+fn levels_note(listed: &[ReasoningEffort], resolved: Option<ReasoningEffort>) -> String {
+    let lists = if listed.is_empty() {
+        "the template lists no level".to_owned()
+    } else {
+        let names: Vec<&str> = listed.iter().map(|level| level.as_str()).collect();
+        format!("the template lists {}", names.join(", "))
+    };
+    match resolved {
+        Some(level) if !listed.contains(&level) => format!("{MARK_INFO} {lists}, and not {level}"),
+        _ => format!("{MARK_INFO} {lists}"),
+    }
 }
 
 /// Footnotes for the rungs this command cannot see.

@@ -2,7 +2,8 @@
 //!
 //! Prints the launch gglib would make for a model, flag by flag with whose
 //! choice each was, the context it would be served at and the fit behind
-//! it, and its sampling parameters beside the layer that supplied each.
+//! it, and its sampling parameters beside the layer that supplied each,
+//! with the effort levels the model's template lists under its effort.
 //!
 //! Everything is [`ModelOps::explain`], the call `GET
 //! /api/models/{id}/explain` answers with, so a terminal and the inspector
@@ -16,7 +17,9 @@
 //! and the command's own `ModelOps` plans over nothing.
 
 use anyhow::{Result, anyhow};
-use gglib_app_services::{GuiError, LaunchExplanationDto, ModelOps};
+use gglib_app_services::{GuiError, LaunchExplanationDto, ModelOps, SamplingExplanationDto};
+use gglib_core::Model;
+use gglib_core::domain::reasoning_effort_levels;
 
 use super::resolver;
 use crate::bootstrap::CliContext;
@@ -42,9 +45,16 @@ pub(crate) async fn execute(
             explanation.command.as_ref()
         )
     );
-    explain_display::print_explanation(&model.name, model.id, &explanation.sampling);
+    print!("{}", sampling_text(&model, &explanation.sampling));
 
     Ok(())
+}
+
+/// The sampling table for `model`, with the effort levels its template lists
+/// as this library recorded them.
+fn sampling_text(model: &Model, sampling: &SamplingExplanationDto) -> String {
+    let levels = reasoning_effort_levels(&model.template_caps);
+    explain_display::explanation_text(&model.name, model.id, sampling, levels.as_deref())
 }
 
 /// The explanation of model `id`, from the daemon that serves this library
