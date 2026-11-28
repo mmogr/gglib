@@ -107,7 +107,8 @@ pub use state_words::{
 
 // Re-export the template-capability self-report (ADR 0007) at the domain level
 pub use template_caps::{
-    Support, TemplateCaps, TemplateCapsState, preserve_reasoning_support, reasoning_effort_support,
+    Support, TemplateCaps, TemplateCapsState, preserve_reasoning_support, reasoning_effort_levels,
+    reasoning_effort_support,
 };
 
 // Re-export KV estimation helpers at the domain level for convenience

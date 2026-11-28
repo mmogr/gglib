@@ -7,6 +7,13 @@
 #[path = "support/library.rs"]
 mod library;
 
+#[path = "support/data_dir.rs"]
+mod data_dir;
+
+use std::path::Path;
+
+use gglib_core::Model;
+use gglib_core::domain::{ReasoningEffort, TemplateCaps};
 use library::{gglib, library, run, write_gguf};
 
 /// The rule under the preview's heading.
@@ -198,4 +205,139 @@ fn a_retag_prints_what_each_pass_changed_and_how_many_models_it_updated() {
          \x20 [1] qwen.Q8_0 — removed: agent, reasoning\n\
          Done. 1 model(s) updated.\n"
     );
+}
+
+// ── An effort level the template does not list ────────────────────────────────
+
+/// Model 1's row, read straight from the library in `root`.
+fn model_one(root: &Path) -> Model {
+    data_dir::read_model(&library::data_root(root), 1)
+}
+
+/// Model 1 with caps recorded whose template lists `levels`, as a served
+/// model's are.
+fn listing(root: &Path, levels: &[&str]) {
+    data_dir::update_model(&library::data_root(root), 1, |model| {
+        model.template_caps = Some(TemplateCaps {
+            supports_reasoning_effort: Some(true),
+            reasoning_effort_levels: Some(levels.iter().map(|&l| l.to_owned()).collect()),
+            ..TemplateCaps::default()
+        });
+    });
+}
+
+/// What `gglib model update 1 --reasoning-effort max` says on Qwen3.8's list.
+fn qwen_note(done: &str) -> String {
+    format!(
+        "Note: this model's template lists the reasoning-effort levels low, medium, xhigh, \
+         and not max. The level {done} all the same: one the list leaves out can still work.\n"
+    )
+}
+
+#[test]
+fn an_update_to_a_level_the_template_does_not_list_notes_it_and_stores_it() {
+    let root = tempfile::tempdir().expect("temp data dir");
+    library(root.path());
+    listing(root.path(), &["low", "medium", "xhigh"]);
+
+    let updated = run(
+        root.path(),
+        &["model", "update", "1", "--reasoning-effort", "max", "--yes"],
+        "",
+    );
+
+    assert!(updated.status.success(), "{updated:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&updated.stderr),
+        qwen_note("is stored")
+    );
+    assert!(
+        String::from_utf8_lossy(&updated.stdout).ends_with("✓ Model updated successfully!\n"),
+        "{updated:?}"
+    );
+    let stored = model_one(root.path()).inference_defaults;
+    assert_eq!(
+        stored.and_then(|d| d.reasoning_effort),
+        Some(ReasoningEffort::Max)
+    );
+}
+
+#[test]
+fn a_dry_run_notes_the_level_and_stores_nothing() {
+    let root = tempfile::tempdir().expect("temp data dir");
+    library(root.path());
+    listing(root.path(), &["low", "medium", "xhigh"]);
+
+    let previewed = run(
+        root.path(),
+        &[
+            "model",
+            "update",
+            "1",
+            "--reasoning-effort",
+            "max",
+            "--dry-run",
+        ],
+        "",
+    );
+
+    assert!(previewed.status.success(), "{previewed:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&previewed.stderr),
+        qwen_note("would be stored")
+    );
+    assert_eq!(model_one(root.path()).inference_defaults, None);
+}
+
+/// Without `--yes` and with no terminal the confirm refuses, so the note
+/// says the level would be stored, and nothing is.
+#[test]
+fn an_unconfirmed_update_notes_the_level_as_one_that_would_be_stored() {
+    let root = tempfile::tempdir().expect("temp data dir");
+    library(root.path());
+    listing(root.path(), &["low", "medium", "xhigh"]);
+
+    let refused = run(
+        root.path(),
+        &["model", "update", "1", "--reasoning-effort", "max"],
+        "",
+    );
+
+    assert!(!refused.status.success(), "{refused:?}");
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.starts_with(&qwen_note("would be stored")),
+        "{stderr}"
+    );
+    assert!(stderr.contains("the model was not updated"), "{stderr}");
+    assert_eq!(model_one(root.path()).inference_defaults, None);
+}
+
+/// A listed level, any level while the list is unknown, and a level cleared
+/// in the same command earn no note.
+#[test]
+fn a_listed_unknown_or_cleared_level_earns_no_note() {
+    let unknown = tempfile::tempdir().expect("temp data dir");
+    library(unknown.path());
+    let listed = tempfile::tempdir().expect("temp data dir");
+    library(listed.path());
+    listing(listed.path(), &["low", "medium", "xhigh"]);
+
+    let cases: [(&tempfile::TempDir, &[&str]); 3] = [
+        (&unknown, &["--reasoning-effort", "max"]),
+        (&listed, &["--reasoning-effort", "xhigh"]),
+        (
+            &listed,
+            &["--reasoning-effort", "max", "--unset", "reasoning-effort"],
+        ),
+    ];
+    for (root, flags) in cases {
+        let argv = [&["model", "update", "1", "--yes"][..], flags].concat();
+        let updated = run(root.path(), &argv, "");
+        assert!(updated.status.success(), "{updated:?}");
+        let stderr = String::from_utf8_lossy(&updated.stderr);
+        assert!(!stderr.contains("Note:"), "for {flags:?}: {stderr}");
+    }
+    let cleared = model_one(listed.path()).inference_defaults;
+    assert_eq!(cleared.and_then(|d| d.reasoning_effort), None);
 }

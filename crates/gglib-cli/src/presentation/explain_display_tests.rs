@@ -134,7 +134,7 @@ fn auto_detected_sources() -> Vec<ParamProvenanceDto> {
 /// omission fails here rather than being added to it.
 #[test]
 fn every_provenance_row_is_rendered() {
-    let lines = explanation_lines(&plain());
+    let lines = explanation_lines(&plain(), None);
 
     for row in auto_detected_sources() {
         let named = |line: &String| {
@@ -151,7 +151,7 @@ fn every_provenance_row_is_rendered() {
 
 #[test]
 fn every_parameter_gets_exactly_one_line() {
-    let lines = explanation_lines(&plain());
+    let lines = explanation_lines(&plain(), None);
     assert_eq!(lines.len(), 17, "{lines:#?}");
     for field in [
         "temperature",
@@ -182,7 +182,7 @@ fn every_parameter_gets_exactly_one_line() {
 fn an_absent_max_tokens_reads_as_deliberate() {
     assert_eq!(plain().resolved.max_tokens, None, "guards the premise");
 
-    let lines = explanation_lines(&plain());
+    let lines = explanation_lines(&plain(), None);
     let line = lines
         .iter()
         .find(|l| l.starts_with("max_tokens"))
@@ -199,7 +199,7 @@ fn a_row_prints_the_served_label() {
     let mut served = plain();
     served.sources[0].label = "the label as served".to_owned();
 
-    let lines = explanation_lines(&served);
+    let lines = explanation_lines(&served, None);
 
     assert!(
         lines[0].ends_with("\u{2190} the label as served"),
@@ -216,7 +216,7 @@ fn values_come_from_the_resolved_config() {
         top_k: Some(20),
         ..InferenceConfig::default()
     };
-    let lines = explanation_lines(&explained(resolved));
+    let lines = explanation_lines(&explained(resolved), None);
 
     assert!(lines[0].contains("0.2"), "{}", lines[0]);
     assert!(lines[2].contains("20"), "{}", lines[2]);
@@ -255,12 +255,15 @@ fn an_overridden_published_value_names_both_numbers() {
         published: 0.33,
         sending: 1.0,
     };
-    let lines = explanation_lines(&publishing(
-        explained(resolved),
-        "temperature",
-        "general.sampling.temp",
-        overridden,
-    ));
+    let lines = explanation_lines(
+        &publishing(
+            explained(resolved),
+            "temperature",
+            "general.sampling.temp",
+            overridden,
+        ),
+        None,
+    );
 
     let note = note_for(&lines, "temperature").expect("temperature carries a note");
     assert!(note.starts_with(MARK_OVERRIDE), "{note}");
@@ -277,12 +280,15 @@ fn a_deferred_field_says_the_missing_number_is_the_models() {
         top_k: None,
         ..InferenceConfig::default()
     };
-    let lines = explanation_lines(&publishing(
-        sourced(explained(resolved), "topK", Unset, None),
-        "topK",
-        "general.sampling.top_k",
-        PublishedStateDto::Deferred { published: 17.0 },
-    ));
+    let lines = explanation_lines(
+        &publishing(
+            sourced(explained(resolved), "topK", Unset, None),
+            "topK",
+            "general.sampling.top_k",
+            PublishedStateDto::Deferred { published: 17.0 },
+        ),
+        None,
+    );
 
     let row = lines
         .iter()
@@ -335,12 +341,15 @@ fn a_restated_value_is_marked_as_information_not_as_an_override() {
         temperature: Some(0.7),
         ..InferenceConfig::default()
     };
-    let lines = explanation_lines(&publishing(
-        explained(resolved),
-        "temperature",
-        "general.sampling.temp",
-        PublishedStateDto::Restated { published: 0.7 },
-    ));
+    let lines = explanation_lines(
+        &publishing(
+            explained(resolved),
+            "temperature",
+            "general.sampling.temp",
+            PublishedStateDto::Restated { published: 0.7 },
+        ),
+        None,
+    );
 
     let note = note_for(&lines, "temperature").expect("temperature carries a note");
     assert!(note.starts_with(MARK_INFO), "{note}");
@@ -351,12 +360,15 @@ fn a_restated_value_is_marked_as_information_not_as_an_override() {
 /// gglib does not know what it displaced.
 #[test]
 fn an_unreadable_published_value_reads_as_unknown() {
-    let lines = explanation_lines(&publishing(
-        plain(),
-        "temperature",
-        "general.sampling.temp",
-        PublishedStateDto::Unreadable,
-    ));
+    let lines = explanation_lines(
+        &publishing(
+            plain(),
+            "temperature",
+            "general.sampling.temp",
+            PublishedStateDto::Unreadable,
+        ),
+        None,
+    );
 
     let note = note_for(&lines, "temperature").expect("temperature carries a note");
     assert!(note.starts_with(MARK_UNKNOWN), "{note}");
@@ -367,7 +379,7 @@ fn an_unreadable_published_value_reads_as_unknown() {
 /// A note on every row would train the reader to ignore all of them.
 #[test]
 fn a_model_that_publishes_nothing_gains_no_notes() {
-    let lines = explanation_lines(&plain());
+    let lines = explanation_lines(&plain(), None);
 
     assert_eq!(lines.len(), 17, "one row per parameter and nothing else");
     assert!(lines.iter().all(|l| !l.starts_with(' ')), "{lines:#?}");
@@ -381,12 +393,15 @@ fn a_field_no_model_can_reach_never_gains_a_note() {
         presence_penalty: Some(1.5),
         ..InferenceConfig::default()
     };
-    let lines = explanation_lines(&publishing(
-        explained(resolved),
-        "temperature",
-        "general.sampling.temp",
-        PublishedStateDto::Restated { published: 0.7 },
-    ));
+    let lines = explanation_lines(
+        &publishing(
+            explained(resolved),
+            "temperature",
+            "general.sampling.temp",
+            PublishedStateDto::Restated { published: 0.7 },
+        ),
+        None,
+    );
 
     assert_eq!(note_for(&lines, "presence_penalty"), None, "{lines:#?}");
     assert_eq!(lines.iter().filter(|l| l.starts_with(' ')).count(), 1);
@@ -399,7 +414,7 @@ fn a_field_no_model_can_reach_never_gains_a_note() {
 /// did exactly that for as long as they have existed.
 #[test]
 fn every_name_fits_its_column() {
-    let lines = explanation_lines(&plain());
+    let lines = explanation_lines(&plain(), None);
 
     for line in lines.iter().filter(|l| !l.starts_with(' ')) {
         let name = line.split_whitespace().next().expect("a name");
@@ -440,7 +455,7 @@ fn notes_fit_within_the_table_width() {
                 let state = PublishedStateDto::Overridden { published, sending };
                 publishing(explanation, param, key, state)
             });
-    let lines = explanation_lines(&explanation);
+    let lines = explanation_lines(&explanation, None);
 
     // Every reachable field published, so every one carries a note.
     assert_eq!(lines.iter().filter(|l| l.starts_with(' ')).count(), 5);
@@ -526,7 +541,7 @@ fn reasoning() -> SamplingExplanationDto {
 /// The row that could not be drawn before this table's name column grew.
 #[test]
 fn both_reasoning_controls_render_their_value_and_their_rung() {
-    let lines = explanation_lines(&reasoning());
+    let lines = explanation_lines(&reasoning(), None);
 
     let effort = lines
         .iter()
@@ -557,7 +572,7 @@ fn a_level_renders_as_its_wire_name() {
 fn the_defer_sentinel_is_a_value_not_an_absence() {
     let mut deferring = reasoning();
     deferring.resolved.reasoning_budget_tokens = Some(-1);
-    let line = explanation_lines(&deferring)
+    let line = explanation_lines(&deferring, None)
         .into_iter()
         .find(|l| l.starts_with("reasoning_budget_tokens"))
         .expect("rendered");
@@ -566,11 +581,12 @@ fn the_defer_sentinel_is_a_value_not_an_absence() {
     assert!(!line.contains(ABSENT), "{line}");
 }
 
-/// The effort row carries no note: no reasoning control has a GGUF key, so
-/// the published comparison never reaches it.
+/// The effort row carries no note while the template's list is unknown: no
+/// reasoning control has a GGUF key, so the published comparison never
+/// reaches it.
 #[test]
 fn the_effort_row_gains_no_note() {
-    let lines = explanation_lines(&reasoning());
+    let lines = explanation_lines(&reasoning(), None);
     assert_eq!(note_for(&lines, "reasoning_effort"), None, "{lines:#?}");
 }
 
@@ -588,9 +604,64 @@ fn the_reasoning_rows_fit_the_table_width() {
     // reasoning tag)".
     let longest = Some(ModelAutoDetected);
     let budgeted = sourced(explained(resolved), "reasoningBudgetTokens", Layer, longest);
-    let lines = explanation_lines(&sourced(budgeted, "reasoningEffort", Layer, longest));
+    let lines = explanation_lines(&sourced(budgeted, "reasoningEffort", Layer, longest), None);
 
     assert_eq!(lines.len(), 17, "seventeen rows: {lines:#?}");
+    for line in &lines {
+        assert!(
+            line.chars().count() + 2 <= SEP_WIDTH,
+            "{} chars: {line}",
+            line.chars().count()
+        );
+    }
+}
+
+/// The note under the effort row, for a template that lists `levels`.
+fn levels_line(resolved: &SamplingExplanationDto, levels: &[ReasoningEffort]) -> Option<String> {
+    note_for(
+        &explanation_lines(resolved, Some(levels)),
+        "reasoning_effort",
+    )
+}
+
+/// Qwen3.8's list under a resolved `high`: the levels listed, and that the
+/// resolved one is not among them.
+#[test]
+fn the_effort_row_names_the_levels_the_template_lists() {
+    use ReasoningEffort::{High, Low, Medium, XHigh};
+
+    assert_eq!(
+        levels_line(&reasoning(), &[Low, Medium, XHigh]).as_deref(),
+        Some("\u{b7} the template lists low, medium, xhigh, and not high")
+    );
+    assert_eq!(
+        levels_line(&reasoning(), &[Low, High]).as_deref(),
+        Some("\u{b7} the template lists low, high")
+    );
+    assert_eq!(
+        levels_line(&reasoning(), &[]).as_deref(),
+        Some("\u{b7} the template lists no level, and not high")
+    );
+}
+
+/// The list is the template's whether or not a level resolved.
+#[test]
+fn an_unset_effort_still_shows_the_list() {
+    assert_eq!(
+        levels_line(&plain(), &[ReasoningEffort::Low]).as_deref(),
+        Some("\u{b7} the template lists low")
+    );
+}
+
+/// The longest levels note fits the rule, and is the one extra line.
+#[test]
+fn the_levels_note_fits_the_table_width() {
+    let mut resolved = reasoning();
+    resolved.resolved.reasoning_effort = Some(ReasoningEffort::Minimal);
+    let listed = &ReasoningEffort::ALL[1..];
+    let lines = explanation_lines(&resolved, Some(listed));
+
+    assert_eq!(lines.len(), 18, "{lines:#?}");
     for line in &lines {
         assert!(
             line.chars().count() + 2 <= SEP_WIDTH,

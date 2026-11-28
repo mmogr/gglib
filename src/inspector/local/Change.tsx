@@ -164,7 +164,9 @@ export const Change: FC<ChangeProps> = ({ kind, model, detail, sampling, servesA
             ownLayer: 'modelUserSet',
             resolution: { explanation: sampling, isLoading: false, hasError: sampling === null },
           }}
-          capabilities={detail ? { reasoningEffort: detail.reasoningEffortSupport } : undefined}
+          capabilities={
+            detail ? { reasoningEffort: detail.reasoningEffortSupport, reasoningEffortLevels: detail.reasoningEffortLevels } : undefined
+          }
           compact={{ keys, caption: "This model's own values. A field left empty uses the setting below it." }}
         />
         {buttons(() => void save({ inferenceDefaults: draft ?? {} }))}

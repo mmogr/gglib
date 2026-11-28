@@ -1,6 +1,7 @@
 import { FC, useCallback, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import type { SparseInferenceConfig, SamplingParamKey, TemplateSupport } from '../../types';
+import type { ReasoningEffort } from '../../types/generated/ReasoningEffort';
 import { INFERENCE_PARAMS } from '../../constants/inferenceDefaults';
 import { PARAM_LABELS, formatParamValue } from '../../utils/samplingProvenance';
 import { Input } from '../ui/Input';
@@ -56,6 +57,8 @@ const NUMBER_FIELDS: ReadonlySet<SamplingParamKey> = new Set([
 export interface FormCapabilities {
   /** Whether the model's chat template reads `reasoning_effort`. */
   reasoningEffort: TemplateSupport;
+  /** The effort levels the model's template lists; absent when unknown. */
+  reasoningEffortLevels?: readonly ReasoningEffort[];
 }
 
 /**
@@ -227,6 +230,7 @@ export const SamplingForm: FC<SamplingFormProps> = ({
       onChange={(level) => updateField('reasoningEffort', level)}
       disabled={disabled}
       support={capabilities?.reasoningEffort}
+      levels={capabilities?.reasoningEffortLevels}
     />
   );
 

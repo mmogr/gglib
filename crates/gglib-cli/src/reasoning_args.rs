@@ -1,5 +1,6 @@
-//! Value parsers for the two reasoning controls, shared by every CLI surface
-//! that offers them.
+//! Value parsers for the two reasoning controls, and the note a level the
+//! model's template does not list earns, shared by every CLI surface that
+//! offers them.
 //!
 //! Three surfaces spell the same pair of flags — `SamplingArgs` (per run),
 //! `gglib model update` (per model) and `gglib config profile set` (per
@@ -50,6 +51,37 @@ pub(crate) fn parse_effort(s: &str) -> Result<ReasoningEffort, String> {
     Err(format!(
         "expected one of: {}",
         ReasoningEffort::wire_vocabulary()
+    ))
+}
+
+/// The note `--reasoning-effort <level>` prints for a model whose template's
+/// list is known and does not hold `level`, or `None` when the list holds it
+/// or is unknown. `listed` is the model's list
+/// (`gglib_core::domain::reasoning_effort_levels`, `None` when unknown), and
+/// `done` says what happens to the level anyway: `"is stored"`, `"would be
+/// stored"` or `"is sent"`.
+///
+/// A note and never a refusal: a level the list leaves out can still work
+/// (`high` on Qwen3.8), so the list alone cannot say it fails, and a
+/// template's capabilities are read, never used to edit a request.
+pub(crate) fn unlisted_effort_note(
+    level: ReasoningEffort,
+    listed: Option<&[ReasoningEffort]>,
+    done: &str,
+) -> Option<String> {
+    let listed = listed?;
+    if listed.contains(&level) {
+        return None;
+    }
+    let lists = if listed.is_empty() {
+        "lists no reasoning-effort level".to_owned()
+    } else {
+        let names: Vec<&str> = listed.iter().map(|l| l.as_str()).collect();
+        format!("lists the reasoning-effort levels {}", names.join(", "))
+    };
+    Some(format!(
+        "Note: this model's template {lists}, and not {level}. \
+         The level {done} all the same: one the list leaves out can still work."
     ))
 }
 

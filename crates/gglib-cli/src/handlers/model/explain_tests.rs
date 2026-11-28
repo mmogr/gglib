@@ -35,7 +35,7 @@ fn table(model: &Model, heading: &str, rows: &str) -> String {
 /// prints after the launch.
 async fn printed(ctx: &CliContext, model: &Model, profile: Option<&str>) -> String {
     let explanation = explain(&one_shot_model_ops(ctx), model.id, profile).await;
-    explain_display::explanation_text(&model.name, model.id, &explanation.unwrap().sampling)
+    sampling_text(model, &explanation.unwrap().sampling)
 }
 
 /// A library of two models: the first stores nothing, and the second stores
@@ -92,6 +92,48 @@ async fn a_model_that_stores_nothing_is_explained_as_unset() {
   reasoning_budget_tokens —       ← unset by design
 ";
     assert_eq!(printed(&ctx, &plain, None).await, table(&plain, "", rows));
+}
+
+/// A model whose template lists its effort levels, with one of them not
+/// listed set as its own: the list hangs under the effort row, and names the
+/// level it leaves out.
+#[tokio::test]
+async fn the_effort_row_carries_the_levels_the_template_lists() {
+    let dir = tempfile::tempdir().unwrap();
+    let (ctx, mut plain, _) = two_models(dir.path()).await;
+    plain.template_caps = Some(gglib_core::domain::TemplateCaps {
+        supports_reasoning_effort: Some(true),
+        reasoning_effort_levels: Some(vec!["low".into(), "medium".into(), "xhigh".into()]),
+        ..gglib_core::domain::TemplateCaps::default()
+    });
+    ctx.app
+        .models()
+        .update(&plain)
+        .await
+        .expect("the caps are recorded");
+    let id = plain.id.to_string();
+    let argv = [
+        "gglib",
+        "model",
+        "update",
+        &id,
+        "--reasoning-effort",
+        "max",
+        "--yes",
+    ];
+    run(&ctx, &argv).await.expect("the level is stored");
+    let plain = stored(&ctx, plain.id).await;
+
+    let text = printed(&ctx, &plain, None).await;
+
+    assert!(
+        text.contains(
+            "  reasoning_effort        max     ← per-model defaults (user-set)
+        · the template lists low, medium, xhigh, and not max
+  reasoning_budget_tokens"
+        ),
+        "{text}"
+    );
 }
 
 /// A model's own defaults, each beside what its GGUF publishes for the field.

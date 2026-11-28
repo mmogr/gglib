@@ -35,6 +35,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::ReasoningEffort;
+
 /// The nine bools of `chat_template_caps`, and the one list, as `GET /props`
 /// reports them.
 ///
@@ -170,6 +172,27 @@ pub fn reasoning_effort_support(caps: &Option<TemplateCaps>) -> Support {
         Some(false) => Support::No,
         None => Support::Unknown,
     }
+}
+
+/// The effort levels a model's template lists, from its recorded caps, as
+/// gglib's levels in the template's order.
+///
+/// `None` when no list was recorded: no caps (the model was never served
+/// here), or caps from a server that did not report the key. That is
+/// unknown, and a surface offers every level on it (ADR 0007 decision 3).
+/// `Some(vec![])` is a recorded answer: no level renders distinctly. A word
+/// in the list that is no [`ReasoningEffort`] is left out, since no control
+/// can send it. Nothing edits a request on this: surfaces read it to offer
+/// levels and to note one the template does not list.
+#[must_use]
+pub fn reasoning_effort_levels(caps: &Option<TemplateCaps>) -> Option<Vec<ReasoningEffort>> {
+    let listed = caps.as_ref()?.reasoning_effort_levels.as_ref()?;
+    Some(
+        listed
+            .iter()
+            .filter_map(|word| ReasoningEffort::from_wire(word))
+            .collect(),
+    )
 }
 
 /// Whether a model's template renders earlier assistant turns' reasoning back

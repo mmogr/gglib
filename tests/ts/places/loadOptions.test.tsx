@@ -375,6 +375,24 @@ describe('the Load with options sheet', () => {
     expect(bodies()).toEqual([['/api/servers/start', { id: 4, mlock: false }]]);
   });
 
+  it("offers the template's listed levels, and a save that leaves the control alone keeps the saved level", async () => {
+    const stored = resolvedConfig({ reasoningEffort: 'max' });
+    transport.getModelDetail.mockResolvedValue({ id: 9, tags: [], reasoningEffortSupport: 'yes', reasoningEffortLevels: ['low', 'medium', 'xhigh'] });
+    renderInspector(guiModel({ ...GEMMA, inferenceDefaults: stored }));
+    await waitFor(() => expect(transport.getModelDetail).toHaveBeenCalled());
+    const { u, dialog } = await openSheet();
+
+    const effort = within(dialog).getByLabelText('Reasoning Effort');
+    await waitFor(() =>
+      expect(within(effort).getAllByRole('option').map((o) => (o as HTMLOptionElement).value)).toEqual(['', 'low', 'medium', 'xhigh']),
+    );
+    await u.type(within(dialog).getByLabelText('Top K'), '40');
+    await u.click(within(dialog).getByRole('button', { name: 'Load' }));
+
+    await waitFor(() => expect(transport.updateModel).toHaveBeenCalledTimes(1));
+    expect(transport.updateModel.mock.calls[0][0].inferenceDefaults).toEqual({ ...stored, topK: 40 });
+  });
+
   it('sends every sampling value the form offers (IN-6)', async () => {
     renderInspector();
     const { u, dialog } = await openSheet();

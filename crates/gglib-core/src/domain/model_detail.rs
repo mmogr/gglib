@@ -164,20 +164,33 @@ pub struct ModelDetailDto {
     /// reproduced one layer out. A surface should offer the control on `yes`
     /// and `unknown` alike, and explain itself on `no`.
     ///
-    /// # Why the one field and not the whole caps object
+    /// # Why two fields and not the whole caps object
     ///
     /// `TemplateCaps` carries nine bools and a list of effort levels. Eight
     /// of the bools describe things gglib already models in
     /// [`Self::capabilities`] from its own catalog — tools, system role,
     /// parallel calls — and publishing a second, differently-sourced answer
     /// to the same question invites a client to read whichever it finds
-    /// first. The ninth has no other home, and this is it; the list is read
-    /// by nothing yet. A surface that genuinely needs the raw self-report
-    /// should get its own endpoint rather than a `serde` alias on this one.
+    /// first. The ninth has no other home, and this is it; the list is
+    /// [`Self::reasoning_effort_levels`]. A surface that genuinely needs the
+    /// raw self-report should get its own endpoint rather than a `serde`
+    /// alias on this one.
     ///
     /// [`Support`]: gglib_core::domain::Support
     #[serde(default)]
     pub reasoning_effort_support: gglib_core::domain::Support,
+    /// The `reasoning_effort` levels this model's template lists, lowest
+    /// first, as llama-server reported them the last time the model was
+    /// served, and only those that are gglib's levels.
+    ///
+    /// `None` is unknown: no caps stored, or a server too old to report the
+    /// list. A surface offers every level on it and hides none (ADR 0007
+    /// decision 3). An empty list is a stored answer: the template renders no
+    /// level distinctly. A level outside a known list may still work, so a
+    /// surface notes it and never refuses or changes it.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort_levels: Option<Vec<gglib_core::domain::ReasoningEffort>>,
     // ── Timestamps ────────────────────────────────────────────────────────────
     /// When the model was first added to the database (`"%Y-%m-%d %H:%M:%S"`).
     pub added_at: String,
@@ -245,6 +258,9 @@ impl ModelDetailDto {
             // model with no stored caps and for caps that omitted the field.
             // Neither is a "no", and neither may be rendered as one.
             reasoning_effort_support: gglib_core::domain::reasoning_effort_support(
+                &model.template_caps,
+            ),
+            reasoning_effort_levels: gglib_core::domain::reasoning_effort_levels(
                 &model.template_caps,
             ),
             added_at: model.added_at.format("%Y-%m-%d %H:%M:%S").to_string(),

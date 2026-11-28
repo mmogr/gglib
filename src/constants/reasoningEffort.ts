@@ -48,6 +48,15 @@ export const REASONING_EFFORT_LEVELS = [
 export type ReasoningEffortLevel = (typeof REASONING_EFFORT_LEVELS)[number];
 
 /**
+ * The levels a control offers for one model, in the ladder's order: those its
+ * template lists (`reasoningEffortLevels` on the model detail), or every level
+ * when the list is unknown. Unknown never hides a level (ADR 0007 decision 3).
+ */
+export function offeredLevels(listed: readonly ReasoningEffort[] | undefined): readonly ReasoningEffortLevel[] {
+  return listed === undefined ? REASONING_EFFORT_LEVELS : REASONING_EFFORT_LEVELS.filter((level) => listed.includes(level));
+}
+
+/**
  * The other direction: a rung Rust gained that this array has not.
  *
  * `satisfies` above cannot see that — an array of six valid levels satisfies

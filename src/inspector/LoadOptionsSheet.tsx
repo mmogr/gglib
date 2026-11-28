@@ -225,7 +225,10 @@ export const LoadOptionsSheet: FC<LoadOptionsSheetProps> = (props) => {
                 onChange={(next) => change({ sampling: next })}
                 disabled={busy}
                 fallback={{ kind: 'resolved', ownLayer: 'request', resolution: { explanation: sampling, isLoading: explanation === null && !failed, hasError: failed } }}
-                capabilities={{ reasoningEffort: detail?.reasoningEffortSupport ?? 'unknown' }}
+                capabilities={{
+                  reasoningEffort: detail?.reasoningEffortSupport ?? 'unknown',
+                  reasoningEffortLevels: detail?.reasoningEffortLevels,
+                }}
               />
             </div>
           </>
