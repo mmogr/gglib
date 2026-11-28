@@ -172,6 +172,100 @@ mod model_detail_template_caps_tests {
     }
 }
 
+mod model_detail_effort_levels_tests {
+    //! The effort levels [`ModelDetailDto::reasoning_effort_levels`] serves
+    //! from the stored caps: the template's list as gglib's levels, and no
+    //! list at all when none is stored.
+
+    use gglib_core::domain::{Model, ModelDetailDto, ReasoningEffort, TemplateCaps};
+    use serde_json::{Value, json};
+
+    use super::fixture::model;
+
+    /// A model whose stored caps list `levels`.
+    fn listing(levels: &[&str]) -> Model {
+        Model {
+            template_caps: Some(TemplateCaps {
+                supports_reasoning_effort: Some(true),
+                reasoning_effort_levels: Some(levels.iter().map(|&l| l.to_owned()).collect()),
+                ..TemplateCaps::default()
+            }),
+            ..model()
+        }
+    }
+
+    /// The detail's JSON, as the window reads it.
+    fn json_of(model: Model) -> Value {
+        serde_json::to_value(ModelDetailDto::from_model(model, false, None)).expect("serializes")
+    }
+
+    /// Qwen3.8's list: the three levels it renders, and no other.
+    #[test]
+    fn a_stored_list_is_served_as_its_levels() {
+        let detail = ModelDetailDto::from_model(listing(&["low", "medium", "xhigh"]), false, None);
+
+        assert_eq!(
+            detail.reasoning_effort_levels,
+            Some(vec![
+                ReasoningEffort::Low,
+                ReasoningEffort::Medium,
+                ReasoningEffort::XHigh
+            ])
+        );
+        assert_eq!(
+            json_of(listing(&["low", "medium", "xhigh"]))["reasoningEffortLevels"],
+            json!(["low", "medium", "xhigh"])
+        );
+    }
+
+    /// No stored list is unknown, and unknown is no key: a model never
+    /// launched here, and caps from a server too old to report the list.
+    #[test]
+    fn no_stored_list_is_served_as_no_list() {
+        let old_server = Model {
+            template_caps: Some(TemplateCaps {
+                supports_reasoning_effort: Some(true),
+                ..TemplateCaps::default()
+            }),
+            ..model()
+        };
+
+        for unknown in [model(), old_server] {
+            let json = json_of(unknown);
+            assert_eq!(json.get("reasoningEffortLevels"), None, "{json}");
+        }
+    }
+
+    /// An empty list is a stored answer, not a missing one, so it travels.
+    #[test]
+    fn an_empty_list_is_served_empty() {
+        assert_eq!(json_of(listing(&[]))["reasoningEffortLevels"], json!([]));
+    }
+
+    /// A word no control could send is left out; the levels around it stay.
+    #[test]
+    fn a_word_that_is_not_a_level_is_left_out() {
+        let detail = ModelDetailDto::from_model(listing(&["low", "turbo", "max"]), false, None);
+
+        assert_eq!(
+            detail.reasoning_effort_levels,
+            Some(vec![ReasoningEffort::Low, ReasoningEffort::Max])
+        );
+    }
+
+    /// A payload without the key, as the CLI reads `--json` back, has no list.
+    #[test]
+    fn a_payload_without_the_key_reads_back_as_no_list() {
+        let mut json = json_of(listing(&["low"]));
+        json.as_object_mut()
+            .expect("an object")
+            .remove("reasoningEffortLevels");
+
+        let round_tripped: ModelDetailDto = serde_json::from_value(json).expect("deserializes");
+        assert_eq!(round_tripped.reasoning_effort_levels, None);
+    }
+}
+
 mod gui_model_moe_tests {
     //! The `MoE` topology `GET /api/models` must carry.
     //!
