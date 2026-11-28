@@ -15,6 +15,7 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
 import { SamplingForm } from '../../../src/components/SamplingForm';
+import type { FormCapabilities } from '../../../src/components/SamplingForm/SamplingForm';
 import type { InferenceFallback } from '../../../src/components/SamplingForm/fallbackCaption';
 import { ReasoningSupport } from '../../../src/inspector/local/ReasoningSupport';
 import type { SparseInferenceConfig, TemplateSupport } from '../../../src/types';
@@ -22,7 +23,7 @@ import type { SparseInferenceConfig, TemplateSupport } from '../../../src/types'
 const UPSTREAM: InferenceFallback = { kind: 'upstream' };
 
 function renderForm(
-  capabilities?: { reasoningEffort: TemplateSupport },
+  capabilities?: FormCapabilities,
   value?: SparseInferenceConfig,
 ) {
   const onChange = vi.fn();
@@ -115,6 +116,51 @@ describe('the effort control across the three template states', () => {
     // Not `{ reasoningEffort: undefined }` with the key present — an absent
     // key is what leaves the template's own default in place.
     expect(onChange).toHaveBeenCalledWith({});
+  });
+});
+
+describe("the effort control and the template's own list", () => {
+  /** Qwen3.8's list: the three levels its template renders. */
+  const QWEN: FormCapabilities = { reasoningEffort: 'yes', reasoningEffortLevels: ['low', 'medium', 'xhigh'] };
+
+  const offered = () =>
+    screen.getAllByRole('option').map((option) => (option as HTMLOptionElement).value);
+
+  it('offers only the levels a known list holds', () => {
+    renderForm(QWEN);
+
+    expect(offered()).toEqual(['', 'low', 'medium', 'xhigh']);
+    expect(screen.queryByText(/does not list/i)).not.toBeInTheDocument();
+  });
+
+  it('offers all six when the list is unknown', () => {
+    renderForm({ reasoningEffort: 'yes' });
+
+    expect(offered()).toEqual(['', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+  });
+
+  it('offers no level for a list known to be empty, and keeps the default', () => {
+    renderForm({ reasoningEffort: 'yes', reasoningEffortLevels: [] });
+
+    expect(offered()).toEqual(['']);
+  });
+
+  it('shows a saved level the list does not hold as the value, with a quiet note', () => {
+    const onChange = renderForm(QWEN, { reasoningEffort: 'max' });
+
+    const control = screen.getByLabelText('Reasoning Effort');
+    expect(control).toHaveValue('max');
+    expect(offered()).toEqual(['', 'low', 'medium', 'xhigh', 'max']);
+    expect(control).toHaveAccessibleDescription(/does not list max \(it lists low, medium, xhigh\)/i);
+    // Shown, never changed: nothing is sent until a person picks a level.
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('notes nothing for a saved level when the list is unknown', () => {
+    renderForm({ reasoningEffort: 'unknown' }, { reasoningEffort: 'max' });
+
+    expect(screen.getByLabelText('Reasoning Effort')).toHaveValue('max');
+    expect(screen.queryByText(/does not list/i)).not.toBeInTheDocument();
   });
 });
 

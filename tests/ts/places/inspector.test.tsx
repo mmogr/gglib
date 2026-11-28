@@ -556,6 +556,26 @@ describe('the inspector, a model on this machine', () => {
     await waitFor(() => expect(sentUpdate()).toEqual({ id: 9, inferenceDefaults: { ...stored, topK: 40 } }));
   });
 
+  it("offers the template's listed levels, and keeps a saved level it does not list", async () => {
+    const stored = resolvedConfig({ temperature: 0.7, reasoningEffort: 'max' });
+    transport.getModelDetail.mockResolvedValue({ id: 9, tags: [], reasoningEffortSupport: 'yes', reasoningEffortLevels: ['low', 'medium', 'xhigh'] } as never);
+    renderInspector(guiModel({ ...GEMMA, inferenceDefaults: stored }));
+    await waitFor(() => expect(transport.getModelDetail).toHaveBeenCalled());
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Change Reasoning' }));
+
+    const control = screen.getByLabelText('Reasoning Effort');
+    await waitFor(() =>
+      expect(within(control).getAllByRole('option').map((o) => (o as HTMLOptionElement).value)).toEqual(['', 'low', 'medium', 'xhigh', 'max']),
+    );
+    expect(control).toHaveValue('max');
+    expect(control).toHaveAccessibleDescription(/does not list max/i);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(sentUpdate()).toEqual({ id: 9, inferenceDefaults: stored }));
+    transport.getModelDetail.mockResolvedValue(null);
+  });
+
   it('saves a reasoning value added in place, with the stored values kept', async () => {
     const stored = resolvedConfig({ temperature: 0.7 });
     renderInspector(guiModel({ ...GEMMA, inferenceDefaults: stored }));

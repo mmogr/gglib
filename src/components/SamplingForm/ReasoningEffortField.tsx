@@ -1,6 +1,11 @@
 /**
- * The `reasoning_effort` control, and the three answers a surface can have
- * about whether it applies.
+ * The `reasoning_effort` control, the three answers a surface can have
+ * about whether it applies, and the levels it offers.
+ *
+ * A model whose template's list is known is offered only the levels on it,
+ * and an unknown list offers all six. A saved level the list leaves out stays
+ * the control's value, with a note: an unlisted level can still work, so the
+ * note never says it will fail and nothing changes it.
  *
  * Split out of `SamplingForm` because it is the only field there
  * that is *conditional on the model*: every sampling parameter reaches the
@@ -12,8 +17,10 @@
 import { FC } from 'react';
 import { Info } from 'lucide-react';
 import type { TemplateSupport } from '../../types';
+import type { ReasoningEffort } from '../../types/generated/ReasoningEffort';
 import {
   REASONING_EFFORT_LEVELS,
+  offeredLevels,
   type ReasoningEffortLevel,
 } from '../../constants/reasoningEffort';
 import { Icon } from '../ui/Icon';
@@ -40,6 +47,17 @@ export interface ReasoningEffortFieldProps {
    * its own caption rather than borrowing the unobserved one.
    */
   support?: TemplateSupport;
+  /**
+   * The levels the model's template lists. `undefined` when the list is
+   * unknown, and on a surface with no model: every level is offered.
+   */
+  levels?: readonly ReasoningEffort[];
+}
+
+/** The note under a level the template's list leaves out. */
+function unlistedNote(value: ReasoningEffortLevel, listed: readonly ReasoningEffortLevel[]): string {
+  const lists = listed.length > 0 ? ` (it lists ${listed.join(', ')})` : ' (it lists none)';
+  return `This model's template does not list ${value}${lists}. The level is kept and still sent.`;
 }
 
 /**
@@ -91,15 +109,23 @@ export const ReasoningEffortField: FC<ReasoningEffortFieldProps> = ({
   onChange,
   disabled,
   support,
+  levels,
   id = DEFAULT_FIELD_ID,
 }) => {
   const captionId = `${id}-description`;
+  const noteId = `${id}-unlisted`;
 
   // The one state that hides the control. `unknown` deliberately does not:
   // only a measured `no` says the template ignores the level (ADR 0007
   // decision 3), so hiding on `unknown` would gate the control on every model
   // nobody has launched — which is most of them.
   if (support === 'no') return <UnsupportedNote />;
+
+  const offered = offeredLevels(levels);
+  // Only a known list can leave a level out. The saved level keeps its option,
+  // or the select would read blank for a value it still holds.
+  const unlisted = value !== undefined && !offered.includes(value);
+  const options = unlisted ? REASONING_EFFORT_LEVELS.filter((level) => level === value || offered.includes(level)) : offered;
 
   return (
     <div className="flex flex-col gap-[0.4rem]">
@@ -112,7 +138,7 @@ export const ReasoningEffortField: FC<ReasoningEffortFieldProps> = ({
           size="sm"
           disabled={disabled}
           value={value ?? ''}
-          aria-describedby={captionId}
+          aria-describedby={unlisted ? `${captionId} ${noteId}` : captionId}
           onChange={(e) => onChange((e.target.value || undefined) as ReasoningEffortLevel | undefined)}
         >
           {/*
@@ -123,7 +149,7 @@ export const ReasoningEffortField: FC<ReasoningEffortFieldProps> = ({
             preference.
           */}
           <option value="">Template&apos;s own default (send nothing)</option>
-          {REASONING_EFFORT_LEVELS.map((level) => (
+          {options.map((level) => (
             <option key={level} value={level}>
               {level}
             </option>
@@ -133,6 +159,12 @@ export const ReasoningEffortField: FC<ReasoningEffortFieldProps> = ({
       <span id={captionId} className="text-xs text-text-muted italic">
         {caption(support)}
       </span>
+      {unlisted && (
+        <span className="flex items-start gap-xs text-xs text-text-muted">
+          <Icon icon={Info} size={13} className="mt-[2px] shrink-0" />
+          <span id={noteId}>{unlistedNote(value, offered)}</span>
+        </span>
+      )}
     </div>
   );
 };

@@ -37,6 +37,8 @@ So the optional `capabilities` prop carries that answer, and it has **three** st
 
 `unknown` is the common answer, not an edge case: capabilities are read from `GET /props` while a model runs, so every model nobody has launched on this installation answers it. Hiding the control there would gate it on nearly the whole library, which is the mistake ADR 0007 decision 3 forbids. Omitting the prop is therefore safe by construction — nothing is ever hidden by default, only captioned differently.
 
+`capabilities.reasoningEffortLevels` is the levels the model's template lists. Present, the select offers only those; absent (unknown, or no model), it offers all six. A saved level the list leaves out stays the select's value with a note that the template does not list it, and is never changed: a level the list leaves out can still work.
+
 The **budget** is not gated at all. llama.cpp enforces it sampler-side, so no template can veto it, and the field shows for every model.
 
 ## Key Files
@@ -44,7 +46,7 @@ The **budget** is not gated at all. llama.cpp enforces it sampler-side, so no te
 | File | Role |
 |------|------|
 | `SamplingForm.tsx` | Sliders and number inputs for the sampling parameters, plus the reasoning group, with inline reset controls; `compact` draws only the set fields and "Add a value" |
-| `ReasoningEffortField.tsx` | The effort select and the three answers about whether it applies |
+| `ReasoningEffortField.tsx` | The effort select, the three answers about whether it applies, and the levels the model's template lists |
 | `fallbackCaption.ts` | What to say (and what number to show) under an empty field on each surface |
 | `SamplingForm.css` | Slider and range input styling |
 
