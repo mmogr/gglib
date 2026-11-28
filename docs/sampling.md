@@ -207,6 +207,12 @@ finding 7c). `GET /api/models/:id/detail` carries the answer as
 bool, so a client can hide a control on a positive `no` without hiding it
 on every model nobody has launched. The proxy dashboard shows the running
 model's answer beside the level the last request resolved.
+The same detail carries `reasoningEffortLevels`, the levels the template
+lists as llama-server reported them, and no key when that is unknown. A
+per-model control offers only the listed levels (all six when unknown),
+`gglib model explain` prints the list, and `--reasoning-effort` notes a level
+outside it and still stores or sends it: a level the list leaves out can
+still work, so nothing refuses or edits it.
 
 The GUI is the client that does exactly that. Its effort control is *hidden*
 only on a measured `no`, and replaced there by a sentence saying the
